@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, PanResponder } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -36,9 +36,27 @@ export default function HomeScreen() {
   const heroGradient = surplus.surplus > 0 ? theme.heroPositive : surplus.surplus < 0 ? theme.heroNegative : theme.heroNeutral;
   const savingsTarget = totalSavingsGoals(savingsGoals);
 
+  const monthSwipe = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_, gesture) =>
+        Math.abs(gesture.dx) > 15 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5,
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dx <= -50) {
+          goToNextMonth();
+        } else if (gesture.dx >= 50) {
+          goToPrevMonth();
+        }
+      },
+    })
+  ).current;
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.groupedBackground }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        {...monthSwipe.panHandlers}
+      >
         <View style={styles.header}>
           <Pressable onPress={goToPrevMonth} hitSlop={12} style={styles.monthArrow}>
             <Ionicons name="chevron-back" size={20} color={theme.secondaryLabel} />
