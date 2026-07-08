@@ -6,8 +6,8 @@
 >
 > **Keeping it live:** update §3, §4, and append to §6 whenever meaningful work pauses.
 
-**Last updated:** 2026-07-08 (bold/colorful redesign, per-month budget snapshots, Particulars
-importer, transaction-entry bug fix, first TestFlight builds in flight)
+**Last updated:** 2026-07-08 (initial git history created; keyboard-covers-field fix on
+transaction add/edit; swipe-to-change-month on Home)
 
 > **⚠️ IN-FLIGHT WHEN THIS FILE WAS LAST TOUCHED:** a background poll-and-submit loop
 > (`wait_and_submit.sh`, task id `b78rit34t` in that session — won't exist in a new session, this
@@ -175,7 +175,27 @@ script (not committed, lived in a session scratchpad). No Android build has been
 
 ## 6. Session log (newest first)
 
-- **2026-07-08 (latest — bold redesign, per-month budgets, Particulars importer verified, real bug
+- **2026-07-08 (latest — git repo initialized, keyboard/UX fixes).** Repo had no commits yet;
+  created initial commit (`440a6c9`) with local git identity set to Gaurav Choukse /
+  GauravChoukse22@gmail.com — deliberately **not** tied to any org email (owner: "this app is
+  personal," don't ever connect it to gobuildhsv). Then two small UX fixes per owner report:
+  • **"Keyboard covers the field I am typing"** — `app/transaction/add.tsx` and
+  `app/transaction/[id].tsx` (edit) now wrap their `ScrollView` in a `KeyboardAvoidingView`
+  (`behavior="padding"` on iOS, `keyboardVerticalOffset={90}`) plus `keyboardShouldPersistTaps="handled"`
+  on the ScrollView so tapping another field while the keyboard is open doesn't require a
+  dismiss-tap first.
+  • **"When I want to switch between month, I should be able to just swipe"** — Home screen
+  (`app/(tabs)/index.tsx`) header already had chevron-back/forward buttons calling
+  `goToPrevMonth`/`goToNextMonth` from `BudgetContext`; added a `PanResponder` on the ScrollView
+  (`onMoveShouldSetPanResponderCapture` only fires when `|dx| > 15` and dominates `|dy|`, so
+  vertical scrolling is untouched) that calls `goToNextMonth`/`goToPrevMonth` on a ≥50px
+  horizontal swipe release. Budget/Insights tabs don't have their own month header — they read
+  the same global `selectedMonth`, so switching on Home is sufficient. Verified via `tsc --noEmit`
+  (clean) and Expo web preview (no new console errors, app renders); swipe/keyboard-avoidance
+  behavior itself is native-only and wasn't exercisable in the web preview — **verify swipe and
+  keyboard behavior on a real device/simulator before considering this fully done.**
+
+- **2026-07-08 (bold redesign, per-month budgets, Particulars importer verified, real bug
   fixes, first two TestFlight builds).** Long session, several distinct asks from the owner in
   sequence:
   • **"App is showing same numbers for previous months which are already gone, I don't need that"**
