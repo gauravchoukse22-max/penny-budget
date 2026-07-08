@@ -1,0 +1,257 @@
+PRODUCT &amp; TECHNICAL SPECIFICATION
+Personal Budget App — for Gary &amp; partner
+Native cross-platform app (React Native + Expo), local-only storage, built for a couple&apos;s monthly credit-card budgeting ritual.
+
+1. Purpose &amp; Core Workflow
+This app digitizes the exact process already in use on paper, without changing the ritual — just removing the arithmetic and adding visibility.
+The monthly ritual, as-is
+Sit together and log every transaction from the month, one by one, from each credit card statement/memory.
+Each transaction is tagged to a card and a spending category.
+Total spend per category is checked against what was planned for that category (the &quot;ideal sheet&quot;).
+Total monthly spend is subtracted from salary.
+Fixed amounts for savings goals are subtracted next.
+What&apos;s left is the surplus.
+What the app changes
+All of the above happens automatically as transactions are entered — no manual subtraction.
+Historical trends become visible (this app makes that possible; a paper sheet doesn&apos;t).
+Both of you can review the same numbers on one phone, in real time, while talking through the sheet together.
+2. Design Direction
+Apple-native visual language — the app should feel like it belongs on iOS next to Wallet, Health, and Numbers. Not a generic cross-platform look.
+Visual principles
+Minimal surface area: generous white space, no visual clutter, one primary action per screen.
+SF Pro (system font) throughout; Dynamic Type support (respects the user&apos;s iOS text-size setting).
+Native iOS color system: system background colors, semantic colors (systemRed for over-budget, systemGreen for surplus/under-budget), full support for Light and Dark Mode via system appearance, not a custom toggle.
+Cards and lists use iOS-standard rounded corners (continuous corner radius, ~14pt), subtle shadows, standard 16pt margins.
+Tab bar navigation (bottom), matching Wallet / Apple&apos;s own finance-adjacent apps — not a hamburger menu.
+Numbers are the hero: large, bold, tabular (monospaced-digit) figures for amounts so columns of numbers align — this is what Apple&apos;s own Numbers and Stocks apps do.
+Category colors: a fixed, tasteful palette (12–14 hues) assigned once per category, used consistently across charts, icons, and lists so a category is recognizable by color alone.
+Charts rendered natively (Swift Charts if we go fully native later; for the Expo/RN build, Victory Native or React Native Skia — both render smooth, native-feeling charts, not web-embedded ones).
+Reference apps (functional inspiration, not code or assets)
+App
+What we&apos;re borrowing
+Copilot / Monarch Money
+Category-first budgeting, clean monthly overview, budget-vs-actual bars
+YNAB
+&quot;Money left to allocate&quot; surplus concept, category envelopes
+Apple Wallet
+Card-first visual language, card carousel UI
+Apple Stocks / Numbers
+Tabular figures, native charts, light/dark polish
+No copyrighted UI assets, icons, or code from these apps are used — only their functional patterns, which are not protectable design elements.
+3. Information Architecture — Screens
+3.1 Home / Dashboard (default tab)
+The single-glance monthly summary. This is what you open the app to see.
+Header: current month + year, with left/right arrows to move between months.
+Surplus hero card: large number showing this month&apos;s surplus (green) or shortfall (red), with the formula visible beneath it in small text: Salary − Spend − Savings Goals = Surplus.
+Quick stats row: Total Spent, Total Saved, Days Left in Month.
+Budget health strip: one thin horizontal bar per category showing actual vs. ideal limit, sorted worst-to-best (most over-budget first) so problems are visible immediately.
+Recent transactions: last 5 entries, tap to see all.
+Floating &quot;+&quot; button: always-visible quick-add for a new transaction.
+3.2 Transactions Tab
+Chronological list, grouped by day, newest first.
+Each row: category icon (colored), merchant/description, card used (small badge), amount.
+Filter bar at top: filter by card, by category, by date range.
+Search bar for merchant/description text.
+Swipe-to-delete, tap to edit.
+Add Transaction sheet (modal): Amount (numeric keypad), Category (grid of icons), Card (horizontal picker of your saved cards), Date (defaults to today, editable — since you often log a batch after the fact), optional Note.
+Bulk-entry mode: after opening &quot;+&quot;, a &quot;save &amp; add another&quot; button keeps the sheet open with the same date/card pre-filled, so logging a whole statement in one sitting is fast — this maps directly to how you currently do it with your partner.
+3.3 Budget Tab (the &quot;ideal sheet&quot;, digitized)
+List of all categories, each row editable: category name, icon, color, and monthly ideal limit amount.
+Add/remove/reorder categories.
+Each category row also shows this month&apos;s actual spend inline, with a progress bar (green under limit, amber near limit, red over limit).
+Tap a category to drill into its own detail screen: this month&apos;s transactions in that category, a small trend chart of that category over the last 6 months, and the limit editor.
+Salary &amp; Savings Goals section (same tab or a sub-section): Monthly salary input (can be a fixed number or edited each month if it varies). Savings goals list — name + fixed monthly amount (e.g., &quot;Emergency fund — $500&quot;, &quot;Vacation — $200&quot;). Add/remove goals freely.
+3.4 Cards Tab
+Visual list of your 4–5 credit cards, styled like Apple Wallet cards (name, last 4 digits, a chosen color/gradient — no real card numbers or sensitive data stored, purely a label).
+Tap a card to see all transactions on that card, this month or filtered by range, plus a running total for that card.
+Add/edit/remove/reorder cards.
+3.5 Insights / Charts Tab
+Monthly trend line: total spend over the last 6–12 months.
+Category breakdown donut/pie chart for the selected month, tap a slice to see that category&apos;s transactions.
+Budget vs. Actual bar chart: one bar pair per category, ideal limit vs. actual, for the selected month.
+Card usage breakdown: how much was spent on each card this month (bar or donut).
+Surplus history: bar chart of surplus/shortfall per month over time, so trends in your saving rate are visible.
+Month picker/range picker at top of this tab, applies to all charts on the page.
+3.6 Settings
+Currency selection.
+Export data (CSV) — for backup, since data is local-only.
+Import data (CSV) — to restore from a backup or migrate from your existing sheet.
+Manage categories/cards shortcuts (same as Budget/Cards tabs).
+App appearance: follows system Light/Dark automatically (no manual override needed, but can add one if requested later).
+Face ID / passcode lock toggle (optional privacy layer, since it&apos;s financial data).
+4. Data Model
+All data lives only on your device (local SQLite database via Expo&apos;s SQLite module). No account, no login, no server, no analytics — matches how you described wanting to use it.
+4.1 Card
+Field
+Type
+Notes
+id
+string (uuid)
+Primary key
+name
+string
+e.g. &quot;Chase Sapphire&quot;
+lastFour
+string (4 digits)
+Label only, not validated as a real card
+color
+string (hex)
+For the Wallet-style card UI
+sortOrder
+integer
+Manual ordering in the Cards tab
+4.2 Category
+Field
+Type
+Notes
+id
+string (uuid)
+Primary key
+name
+string
+e.g. &quot;Groceries&quot;, &quot;Utilities&quot;, &quot;Personal / Clothing&quot;
+icon
+string
+SF Symbol name
+color
+string (hex)
+Fixed per category, used everywhere
+monthlyLimit
+decimal
+The &quot;ideal sheet&quot; number — can change per month, see 4.5
+sortOrder
+integer
+Manual ordering
+4.3 Transaction
+Field
+Type
+Notes
+id
+string (uuid)
+Primary key
+amount
+decimal
+Positive number, always an expense in v1
+date
+date
+Editable — defaults to today
+categoryId
+string (fk)
+→ Category
+cardId
+string (fk)
+→ Card
+note
+string, optional
+Free text — merchant name etc.
+createdAt
+timestamp
+For audit/debug only
+4.4 SavingsGoal
+Field
+Type
+Notes
+id
+string (uuid)
+Primary key
+name
+string
+e.g. &quot;Emergency Fund&quot;
+monthlyAmount
+decimal
+Fixed amount set aside each month
+sortOrder
+integer
+Manual ordering
+4.5 MonthlySettings
+Salary can vary month to month (bonuses, overtime, etc.), so it&apos;s tracked per month rather than as one fixed global number. Category limits are fixed globally per your stated requirement (Q&amp;A confirmed: no month-to-month limit variation needed), so they live on Category directly, not here.
+Field
+Type
+Notes
+id
+string (uuid)
+Primary key
+yearMonth
+string (&quot;2026-07&quot;)
+Which month this row applies to
+salary
+decimal
+That month&apos;s take-home salary
+5. Core Calculations
+These formulas run live, recalculated the moment any transaction, salary, or savings goal changes — nothing is ever manually re-added.
+5.1 Monthly Surplus (the Home tab hero number)
+Surplus = Salary
+          − SUM(Transactions.amount WHERE month = selected month)
+          − SUM(SavingsGoals.monthlyAmount)
+5.2 Category Actual Spend
+CategorySpend[c] = SUM(Transactions.amount
+                       WHERE categoryId = c AND month = selected month)
+5.3 Budget Health (per category)
+Remaining[c] = Category.monthlyLimit − CategorySpend[c]
+
+Status:  green  if CategorySpend[c] &lt;= 80% of monthlyLimit
+         amber  if 80–100% of monthlyLimit
+         red    if over 100% of monthlyLimit
+5.4 Card Total
+CardTotal[card] = SUM(Transactions.amount
+                      WHERE cardId = card AND month = selected month)
+5.5 Trend series (Insights tab)
+Each of the last 6–12 months is computed with the same formulas above, producing a time series for the trend line, the surplus-history bars, and category trend charts.
+6. Tech Stack
+Layer
+Choice
+Why
+Framework
+Expo (React Native) + TypeScript
+Matches your existing Backstory app setup — same EAS/Apple Developer account carries over, no new infrastructure
+Navigation
+expo-router
+File-based routing, same pattern as Backstory
+Local storage
+expo-sqlite
+On-device relational DB — matches Backstory&apos;s local-only approach
+Charts
+Victory Native or React Native Skia
+Smooth native-feeling charts, no web views
+Icons
+SF Symbols via expo-symbols (iOS)
+Same approach Backstory already uses for cross-platform icon parity
+State management
+React Context + hooks (or Zustand if complexity grows)
+Lightweight, no external backend to sync
+Styling
+Custom theme file mapping to iOS semantic colors
+Automatic Light/Dark support, matches system
+Build/ship
+EAS Build + EAS Submit
+Same pipeline already proven working for Backstory — Team ID 5RKH5ZFXPM
+7. Build Phases
+Phase 1 — Data layer &amp; core screens
+SQLite schema + migrations for Card, Category, Transaction, SavingsGoal, MonthlySettings.
+Add/Edit/Delete flows for Cards, Categories, Transactions, Savings Goals.
+Home dashboard with live surplus calculation.
+Phase 2 — Budget &amp; Cards tabs
+Budget tab with ideal-limit editing and progress bars.
+Cards tab with Wallet-style card UI and per-card totals.
+Bulk quick-entry flow for logging a full statement in one sitting.
+Phase 3 — Insights &amp; polish
+All charts (trend line, category donut, budget-vs-actual bars, card breakdown, surplus history).
+CSV export/import for backup.
+Optional Face ID lock.
+Light/Dark mode pass, empty states, animations/haptics for a native feel.
+Phase 4 — Ship
+EAS production build, TestFlight submission via your existing Apple Developer + EAS accounts.
+On-device testing pass with real data from a real month.
+8. Explicitly Out of Scope for v1
+Bank/card account linking or automatic transaction import (Plaid, etc.) — you&apos;re entering manually by design, matching your current ritual.
+Multi-device sync or shared accounts — confirmed single-device, local-only.
+Income tracking beyond a single monthly salary figure — no multiple income streams in v1.
+Debt/loan tracking, investment tracking — pure budgeting scope only.
+Month-to-month variable category limits — confirmed fixed limits are sufficient for now; can be added later without a data-model rewrite (MonthlySettings could absorb per-category limits if ever needed).
+9. Open Questions for the Build Session
+Small decisions worth confirming in Claude Code before or during the build, so nothing gets assumed:
+Exact category list and starting ideal limits (utility, grocery, home, personal/clothing, others — full list + numbers).
+Exact card names/colors for the 4–5 cards.
+Currency (assumed USD unless specified).
+Whether monthly salary is truly fixed or varies — affects whether MonthlySettings needs a UI or can just be a single global settings value.
+Names and fixed amounts for current savings goals.

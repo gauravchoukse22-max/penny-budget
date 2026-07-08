@@ -1,0 +1,225 @@
+PRODUCT &amp; TECHNICAL SPECIFICATION — v2
+Personal Budget App — for Gary &amp; partner
+Native cross-platform app (React Native + Expo) with automatic bank/card transaction import via Plaid. Updated from v1 (manual-entry, local-only) to reflect auto-import as the primary flow.
+
+0. What Changed from v1
+Two decisions from your last round of feedback reshape the architecture. Both are captured here so nothing from the conversation gets lost.
+Auto-import via Plaid is now the primary way transactions enter the app — manual typing is no longer the main ritual. You&apos;ll review and categorize imported transactions rather than typing each one in.
+The &quot;Open Questions&quot; from v1 (categories, cards, currency, salary type, savings goals) are no longer a doc you fill in once — they become an in-app Setup flow and an editable Settings section, so you configure and adjust them yourself, inside the app, at any time.
+Because Plaid requires a backend to hold API secrets, this app is no longer local-only. A small server component is now part of the build — detailed in Section 3.
+1. Purpose &amp; Core Workflow (updated)
+New monthly ritual
+Bank/card accounts are linked once, during setup, via Plaid.
+Each day (or whenever you open the app), new transactions from all linked cards appear automatically in a review queue.
+You (and your partner, looking at the same phone) assign each new transaction a category — a fast, tap-based triage, not typing.
+Everything downstream — category totals, budget-vs-ideal comparison, salary minus spend minus savings goals, surplus — recalculates automatically as transactions are categorized.
+Manual entry still exists (Section 3.3) for cash spending or anything a bank doesn&apos;t report, but it&apos;s a secondary path now, not the primary one.
+2. In-App Setup &amp; Editable Settings
+Everything that was a static &quot;Open Question&quot; in v1 is now a Setup flow the first time you open the app, and a living section of Settings you can revisit any time — no separate document, no one-time decision.
+2.1 First-run Setup Wizard
+Step 1 — Link accounts: Plaid Link flow, connect each of your 4–5 cards (see Section 4).
+Step 2 — Currency: pick from a standard list, defaults to your device locale&apos;s currency.
+Step 3 — Categories: start from a sensible default set (Groceries, Utilities, Home, Personal/Clothing, Dining, Transport, Other) which you can rename, delete, reorder, add to, and assign an ideal monthly limit to — all editable later in Settings → Categories.
+Step 4 — Salary: choose &quot;Fixed amount every month&quot; or &quot;Enter it each month&quot; (it varies) — see Section 5.5 for why this matters for the calculation.
+Step 5 — Savings goals: add as many as you like, each with a name and fixed monthly amount. Skippable, editable later.
+2.2 Settings → editable forever
+Linked Accounts: see all connected cards, re-link if a connection expires (Plaid connections occasionally need re-authentication — normal and expected), unlink a card.
+Categories: same editor as Setup Step 3, always available.
+Salary: switch between fixed/variable at any time; edit the fixed amount or this month&apos;s entry.
+Savings Goals: add/edit/remove at any time.
+Currency: changeable later (note: does not convert historical amounts, just changes the display symbol — flagged here as a real product decision to confirm during build).
+3. Architecture — Why a Backend Is Now Required
+Plaid&apos;s API credentials (the &quot;secret key&quot;) must never be exposed on a device — anyone extracting them from the app binary could access Plaid&apos;s API under your account. Plaid&apos;s own integration model requires a server to hold that secret and make the actual API calls; the phone app only ever talks to your server, never to Plaid directly.
+3.1 What the backend actually does
+Holds the Plaid client ID + secret (never shipped in the app).
+Creates Plaid &quot;Link tokens&quot; so the phone app can open Plaid&apos;s secure bank-login flow.
+Exchanges Plaid&apos;s response for a permanent &quot;access token&quot; per linked bank, and stores those tokens securely.
+Periodically (or via Plaid&apos;s webhook) pulls new transactions for each linked account and stores them.
+Serves transactions to the phone app over a simple authenticated API.
+3.2 What this means practically
+Your data (transactions, categories, budgets) now lives in a small cloud database, not only on your phone — necessary for Plaid, and also means it survives a lost/replaced phone.
+The app needs a lightweight login (even if it&apos;s just you and your partner) so the server knows whose data to serve — this can be as simple as a PIN/passcode tied to one account, no need for a full multi-user system.
+There is a real, ongoing hosting cost — covered in Section 6.
+3.3 Backend shape
+Piece
+Choice
+Why
+Server runtime
+Node.js (Express or Fastify)
+Same language as the app (TypeScript everywhere), simple Plaid SDK support
+Database
+PostgreSQL (hosted, e.g. Supabase or Railway)
+Relational fit for transactions/categories/accounts; Supabase also gives auth for free if we want it later
+Hosting
+Railway, Render, or Fly.io
+Cheapest tier is normally enough for a 2-person app; simple deploy from a git repo
+Auth
+Single shared passcode or simple email+password (Supabase Auth)
+You explicitly don&apos;t need multi-tenant accounts — keep this minimal
+Transaction sync
+Plaid webhooks (preferred) or a daily scheduled job
+Webhooks push new transactions as the bank reports them; simplest fallback is a nightly pull
+4. Plaid Integration Details
+4.1 Why Plaid specifically
+You asked for Plaid &quot;or whatever is cheaper&quot; — here&apos;s the honest comparison so the choice is informed, not just defaulted to the biggest name.
+Provider
+Cost shape
+Bank coverage
+Notes
+Plaid
+Free sandbox/dev; production ~$0.30–$1.50/mo per item
+Excellent — most US/Canada/EU banks
+Industry standard, best docs, what most budgeting apps use
+Teller
+Flat monthly fee tiers, often cheaper at low volume; free tier for a handful of accounts
+Good, US-focused, growing
+Simpler pricing, smaller bank list than Plaid
+MX
+Enterprise-oriented, pricing usually requires sales contact
+Very good
+Typically not cheaper for a 2-person personal app
+Akoya
+Bank-backed network, pricing varies
+Strong for large US banks specifically
+Newer, narrower use case
+Recommendation: start on Plaid&apos;s free Sandbox/Development tier while building — it&apos;s free and fully functional for testing with fake bank logins. Only move to Plaid&apos;s paid Production tier (real banks, real data) once the app works end-to-end. At just 4–5 real accounts for personal use, Plaid&apos;s production cost is realistically in the $2–$8/month range total, which is competitive with alternatives once you include Plaid&apos;s superior bank coverage. This is a build-time decision to revisit once real pricing is confirmed on Plaid&apos;s current pricing page.
+4.2 Plaid flow, step by step
+App requests a Link token from your backend.
+App opens Plaid Link (a secure, Plaid-hosted login UI) — you log into each bank/card directly with the bank, credentials never touch your app or your server.
+Plaid returns a public token to the app, which sends it to your backend.
+Backend exchanges it for a permanent access token, stores it securely, associated with that linked card.
+Backend uses Plaid&apos;s Transactions product to fetch new transactions going forward, either via webhook push or scheduled pull.
+New transactions land in your database tagged with which linked account they came from, status &quot;needs categorization.&quot;
+App shows them in the Review Queue (Section 5.2) for you to assign a category.
+5. Information Architecture — Screens (updated)
+5.1 Home / Dashboard
+Same surplus hero card, quick stats, and budget health strip as v1 (Section 5.1 formulas unchanged).
+New: a badge/banner if there are uncategorized transactions waiting in the Review Queue — &quot;12 new transactions to review.&quot;
+5.2 Review Queue (new, replaces most manual entry)
+List of newly imported, not-yet-categorized transactions: merchant name (from Plaid), amount, date, which card.
+Tap a transaction → pick a category from the same icon grid as v1&apos;s Add Transaction flow. One tap files it and moves to the next.
+Batch actions: &quot;categorize all from [merchant] as [category]&quot; when the same merchant appears repeatedly (e.g., every Starbucks charge), so recurring merchants don&apos;t need re-tagging every time.
+This is the screen you and your partner sit down with together — same ritual, but reviewing/tapping instead of writing/typing.
+5.3 Transactions Tab
+Same as v1: chronological list, filters by card/category/date, search, swipe-to-delete, tap-to-edit.
+Manual &quot;+&quot; add still available for cash or anything not captured by a linked card.
+Each transaction shows its source: &quot;Imported&quot; (from a bank) or &quot;Manual.&quot;
+5.4 Budget Tab
+Unchanged from v1 — ideal limits per category, this month&apos;s actual spend, progress bars, drill-in detail per category.
+5.5 Cards Tab (updated)
+Now shows real linked accounts from Plaid: institution name, account nickname, and last 4 digits — pulled from the bank via Plaid, not manually entered.
+Connection status per card (&quot;Connected&quot; / &quot;Needs attention&quot; if Plaid requires re-authentication — this happens periodically and is normal).
+&quot;Add another account&quot; launches Plaid Link again.
+Tap a card for its transaction history and running total, same as v1.
+5.6 Insights / Charts Tab
+Unchanged from v1: trend line, category donut, budget-vs-actual bars, card usage breakdown, surplus history.
+5.7 Settings
+Linked Accounts, Categories, Salary, Savings Goals — all editable per Section 2.2.
+Passcode/login for the app (needed now that data lives on a server, not just your phone).
+Export data (CSV), still available as a backup/portability option.
+6. Cost Summary
+Being direct about the real, ongoing costs this architecture introduces, since v1 had none of these.
+Item
+Estimated cost
+Notes
+Plaid (production, ~5 accounts)
+~$2–$8/month
+Confirm against Plaid&apos;s current published pricing at build time — rates change
+Backend hosting (Railway/Render/Fly.io)
+$0–$7/month
+Free tiers usually sufficient for a 2-person app&apos;s traffic
+Database (Supabase/Railway Postgres)
+$0–$5/month
+Free tier likely sufficient at this scale
+Apple Developer account
+$0 (already active)
+Already have this — confirmed in Backstory handoff
+Total estimate
+~$2–$20/month
+Realistically toward the low end for personal-scale use
+7. Data Model (updated)
+Card, Category, Transaction, SavingsGoal from v1 remain, with additions for Plaid linkage. All data now lives in the backend&apos;s PostgreSQL database rather than only on-device; the app caches locally for fast/offline viewing and syncs when online.
+7.1 LinkedAccount (new)
+Field
+Type
+Notes
+id
+string (uuid)
+Primary key
+plaidItemId
+string
+Plaid&apos;s identifier for this bank connection
+plaidAccessToken
+string, encrypted
+Stored server-side only, never sent to the app
+institutionName
+string
+e.g. &quot;Chase&quot;, from Plaid
+accountName
+string
+e.g. &quot;Sapphire Preferred&quot;, from Plaid, editable nickname
+lastFour
+string
+From Plaid
+status
+enum: connected / needs_attention
+Surfaced in Cards tab
+color
+string (hex)
+User-assigned, for the Wallet-style UI
+7.2 Transaction (updated)
+Field
+Type
+Notes
+id
+string (uuid)
+Primary key
+amount
+decimal
+From Plaid for imports, or user-entered for manual
+date
+date
+From Plaid, or editable for manual entries
+categoryId
+string (fk), nullable
+Null until categorized in the Review Queue
+linkedAccountId
+string (fk), nullable
+Set for imported transactions
+source
+enum: imported / manual
+Drives the badge shown in the Transactions list
+plaidTransactionId
+string, nullable
+For de-duplication on re-sync
+merchantName
+string
+From Plaid, or user note for manual entries
+Category, SavingsGoal, and the surplus/budget-health formulas from v1 Sections 4.2, 4.4, and 5 are unchanged — repeated here only if useful for the build session; see the v1 document for full formula detail.
+8. Build Phases (updated)
+Phase 1 — Backend foundation
+Server scaffold (Node/Express or Fastify), database schema, deploy pipeline to Railway/Render.
+Plaid Sandbox integration: Link token creation, token exchange, fake-bank transaction fetch working end-to-end.
+Simple passcode auth between app and server.
+Phase 2 — Core app + Setup wizard
+First-run Setup flow (Link accounts, currency, categories, salary type, savings goals) — all writing to the backend, all editable later.
+Home dashboard with live surplus calculation, pulling from server data.
+Review Queue for categorizing imported transactions.
+Phase 3 — Budget, Cards, manual entry
+Budget tab (ideal limits, progress bars).
+Cards tab reflecting real linked accounts + statuses.
+Manual transaction entry as a secondary path.
+Phase 4 — Insights &amp; polish
+All charts from v1 Section 3.6, now backed by server data.
+CSV export.
+Light/Dark polish, empty states, haptics.
+Phase 5 — Move to Plaid Production &amp; ship
+Switch Plaid from Sandbox to Production credentials once everything works with fake data.
+Real bank linking test with your actual 4–5 cards.
+EAS production build, TestFlight submission via your existing Apple Developer + EAS accounts.
+9. Decisions Still Worth Making (now inside the app, not this doc)
+These no longer block starting the build — they&apos;re first-run Setup steps and editable Settings, per Section 2. Listed here only as a build-order checklist:
+Default category list to ship with (you can rename/edit after).
+Whether the app login is a simple shared PIN or something slightly more formal (email+password via Supabase Auth) — worth 5 minutes of discussion at build start.
+Which hosting provider to actually spin up first (Railway is a reasonable default — simplest setup).
+Confirm current Plaid production pricing before flipping out of Sandbox, since rates are set by Plaid and can change.
