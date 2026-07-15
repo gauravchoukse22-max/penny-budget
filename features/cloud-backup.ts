@@ -72,6 +72,19 @@ export async function restoreFromCloud(userId: string): Promise<{ success: boole
   }
 }
 
+/** Permanently removes the user's cloud backup object. Safe to call when none exists. */
+export async function deleteCloudBackup(userId: string): Promise<{ success: boolean; message: string }> {
+  if (!isSupabaseConfigured) {
+    return { success: false, message: "Cloud accounts aren't configured for this build." };
+  }
+  const { error } = await supabase.storage.from(BUCKET).remove([objectPath(userId)]);
+  // A missing object is not a failure for our purposes — the goal is "gone".
+  if (error && !error.message.toLowerCase().includes('not found')) {
+    return { success: false, message: error.message };
+  }
+  return { success: true, message: 'Cloud backup deleted.' };
+}
+
 /** Returns when the user's cloud backup was last written, or null if none exists. */
 export async function getLastCloudBackupTimestamp(userId: string): Promise<string | null> {
   if (!isSupabaseConfigured) return null;

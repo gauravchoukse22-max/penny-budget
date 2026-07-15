@@ -10,7 +10,7 @@ import { backupToCloud, restoreFromCloud, getLastCloudBackupTimestamp } from '..
 
 export default function AccountScreen() {
   const theme = useTheme();
-  const { isConfigured, loading, user, signIn, signUp, signOut } = useAuth();
+  const { isConfigured, loading, user, signIn, signUp, signOut, deleteAccount } = useAuth();
   const { refresh } = useBudget();
 
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
@@ -59,6 +59,30 @@ export default function AccountScreen() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const doDeleteAccount = () => {
+    if (!user) return;
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your account and your cloud backup. It cannot be undone. The budget data on this device stays and keeps working offline.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: async () => {
+            setBusy(true);
+            try {
+              const result = await deleteAccount();
+              Alert.alert(result.success ? 'Account deleted' : 'Delete failed', result.message);
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const doRestore = () => {
@@ -137,6 +161,17 @@ export default function AccountScreen() {
           <Pressable style={[styles.button, styles.secondaryButton, { borderColor: theme.separator }]} onPress={signOut}>
             <Text style={{ color: theme.label, fontWeight: '600' }}>Sign Out</Text>
           </Pressable>
+
+          <Pressable
+            style={[styles.button, styles.secondaryButton, { borderColor: theme.systemRed }]}
+            onPress={doDeleteAccount}
+            disabled={busy}
+          >
+            <Text style={{ color: theme.systemRed, fontWeight: '600' }}>Delete Account</Text>
+          </Pressable>
+          <Text style={[styles.helper, { color: theme.tertiaryLabel, textAlign: 'center' }]}>
+            Permanently deletes your account and cloud backup. Data on this device is untouched.
+          </Text>
         </ScrollView>
       </SafeAreaView>
     );

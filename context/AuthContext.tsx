@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { deleteCloudBackup } from '../features/cloud-backup';
 
 type AuthResult = { success: boolean; message: string; needsEmailConfirmation?: boolean };
 
@@ -12,6 +13,7 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<AuthResult>;
   signUp: (email: string, password: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<AuthResult>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -62,6 +64,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   }, []);
 
+  // Permanently deletes the signed-in user's account and all server-side data
+  // (Apple Guideline 5.1.1(v) requires in-app account deletion). Deleting the
+  // auth user itself needs elevated privileges, so it goes through a
+  // SECURITY DEFINER RPC (`public.delete_user`); see docs/supabase-setup.md.
+  const deleteAccount = useCallback(async (): Promise<AuthResult> => {
+    if (!isSupabaseConfigured) {
+      return { success: false, message: "Cloud accounts aren't configured for this build." };
+    }
+    const { data: userData } = await supabase.auth.getUser();
+    const uid = userData.user?.id;
+    if (!uid) return { success: false, message: 'You are not signed in.' };
+
+    // Remove their cloud backup first (RLS lets the user delete their own object).
+    const backupResult = await deleteCloudBackup(uid);
+    if (!backupResult.success) {
+      return { success: false, message: `Couldn't delete your cloud data: ${backupResult.message}` };
+    }
+
+    // Delete the auth user via the privileged RPC.
+    const { error } = await supabase.rpc('delete_user');
+    if (error) return { success: false, message: error.message };
+
+    // Clear the now-orphaned local session.
+    await supabase.auth.signOut();
+    return { success: true, message: 'Your account and cloud data were permanently deleted.' };
+  }, []);
+
   const value: AuthContextValue = {
     isConfigured: isSupabaseConfigured,
     loading,
@@ -70,6 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signIn,
     signUp,
     signOut,
+    deleteAccount,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

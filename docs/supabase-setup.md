@@ -27,7 +27,36 @@ Login is **optional**, not a gate — the app is fully usable offline without ev
    with check ( bucket_id = 'backups' and auth.uid()::text = (storage.foldername(name))[1] );
    ```
 
-## 3. Configure the app
+## 3. Account deletion function (required — Apple Guideline 5.1.1(v))
+
+Apps that let users create an account must let them delete it (and their
+server-side data) from within the app. The app's **Delete Account** button
+removes the user's `backups/{uid}/backup.json` object via RLS, then calls a
+`delete_user` RPC to remove the `auth.users` row. Deleting an auth user needs
+elevated privileges, so it runs through a `SECURITY DEFINER` function.
+
+**SQL Editor**: run this once.
+
+```sql
+create or replace function public.delete_user()
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  delete from auth.users where id = auth.uid();
+$$;
+
+-- Only a signed-in user may delete their own account; never anon/public.
+revoke all on function public.delete_user() from public, anon;
+grant execute on function public.delete_user() to authenticated;
+```
+
+The function deletes only the caller (`auth.uid()`), so a signed-in user can
+never delete anyone else. The cloud backup object is removed client-side before
+this runs; there are no other per-user tables to clean up.
+
+## 4. Configure the app
 
 Add the two values from step 1 to `.env.local` (gitignored — see `.env.example` for the template):
 
