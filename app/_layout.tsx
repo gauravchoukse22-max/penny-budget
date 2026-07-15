@@ -6,6 +6,7 @@ import { useColorScheme, AppState } from 'react-native';
 import { BudgetProvider, useBudget } from '../context/BudgetContext';
 import { AuthProvider } from '../context/AuthContext';
 import { authenticateUser } from '../features/biometrics';
+import { hasUnseenChangelog } from '../features/whats-new';
 import { AppLockScreen } from '../components/FeatureCards';
 
 function RootNavigator() {
@@ -37,6 +38,19 @@ function RootNavigator() {
       router.replace('/(tabs)');
     }
     setCheckedOnboarding(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, settings.onboarded]);
+
+  // Once the user is past onboarding, show "What's New" if a perceptible change
+  // shipped since they last saw it. Runs once per launch; the screen marks itself
+  // seen so it won't reappear until the next changelog entry.
+  const shownWhatsNewRef = useRef(false);
+  useEffect(() => {
+    if (!ready || !settings.onboarded || shownWhatsNewRef.current) return;
+    shownWhatsNewRef.current = true;
+    hasUnseenChangelog().then((unseen) => {
+      if (unseen) router.push('/whats-new');
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, settings.onboarded]);
 
@@ -73,6 +87,7 @@ function RootNavigator() {
         <Stack.Screen name="recurring/index" options={{ headerShown: true, title: 'Recurring Bills' }} />
         <Stack.Screen name="search" options={{ headerShown: true, title: 'Search' }} />
         <Stack.Screen name="account/index" options={{ headerShown: true, title: 'Account' }} />
+        <Stack.Screen name="whats-new/index" options={{ presentation: 'modal', headerShown: true, title: "What's New" }} />
       </Stack>
       {locked && <AppLockScreen onUnlock={runAuth} />}
     </>

@@ -258,6 +258,11 @@ export default function SettingsScreen() {
           </Text>
         </Surface>
 
+        <Surface>
+          <Text style={[styles.sectionTitle, { color: theme.label }]}>About</Text>
+          <SettingsLink label="What's New" onPress={() => router.push('/whats-new')} />
+        </Surface>
+
         <Text style={[styles.footer, { color: theme.tertiaryLabel }]}>
           Penny Budget — your data stays on this device unless you turn on iCloud Sync.
         </Text>
