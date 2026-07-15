@@ -91,6 +91,9 @@ export function validateBackup(backup: unknown): { valid: true; backup: BackupDa
     return { valid: false, message: 'Invalid backup file structure.' };
   }
   const typed = backup as BackupData;
+  if (typeof typed.version !== 'number' || !Number.isFinite(typed.version) || typed.version < 1) {
+    return { valid: false, message: "This file isn't a valid Penny Budget backup." };
+  }
   if (typed.version > BACKUP_VERSION) {
     return {
       valid: false,

@@ -40,7 +40,7 @@ export default function CardDetailScreen() {
   const saveDueDay = () => editCard(card.id, { dueDay: parseDay(dueDayDraft) });
 
   const confirmDelete = () => {
-    Alert.alert('Delete card?', 'Its transactions will remain but lose this card reference.', [
+    Alert.alert('Delete card?', 'This permanently deletes the card and every transaction on it, across all months. This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',

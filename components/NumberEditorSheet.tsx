@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, radius, type } from '../theme/colors';
-import { formatCurrency } from '../lib/format';
+import { formatCurrency, currencySymbol } from '../lib/format';
 import { PressableScale } from './PressableScale';
 import { tapLight, tapMedium, success } from '../lib/haptics';
 
@@ -80,7 +80,7 @@ export function NumberEditorSheet({
         <View style={styles.amountArea}>
           <Text style={[styles.preview, { color: theme.tertiaryLabel }]}>{formatCurrency(numeric, currency)}</Text>
           <View style={styles.inputRow}>
-            <Text style={[styles.currency, { color: theme.secondaryLabel }]}>$</Text>
+            <Text style={[styles.currency, { color: theme.secondaryLabel }]}>{currencySymbol(currency)}</Text>
             <TextInput
               style={[styles.input, { color: theme.label }]}
               keyboardType="numeric"

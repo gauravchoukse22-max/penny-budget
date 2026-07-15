@@ -98,16 +98,31 @@ export async function updateCard(id: string, patch: Partial<Omit<Card, 'id'>>): 
 /** Days until a card's next due date (day-of-month), or null if not tracked. Wraps to next month if the day already passed. */
 export function daysUntilDue(dueDay: number | null, today = new Date()): number | null {
   if (!dueDay) return null;
-  const candidate = new Date(today.getFullYear(), today.getMonth(), dueDay);
-  if (candidate < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
-    candidate.setMonth(candidate.getMonth() + 1);
+  const y = today.getFullYear();
+  const mo = today.getMonth();
+  // Clamp the requested day to the target month's length so e.g. "the 31st"
+  // resolves to Apr 30 / Feb 28, not an overflow into the following month.
+  const clampDay = (year: number, month: number, day: number) =>
+    Math.min(day, new Date(year, month + 1, 0).getDate());
+  const startOfToday = new Date(y, mo, today.getDate());
+  let candidate = new Date(y, mo, clampDay(y, mo, dueDay));
+  if (candidate < startOfToday) {
+    // new Date handles the year rollover when mo + 1 === 12.
+    candidate = new Date(y, mo + 1, clampDay(y, mo + 1, dueDay));
   }
-  return Math.round((candidate.getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / 86400000);
+  return Math.round((candidate.getTime() - startOfToday.getTime()) / 86400000);
 }
 
 export async function deleteCard(id: string): Promise<void> {
   const db = await getDb();
+  // Every transaction requires a card (cardId is NOT NULL) and FK enforcement
+  // is off, so a bare card delete would orphan its transactions with a dangling
+  // cardId. Delete them together instead — deterministic and matches the
+  // confirmation the user sees.
+  const orphaned = await db.getAllAsync<{ id: string }>('SELECT id FROM transactions WHERE cardId = ?', [id]);
+  await db.runAsync('DELETE FROM transactions WHERE cardId = ?', [id]);
   await db.runAsync('DELETE FROM cards WHERE id = ?', [id]);
+  for (const t of orphaned) await queueSyncMutation('DELETE', 'transactions', t.id, { id: t.id });
   await queueSyncMutation('DELETE', 'cards', id, { id });
 }
 
@@ -153,7 +168,20 @@ export async function updateCategory(id: string, patch: Partial<Omit<Category, '
 
 export async function deleteCategory(id: string): Promise<void> {
   const db = await getDb();
+  // FK enforcement is off, so the schema's ON DELETE SET NULL never fires and a
+  // deleted category would leave transactions with a dangling categoryId — they
+  // vanish from every category view yet still count toward surplus. Null them
+  // explicitly so they become uncategorized and resurface in the review flow.
+  const orphaned = await db.getAllAsync<{ id: string }>('SELECT id FROM transactions WHERE categoryId = ?', [id]);
+  await db.runAsync('UPDATE transactions SET categoryId = NULL WHERE categoryId = ?', [id]);
   await db.runAsync('DELETE FROM categories WHERE id = ?', [id]);
+  if (orphaned.length > 0) {
+    const affected = await db.getAllAsync<Transaction>(
+      `SELECT * FROM transactions WHERE id IN (${orphaned.map(() => '?').join(', ')})`,
+      orphaned.map((o) => o.id)
+    );
+    for (const t of affected) await queueSyncMutation('UPDATE', 'transactions', t.id, t);
+  }
   await queueSyncMutation('DELETE', 'categories', id, { id });
 }
 
@@ -377,7 +405,11 @@ export async function deleteTransaction(id: string): Promise<void> {
 // ---------- Core calculations (spec Section 5) ----------
 
 export function sumAmount(transactions: Transaction[]): number {
-  return transactions.reduce((sum, t) => sum + t.amount, 0);
+  // Round to whole cents so floating-point drift (0.1 + 0.2 …) can't leak into
+  // surplus, "remaining", or the budget score — which otherwise flips on a
+  // sub-cent and can render "-$0.00".
+  const cents = transactions.reduce((sum, t) => sum + Math.round(t.amount * 100), 0);
+  return cents / 100;
 }
 
 /** 5.1 Monthly Surplus = Salary − SUM(transactions) − SUM(savings goals) */

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
+import { currencySymbol } from '../../lib/format';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { PressableScale } from '../../components/PressableScale';
 import { suggestCategory } from '../../features/smart-categorizer';
@@ -19,7 +20,7 @@ function todayIso(): string {
 export default function AddTransactionScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { categories, cards, transactions, addTransaction } = useBudget();
+  const { categories, cards, transactions, settings, addTransaction } = useBudget();
 
   // Surface the categories the user reaches for most, so the common picks sit
   // up top instead of in creation order.
@@ -103,7 +104,7 @@ export default function AddTransactionScreen() {
     >
       <View style={styles.amountRow}>
         <Text style={[styles.currencySymbol, { color: isRefund ? theme.systemGreen : theme.secondaryLabel }]}>
-          {isRefund ? '+' : '$'}
+          {isRefund ? '+' : currencySymbol(settings.currency)}
         </Text>
         <TextInput
           style={[styles.amountInput, { color: isRefund ? theme.systemGreen : theme.label }]}

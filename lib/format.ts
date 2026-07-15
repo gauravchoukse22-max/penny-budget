@@ -6,6 +6,16 @@ export function formatCurrency(amount: number, currency = 'USD'): string {
   }
 }
 
+/** The lone currency symbol for the active currency (e.g. "$", "€", "₹", "¥"). */
+export function currencySymbol(currency = 'USD'): string {
+  try {
+    const parts = new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 0 }).formatToParts(0);
+    return parts.find((p) => p.type === 'currency')?.value ?? '$';
+  } catch {
+    return '$';
+  }
+}
+
 export function formatMonthLabel(yearMonth: string): string {
   const [y, m] = yearMonth.split('-').map(Number);
   const d = new Date(y, m - 1, 1);
@@ -27,7 +37,11 @@ export function daysLeftInMonth(yearMonth: string): number {
   const [y, m] = yearMonth.split('-').map(Number);
   const lastDay = new Date(y, m, 0).getDate();
   const now = new Date();
-  const isCurrentMonth = now.getFullYear() === y && now.getMonth() + 1 === m;
-  if (!isCurrentMonth) return lastDay;
-  return Math.max(0, lastDay - now.getDate());
+  const curY = now.getFullYear();
+  const curM = now.getMonth() + 1;
+  if (y === curY && m === curM) return Math.max(0, lastDay - now.getDate());
+  // A month that has already ended has no days left.
+  if (y < curY || (y === curY && m < curM)) return 0;
+  // A future month hasn't started — the whole month is still ahead.
+  return lastDay;
 }

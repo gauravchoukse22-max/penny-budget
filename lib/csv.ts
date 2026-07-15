@@ -45,13 +45,62 @@ export function parseCsvLine(line: string): string[] {
   return fields;
 }
 
+/**
+ * Parses a whole CSV document into records, honoring RFC-4180 quoting so a
+ * quoted field may itself contain commas AND newlines. Splitting on newlines
+ * first (the naive approach) corrupts any note with an embedded newline, so we
+ * scan character-by-character and only treat an unquoted newline as a record
+ * break. Blank records are dropped.
+ */
+export function parseCsv(content: string): string[][] {
+  const rows: string[][] = [];
+  let field = '';
+  let record: string[] = [];
+  let inQuotes = false;
+  const pushField = () => {
+    record.push(field);
+    field = '';
+  };
+  const pushRecord = () => {
+    pushField();
+    if (record.some((f) => f.trim().length > 0)) rows.push(record);
+    record = [];
+  };
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
+    if (inQuotes) {
+      if (ch === '"' && content[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      pushField();
+    } else if (ch === '\n') {
+      pushRecord();
+    } else if (ch === '\r') {
+      // swallow — a following \n ends the record; a lone \r is ignored
+    } else {
+      field += ch;
+    }
+  }
+  // Flush any trailing record not terminated by a newline.
+  if (field.length > 0 || record.length > 0) pushRecord();
+  return rows;
+}
+
 export async function importTransactionsCsv(): Promise<{ imported: number; skipped: number } | null> {
   const result = await DocumentPicker.getDocumentAsync({ type: 'text/csv', copyToCacheDirectory: true });
   if (result.canceled || !result.assets?.[0]) return null;
 
   const content = await FileSystem.readAsStringAsync(result.assets[0].uri);
-  const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length <= 1) return { imported: 0, skipped: 0 };
+  const records = parseCsv(content);
+  if (records.length <= 1) return { imported: 0, skipped: 0 };
 
   const [categories, cards] = await Promise.all([listCategories(), listCards()]);
   const categoryByName = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
@@ -60,8 +109,8 @@ export async function importTransactionsCsv(): Promise<{ imported: number; skipp
   let imported = 0;
   let skipped = 0;
 
-  for (const line of lines.slice(1)) {
-    const [date, amountStr, categoryName, cardName, note, source] = parseCsvLine(line);
+  for (const record of records.slice(1)) {
+    const [date, amountStr, categoryName, cardName, note, source] = record;
     const amount = parseFloat(amountStr);
     const cardId = cardByName.get((cardName ?? '').toLowerCase());
     if (!date || !Number.isFinite(amount) || amount === 0 || !cardId) {

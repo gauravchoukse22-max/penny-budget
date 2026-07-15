@@ -8,6 +8,7 @@ import { LineChart } from '../../components/charts/LineChart';
 import { DonutChart } from '../../components/charts/DonutChart';
 import { BarChart } from '../../components/charts/BarChart';
 import { computeTrendSeries } from '../../lib/queries';
+import { currentYearMonth } from '../../lib/db';
 import type { TrendPoint } from '../../lib/models';
 import { formatMonthLabel } from '../../lib/format';
 import { SmartForecastCard, AnomalyAlertBanner, MonthlySummaryCard } from '../../components/FeatureCards';
@@ -24,13 +25,19 @@ export default function InsightsScreen() {
   const [summary, setSummary] = useState<MonthlySummary | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
+  // The forecast projects the rest of the *current* month from spend-to-date;
+  // it's meaningless for a past or future month, so only compute it when the
+  // selected month is the live one.
+  const isCurrentMonth = selectedMonth === currentYearMonth();
+
   useEffect(() => {
     computeTrendSeries(selectedMonth, 6).then(setTrend);
-    getHistoricalCategoryProjections(3).then(setProjections);
+    if (isCurrentMonth) getHistoricalCategoryProjections(3).then(setProjections);
+    else setProjections([]);
     detectAnomalies(selectedMonth).then(setAnomalies);
     generateMonthlySummary(selectedMonth).then(setSummary);
     setDismissed(new Set());
-  }, [selectedMonth]);
+  }, [selectedMonth, isCurrentMonth]);
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const projectionCards = projections

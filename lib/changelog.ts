@@ -16,6 +16,21 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-07-15-qa-fixes',
+    version: '1.0.1',
+    date: 'July 2026',
+    title: 'Sharper, safer numbers',
+    changes: [
+      'Deleting a card now clearly warns that its transactions go with it — and they\'re fully removed, instead of lingering as broken rows with no card.',
+      'Deleting a category now moves its transactions to "to review" so spending never silently disappears from your totals.',
+      'The Smart Forecast only shows on the current month, so swiping back to a past month no longer displays a mismatched projection.',
+      '"Days Left" now reads 0 for months that have already ended, and card due dates are correct in short months like April and February.',
+      'Amount fields show your chosen currency symbol (€, £, ₹, ¥ …) instead of always showing "$".',
+      'CSV import is more reliable: notes that contain a line break no longer corrupt the imported file.',
+      'Money totals are rounded to the cent, so you\'ll never see a stray "-$0.00".',
+    ],
+  },
+  {
     id: '2026-07-15-feel',
     version: '1.0.1',
     date: 'July 2026',
