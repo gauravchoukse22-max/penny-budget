@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Platform, KeyboardAvoidingView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as Haptics from 'expo-haptics';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { CategoryIcon } from '../../components/CategoryIcon';
+import { PressableScale } from '../../components/PressableScale';
 import { suggestCategory } from '../../features/smart-categorizer';
+import { tapLight, success } from '../../lib/haptics';
 import type { SmartSuggestion } from '../../features/models';
 
 function todayIso(): string {
@@ -18,7 +19,17 @@ function todayIso(): string {
 export default function AddTransactionScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { categories, cards, addTransaction } = useBudget();
+  const { categories, cards, transactions, addTransaction } = useBudget();
+
+  // Surface the categories the user reaches for most, so the common picks sit
+  // up top instead of in creation order.
+  const sortedCategories = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of transactions) {
+      if (t.categoryId) counts.set(t.categoryId, (counts.get(t.categoryId) ?? 0) + 1);
+    }
+    return [...categories].sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0));
+  }, [categories, transactions]);
 
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -69,7 +80,7 @@ export default function AddTransactionScreen() {
     if (!canSave || !cardId) return;
     const signedAmount = (isRefund ? -1 : 1) * parseFloat(amount);
     await addTransaction({ amount: signedAmount, date, categoryId, cardId, note: note.trim() || null });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    success();
     if (addAnother) {
       setAmount('');
       setNote('');
@@ -107,13 +118,19 @@ export default function AddTransactionScreen() {
 
       <View style={styles.typeRow}>
         <Pressable
-          onPress={() => setIsRefund(false)}
+          onPress={() => {
+            tapLight();
+            setIsRefund(false);
+          }}
           style={[styles.typeChip, { backgroundColor: !isRefund ? theme.accent : theme.fieldBackground }]}
         >
           <Text style={{ color: !isRefund ? '#FFF' : theme.secondaryLabel, fontWeight: '700' }}>Expense</Text>
         </Pressable>
         <Pressable
-          onPress={() => setIsRefund(true)}
+          onPress={() => {
+            tapLight();
+            setIsRefund(true);
+          }}
           style={[styles.typeChip, { backgroundColor: isRefund ? theme.systemGreen : theme.fieldBackground }]}
         >
           <Text style={{ color: isRefund ? '#FFF' : theme.secondaryLabel, fontWeight: '700' }}>Refund / Credit</Text>
@@ -122,29 +139,55 @@ export default function AddTransactionScreen() {
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Category</Text>
       <View style={styles.grid}>
-        {categories.map((c) => (
-          <Pressable key={c.id} onPress={() => setCategoryId(c.id)} style={styles.gridItem}>
-            <View style={[styles.iconWrap, categoryId === c.id && { borderColor: c.color, borderWidth: 2 }]}>
-              <CategoryIcon icon={c.icon} color={c.color} />
-            </View>
-            <Text style={[styles.gridLabel, { color: theme.secondaryLabel }]} numberOfLines={1}>
-              {c.name}
-            </Text>
-          </Pressable>
-        ))}
+        {sortedCategories.map((c) => {
+          const selected = categoryId === c.id;
+          return (
+            <PressableScale
+              key={c.id}
+              haptic
+              activeScale={0.92}
+              onPress={() => setCategoryId(c.id)}
+              style={styles.gridItem}
+            >
+              <View style={[styles.iconWrap, { backgroundColor: selected ? c.color : theme.fieldBackground }]}>
+                <CategoryIcon icon={c.icon} color={selected ? '#FFFFFF' : c.color} size={22} />
+                {selected && (
+                  <View style={styles.checkBadge}>
+                    <Ionicons name="checkmark-circle" size={18} color={c.color} />
+                  </View>
+                )}
+              </View>
+              <Text
+                style={[styles.gridLabel, { color: selected ? theme.label : theme.secondaryLabel, fontWeight: selected ? '700' : '400' }]}
+                numberOfLines={1}
+              >
+                {c.name}
+              </Text>
+            </PressableScale>
+          );
+        })}
       </View>
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Card</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cardRow}>
-        {cards.map((c) => (
-          <Pressable
-            key={c.id}
-            onPress={() => setCardId(c.id)}
-            style={[styles.cardChip, { backgroundColor: c.color, opacity: cardId === c.id ? 1 : 0.4 }]}
-          >
-            <Text style={styles.cardChipText}>{c.name}</Text>
-          </Pressable>
-        ))}
+        {cards.map((c) => {
+          const selected = cardId === c.id;
+          return (
+            <PressableScale
+              key={c.id}
+              haptic
+              activeScale={0.94}
+              onPress={() => setCardId(c.id)}
+              style={[
+                styles.cardChip,
+                { backgroundColor: c.color, opacity: selected ? 1 : 0.5, borderWidth: 2, borderColor: selected ? '#FFFFFF' : 'transparent' },
+              ]}
+            >
+              {selected && <Ionicons name="checkmark" size={15} color="#FFFFFF" style={{ marginRight: 5 }} />}
+              <Text style={styles.cardChipText}>{c.name}</Text>
+            </PressableScale>
+          );
+        })}
       </ScrollView>
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Date</Text>
@@ -193,20 +236,20 @@ export default function AddTransactionScreen() {
       )}
 
       <View style={styles.buttonRow}>
-        <Pressable
+        <PressableScale
           disabled={!canSave}
           style={[styles.button, styles.secondaryButton, { borderColor: theme.accent, opacity: canSave ? 1 : 0.4 }]}
           onPress={() => save(true)}
         >
           <Text style={{ color: theme.accent, fontWeight: '600' }}>Save & Add Another</Text>
-        </Pressable>
-        <Pressable
+        </PressableScale>
+        <PressableScale
           disabled={!canSave}
           style={[styles.button, { backgroundColor: theme.accent, opacity: canSave ? 1 : 0.4 }]}
           onPress={() => save(false)}
         >
           <Text style={{ color: '#FFF', fontWeight: '600' }}>Save</Text>
-        </Pressable>
+        </PressableScale>
       </View>
     </ScrollView>
     </KeyboardAvoidingView>
@@ -224,12 +267,13 @@ const styles = StyleSheet.create({
   typeRow: { flexDirection: 'row', gap: 8, justifyContent: 'center', marginBottom: spacing.md },
   typeChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: radius.md },
   label: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.lg, marginBottom: spacing.sm },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   gridItem: { alignItems: 'center', width: 72 },
-  iconWrap: { borderRadius: 22, padding: 2 },
-  gridLabel: { fontSize: 11, marginTop: 4, textAlign: 'center' },
+  iconWrap: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center' },
+  checkBadge: { position: 'absolute', top: -2, right: -2, backgroundColor: '#FFFFFF', borderRadius: 9 },
+  gridLabel: { fontSize: 11, marginTop: 5, textAlign: 'center' },
   cardRow: { flexDirection: 'row' },
-  cardChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.md, marginRight: 8 },
+  cardChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.md, marginRight: 8 },
   cardChipText: { color: '#FFF', fontWeight: '600' },
   dateBox: { padding: 12, borderRadius: radius.sm },
   noteInput: { padding: 12, borderRadius: radius.sm, fontSize: 15 },

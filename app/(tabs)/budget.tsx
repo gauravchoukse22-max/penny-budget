@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Modal, Alert, Platform, KeyboardAvoidingView } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Modal, Alert, Platform, KeyboardAvoidingView, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,9 +7,20 @@ import { useBudget } from '../../context/BudgetContext';
 import { useTheme, CATEGORY_PALETTE, spacing, radius, type } from '../../theme/colors';
 import { AmountText } from '../../components/AmountText';
 import { ProgressBar } from '../../components/ProgressBar';
+import { RemainingLabel } from '../../components/RemainingLabel';
 import { Surface } from '../../components/Surface';
+import { PressableScale } from '../../components/PressableScale';
+import { NumberEditorSheet } from '../../components/NumberEditorSheet';
 import { CategoryIcon, CATEGORY_ICON_CHOICES } from '../../components/CategoryIcon';
-import { formatMonthLabel } from '../../lib/format';
+import { formatMonthLabel, formatCurrency } from '../../lib/format';
+import { tapLight, success } from '../../lib/haptics';
+
+// What the single money-editor sheet is currently editing.
+type EditorState =
+  | { kind: 'limit'; id: string; name: string; value: number }
+  | { kind: 'salary'; value: number }
+  | { kind: 'goal'; id: string; name: string; value: number }
+  | null;
 
 export default function BudgetScreen() {
   const theme = useTheme();
@@ -32,17 +43,22 @@ export default function BudgetScreen() {
     setCategoryLimitForSelectedMonth,
   } = useBudget();
 
-  const [salaryDraft, setSalaryDraft] = useState(String(settings.salaryMode === 'fixed' ? settings.fixedSalary : surplus.salary));
   const [goalName, setGoalName] = useState('');
   const [goalAmount, setGoalAmount] = useState('');
   const [showAddCategory, setShowAddCategory] = useState(false);
+  const [editor, setEditor] = useState<EditorState>(null);
 
-  const saveSalary = async () => {
-    const value = parseFloat(salaryDraft) || 0;
-    if (settings.salaryMode === 'fixed') {
-      await updateSettings({ fixedSalary: value });
-    } else {
-      await setSalaryForSelectedMonth(value);
+  const currentSalary = settings.salaryMode === 'fixed' ? settings.fixedSalary : surplus.salary;
+
+  const saveEditor = async (value: number) => {
+    if (!editor) return;
+    if (editor.kind === 'limit') {
+      await setCategoryLimitForSelectedMonth(editor.id, value);
+    } else if (editor.kind === 'salary') {
+      if (settings.salaryMode === 'fixed') await updateSettings({ fixedSalary: value });
+      else await setSalaryForSelectedMonth(value);
+    } else if (editor.kind === 'goal') {
+      await setSavingsGoalAmountForSelectedMonth(editor.id, value);
     }
   };
 
@@ -50,35 +66,48 @@ export default function BudgetScreen() {
     const amount = parseFloat(goalAmount);
     if (!goalName.trim() || !(amount > 0)) return;
     await addSavingsGoal({ name: goalName.trim(), monthlyAmount: amount });
+    success();
     setGoalName('');
     setGoalAmount('');
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.groupedBackground }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Text style={[type.title1, { color: theme.label }]}>Budget</Text>
 
         <Surface>
           <Text style={[styles.sectionTitle, { color: theme.label }]}>Categories</Text>
-          {categorySummaries.map((s) => (
-            <View key={s.category.id} style={styles.categoryRow}>
-              <Pressable onPress={() => router.push(`/category/${s.category.id}`)} style={styles.categoryTapArea}>
-                <CategoryIcon icon={s.category.icon} color={s.category.color} size={17} />
-                <View style={styles.categoryMiddle}>
-                  <Text style={[styles.categoryName, { color: theme.label }]}>{s.category.name}</Text>
-                  <ProgressBar percent={s.percent} status={s.status} />
-                </View>
-              </Pressable>
-              <View style={{ alignItems: 'flex-end' }}>
-                <AmountText amount={s.spend} currency={settings.currency} size={14} weight="semibold" />
-                <CategoryLimitInlineInput
-                  value={s.category.monthlyLimit}
-                  onSave={(limit) => setCategoryLimitForSelectedMonth(s.category.id, limit)}
-                />
-              </View>
+          {categorySummaries.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="pricetags-outline" size={28} color={theme.tertiaryLabel} />
+              <Text style={[styles.emptyText, { color: theme.secondaryLabel }]}>Add a category to start setting budgets.</Text>
             </View>
-          ))}
+          ) : (
+            categorySummaries.map((s) => (
+              <View key={s.category.id} style={styles.categoryRow}>
+                <Pressable onPress={() => router.push(`/category/${s.category.id}`)} style={styles.categoryTapArea}>
+                  <CategoryIcon icon={s.category.icon} color={s.category.color} size={17} />
+                  <View style={styles.categoryMiddle}>
+                    <Text style={[styles.categoryName, { color: theme.label }]}>{s.category.name}</Text>
+                    <ProgressBar percent={s.percent} status={s.status} />
+                  </View>
+                </Pressable>
+                <PressableScale
+                  haptic
+                  onPress={() => setEditor({ kind: 'limit', id: s.category.id, name: s.category.name, value: s.category.monthlyLimit })}
+                  style={styles.categoryRight}
+                >
+                  <AmountText amount={s.spend} currency={settings.currency} size={14} weight="semibold" />
+                  {s.category.monthlyLimit > 0 ? (
+                    <RemainingLabel remaining={s.remaining} currency={settings.currency} size={11} />
+                  ) : (
+                    <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '600' }}>Set budget</Text>
+                  )}
+                </PressableScale>
+              </View>
+            ))
+          )}
           <Pressable style={styles.addRow} onPress={() => setShowAddCategory(true)}>
             <Ionicons name="add-circle" size={20} color={theme.accent} />
             <Text style={{ color: theme.accent, marginLeft: 6, fontWeight: '600' }}>Add Category</Text>
@@ -90,29 +119,36 @@ export default function BudgetScreen() {
           <View style={styles.salaryModeRow}>
             <Pressable
               style={[styles.modeChip, { backgroundColor: settings.salaryMode === 'fixed' ? theme.accent : theme.fieldBackground }]}
-              onPress={() => updateSettings({ salaryMode: 'fixed' })}
+              onPress={() => {
+                tapLight();
+                updateSettings({ salaryMode: 'fixed' });
+              }}
             >
               <Text style={{ color: settings.salaryMode === 'fixed' ? '#FFFFFF' : theme.secondaryLabel, fontWeight: '700' }}>Fixed</Text>
             </Pressable>
             <Pressable
               style={[styles.modeChip, { backgroundColor: settings.salaryMode === 'variable' ? theme.accent : theme.fieldBackground }]}
-              onPress={() => updateSettings({ salaryMode: 'variable' })}
+              onPress={() => {
+                tapLight();
+                updateSettings({ salaryMode: 'variable' });
+              }}
             >
               <Text style={{ color: settings.salaryMode === 'variable' ? '#FFFFFF' : theme.secondaryLabel, fontWeight: '700' }}>Varies monthly</Text>
             </Pressable>
           </View>
-          <View style={styles.inlineInputRow}>
-            <TextInput
-              style={[styles.inlineInput, { backgroundColor: theme.fieldBackground, color: theme.label }]}
-              keyboardType="numeric"
-              value={salaryDraft}
-              onChangeText={setSalaryDraft}
-              onBlur={saveSalary}
-            />
-            <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }}>
-              {settings.salaryMode === 'fixed' ? 'Applies every month' : `For ${selectedMonth}`}
-            </Text>
-          </View>
+          <PressableScale
+            haptic
+            onPress={() => setEditor({ kind: 'salary', value: currentSalary })}
+            style={[styles.salaryField, { backgroundColor: theme.fieldBackground }]}
+          >
+            <AmountText amount={currentSalary} currency={settings.currency} size={22} weight="bold" />
+            <View style={styles.salaryFieldRight}>
+              <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }}>
+                {settings.salaryMode === 'fixed' ? 'Every month' : `For ${selectedMonth}`}
+              </Text>
+              <Ionicons name="pencil" size={14} color={theme.tertiaryLabel} />
+            </View>
+          </PressableScale>
         </Surface>
 
         <Surface>
@@ -125,20 +161,25 @@ export default function BudgetScreen() {
             const resolvedAmount = savingsGoalAmounts.get(g.id) ?? g.monthlyAmount;
             return (
               <View key={g.id} style={styles.goalRow}>
-                <Pressable onPress={() => setGoalTransferred(g.id, !transferred)} hitSlop={8} style={{ marginRight: 10 }}>
-                  <Ionicons
-                    name={transferred ? 'checkmark-circle' : 'ellipse-outline'}
-                    size={22}
-                    color={transferred ? theme.systemGreen : theme.tertiaryLabel}
-                  />
-                </Pressable>
+                <GoalCheck
+                  transferred={transferred}
+                  onToggle={() => {
+                    const next = !transferred;
+                    if (next) success();
+                    else tapLight();
+                    setGoalTransferred(g.id, next);
+                  }}
+                />
                 <Text style={{ color: theme.label, flex: 1, textDecorationLine: transferred ? 'line-through' : 'none' }}>
                   {g.name}
                 </Text>
-                <GoalAmountInput
-                  value={resolvedAmount}
-                  onSave={(amount) => setSavingsGoalAmountForSelectedMonth(g.id, amount)}
-                />
+                <PressableScale
+                  haptic
+                  onPress={() => setEditor({ kind: 'goal', id: g.id, name: g.name, value: resolvedAmount })}
+                  style={[styles.goalAmountField, { backgroundColor: theme.fieldBackground }]}
+                >
+                  <AmountText amount={resolvedAmount} currency={settings.currency} size={14} weight="semibold" />
+                </PressableScale>
                 <Pressable onPress={() => removeSavingsGoal(g.id)} style={{ marginLeft: 12 }} hitSlop={8}>
                   <Ionicons name="close-circle" size={20} color={theme.tertiaryLabel} />
                 </Pressable>
@@ -171,49 +212,57 @@ export default function BudgetScreen() {
         </Surface>
       </ScrollView>
 
+      <NumberEditorSheet
+        visible={!!editor}
+        onClose={() => setEditor(null)}
+        onSave={saveEditor}
+        title={editor?.kind === 'salary' ? 'Salary' : editor?.kind === 'goal' ? editor.name : editor?.kind === 'limit' ? editor.name : ''}
+        subtitle={
+          editor?.kind === 'limit'
+            ? 'Monthly budget for this category'
+            : editor?.kind === 'goal'
+            ? `Applies from ${formatMonthLabel(selectedMonth)} forward`
+            : editor?.kind === 'salary'
+            ? settings.salaryMode === 'fixed'
+              ? 'Applies every month'
+              : `For ${formatMonthLabel(selectedMonth)}`
+            : undefined
+        }
+        initialValue={editor?.value ?? 0}
+        currency={settings.currency}
+        quickAdds={editor?.kind === 'salary' ? [100, 500, 1000] : [10, 50, 100]}
+        step={editor?.kind === 'salary' ? 100 : 10}
+      />
+
       <AddCategoryModal visible={showAddCategory} onClose={() => setShowAddCategory(false)} onSave={addCategory} usedCount={categorySummaries.length} />
     </SafeAreaView>
   );
 }
 
-function CategoryLimitInlineInput({ value, onSave }: { value: number; onSave: (limit: number) => void }) {
+/** Toggle circle that pops when a goal's transfer is marked done. */
+function GoalCheck({ transferred, onToggle }: { transferred: boolean; onToggle: () => void }) {
   const theme = useTheme();
-  const [draft, setDraft] = useState(String(value));
+  const scale = useRef(new Animated.Value(1)).current;
+  const prev = useRef(transferred);
 
   useEffect(() => {
-    setDraft(String(value));
-  }, [value]);
+    if (transferred && !prev.current) {
+      scale.setValue(0.6);
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 4, tension: 140 }).start();
+    }
+    prev.current = transferred;
+  }, [transferred, scale]);
 
   return (
-    <View style={styles.inlineLimitRow}>
-      <Text style={{ color: theme.tertiaryLabel, fontSize: 11 }}>of </Text>
-      <TextInput
-        style={[styles.inlineLimitInput, { color: theme.tertiaryLabel }]}
-        keyboardType="numeric"
-        value={draft}
-        onChangeText={setDraft}
-        onBlur={() => onSave(parseFloat(draft) || 0)}
-      />
-    </View>
-  );
-}
-
-function GoalAmountInput({ value, onSave }: { value: number; onSave: (amount: number) => void }) {
-  const theme = useTheme();
-  const [draft, setDraft] = useState(String(value));
-
-  useEffect(() => {
-    setDraft(String(value));
-  }, [value]);
-
-  return (
-    <TextInput
-      style={[styles.goalAmountEditInput, { color: theme.label, backgroundColor: theme.fieldBackground }]}
-      keyboardType="numeric"
-      value={draft}
-      onChangeText={setDraft}
-      onBlur={() => onSave(parseFloat(draft) || 0)}
-    />
+    <Pressable onPress={onToggle} hitSlop={8} style={{ marginRight: 10 }}>
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Ionicons
+          name={transferred ? 'checkmark-circle' : 'ellipse-outline'}
+          size={22}
+          color={transferred ? theme.systemGreen : theme.tertiaryLabel}
+        />
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -244,6 +293,7 @@ function AddCategoryModal({
       color: CATEGORY_PALETTE[usedCount % CATEGORY_PALETTE.length],
       monthlyLimit: parseFloat(limit) || 0,
     });
+    success();
     setName('');
     setLimit('');
     onClose();
@@ -287,9 +337,9 @@ function AddCategoryModal({
             <Pressable style={[styles.button, { borderColor: theme.separator, borderWidth: 1 }]} onPress={onClose}>
               <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
             </Pressable>
-            <Pressable style={[styles.button, { backgroundColor: theme.accent }]} onPress={save}>
+            <PressableScale style={[styles.button, { backgroundColor: theme.accent }]} onPress={save}>
               <Text style={{ color: '#FFF', fontWeight: '600' }}>Add</Text>
-            </Pressable>
+            </PressableScale>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -305,16 +355,23 @@ const styles = StyleSheet.create({
   categoryRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
   categoryTapArea: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   categoryMiddle: { flex: 1, gap: 6 },
-  inlineLimitRow: { flexDirection: 'row', alignItems: 'center' },
-  inlineLimitInput: { fontSize: 11, minWidth: 36, padding: 0, textAlign: 'right' },
+  categoryRight: { alignItems: 'flex-end', gap: 2, paddingLeft: 8 },
   categoryName: { fontSize: 14, fontWeight: '500' },
   addRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 10 },
+  emptyState: { alignItems: 'center', gap: 8, paddingVertical: spacing.lg },
+  emptyText: { fontSize: 13, textAlign: 'center', lineHeight: 18, paddingHorizontal: spacing.lg },
   salaryModeRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   modeChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.md },
-  inlineInputRow: { gap: 4 },
-  inlineInput: { padding: 12, borderRadius: radius.sm, fontSize: 18, fontWeight: '600' },
+  salaryField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+    borderRadius: radius.sm,
+  },
+  salaryFieldRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   goalRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
-  goalAmountEditInput: { width: 70, padding: 6, borderRadius: radius.sm, fontSize: 14, fontWeight: '600', textAlign: 'right' },
+  goalAmountField: { minWidth: 74, paddingVertical: 6, paddingHorizontal: 10, borderRadius: radius.sm, alignItems: 'flex-end' },
   hint: { fontSize: 12, marginTop: 6 },
   goalAddRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
   goalInput: { flex: 1, padding: 10, borderRadius: radius.sm },
