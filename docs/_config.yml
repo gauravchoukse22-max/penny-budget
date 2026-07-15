@@ -1,0 +1,7 @@
+# GitHub Pages serves this repo from /docs. Jekyll excludes files and folders
+# that start with an underscore, which would hide Expo's built asset folder
+# (_expo/). Explicitly include it so the hosted web app at /penny-budget/app
+# can load its JS/wasm. (.nojekyll should also disable Jekyll entirely, but this
+# guarantees the assets are served even if Jekyll still runs.)
+include:
+  - "_expo"
