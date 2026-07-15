@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBudget } from '../../context/BudgetContext';
+import { useAuth } from '../../context/AuthContext';
 import { useTheme, spacing, radius, type } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
 import { listAllTransactions } from '../../lib/queries';
@@ -19,6 +20,7 @@ export default function SettingsScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { settings, categories, cards, selectedMonth, updateSettings, refresh } = useBudget();
+  const { isConfigured: cloudConfigured, user } = useAuth();
   const [busy, setBusy] = useState(false);
   const [biometricType, setBiometricType] = useState<string | null>(null);
   const [pickingCardFor, setPickingCardFor] = useState(false);
@@ -158,6 +160,14 @@ export default function SettingsScreen() {
           <Text style={[styles.hint, { color: theme.tertiaryLabel }]}>
             Changes only the display symbol — does not convert historical amounts.
           </Text>
+        </Surface>
+
+        <Surface>
+          <Text style={[styles.sectionTitle, { color: theme.label }]}>Account</Text>
+          <SettingsLink
+            label={cloudConfigured && user ? `Signed in as ${user.email}` : 'Sign In / Create Account'}
+            onPress={() => router.push('/account')}
+          />
         </Surface>
 
         <Surface>

@@ -11,12 +11,12 @@ import { getDb } from '../lib/db';
 // as the schema gains columns — no hand-maintained column lists to fall out of
 // sync with lib/db.ts.
 
-const BACKUP_VERSION = 2;
+export const BACKUP_VERSION = 2;
 
 // Parent tables first so a restore inserts them before the rows that reference
 // them. (Deletes run in reverse.) Transient sync state (outbox, sync_meta) is
 // intentionally excluded.
-const BACKUP_TABLES = [
+export const BACKUP_TABLES = [
   'cards',
   'categories',
   'savings_goals',
@@ -31,25 +31,81 @@ const BACKUP_TABLES = [
   'app_settings',
 ] as const;
 
-type Row = Record<string, unknown>;
+export type Row = Record<string, unknown>;
 
-type BackupData = {
+export type BackupData = {
   version: number;
   timestamp: string;
   tables: Record<string, Row[]>;
 };
+
+type SQLiteParam = string | number | null;
+
+/**
+ * Reads every user table into a plain object, keyed by table name. Shared by
+ * both the local (share-sheet) export and cloud backup, so they stay in sync.
+ */
+export async function collectAllTables(): Promise<Record<string, Row[]>> {
+  const db = await getDb();
+  const tables: Record<string, Row[]> = {};
+  for (const table of BACKUP_TABLES) {
+    tables[table] = await db.getAllAsync<Row>(`SELECT * FROM ${table}`);
+  }
+  return tables;
+}
+
+/**
+ * Wipes and reinserts every user table from a tables object, in one
+ * transaction so a partial failure leaves existing data untouched. Shared by
+ * both local restore and cloud restore.
+ */
+export async function restoreAllTables(tables: Record<string, Row[]>): Promise<void> {
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    // Wipe in reverse dependency order.
+    for (let i = BACKUP_TABLES.length - 1; i >= 0; i--) {
+      await db.runAsync(`DELETE FROM ${BACKUP_TABLES[i]}`);
+    }
+
+    // Restore in dependency order, inserting each row generically.
+    for (const table of BACKUP_TABLES) {
+      const rows = tables[table];
+      if (!Array.isArray(rows)) continue;
+      for (const row of rows) {
+        const cols = Object.keys(row);
+        if (cols.length === 0) continue;
+        const placeholders = cols.map(() => '?').join(', ');
+        const values = cols.map((c) => row[c] as SQLiteParam);
+        await db.runAsync(
+          `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`,
+          values
+        );
+      }
+    }
+  });
+}
+
+/** Validates a parsed backup's shape/version before any data is touched. */
+export function validateBackup(backup: unknown): { valid: true; backup: BackupData } | { valid: false; message: string } {
+  if (!backup || typeof backup !== 'object' || !('tables' in backup) || typeof (backup as BackupData).tables !== 'object') {
+    return { valid: false, message: 'Invalid backup file structure.' };
+  }
+  const typed = backup as BackupData;
+  if (typed.version > BACKUP_VERSION) {
+    return {
+      valid: false,
+      message: 'This backup was made by a newer version of Penny Budget. Please update the app first.',
+    };
+  }
+  return { valid: true, backup: typed };
+}
 
 /**
  * Serializes every user table into a JSON file and opens the native share sheet.
  */
 export async function exportDatabaseToJson(): Promise<boolean> {
   try {
-    const db = await getDb();
-
-    const tables: Record<string, Row[]> = {};
-    for (const table of BACKUP_TABLES) {
-      tables[table] = await db.getAllAsync<Row>(`SELECT * FROM ${table}`);
-    }
+    const tables = await collectAllTables();
 
     const backup: BackupData = {
       version: BACKUP_VERSION,
@@ -92,48 +148,17 @@ export async function importDatabaseFromJson(): Promise<{ success: boolean; mess
 
     const fileContent = await FileSystem.readAsStringAsync(result.assets[0].uri);
 
-    let backup: BackupData;
+    let parsed: unknown;
     try {
-      backup = JSON.parse(fileContent);
+      parsed = JSON.parse(fileContent);
     } catch {
       return { success: false, message: 'Invalid file — not valid JSON.' };
     }
 
-    // Validate before touching any data.
-    if (!backup || typeof backup !== 'object' || !backup.tables || typeof backup.tables !== 'object') {
-      return { success: false, message: 'Invalid backup file structure.' };
-    }
-    if (backup.version > BACKUP_VERSION) {
-      return {
-        success: false,
-        message: 'This backup was made by a newer version of Penny Budget. Please update the app first.',
-      };
-    }
+    const validation = validateBackup(parsed);
+    if (!validation.valid) return { success: false, message: validation.message };
 
-    const db = await getDb();
-
-    await db.withTransactionAsync(async () => {
-      // Wipe in reverse dependency order.
-      for (let i = BACKUP_TABLES.length - 1; i >= 0; i--) {
-        await db.runAsync(`DELETE FROM ${BACKUP_TABLES[i]}`);
-      }
-
-      // Restore in dependency order, inserting each row generically.
-      for (const table of BACKUP_TABLES) {
-        const rows = backup.tables[table];
-        if (!Array.isArray(rows)) continue;
-        for (const row of rows) {
-          const cols = Object.keys(row);
-          if (cols.length === 0) continue;
-          const placeholders = cols.map(() => '?').join(', ');
-          const values = cols.map((c) => row[c] as SQLiteParam);
-          await db.runAsync(
-            `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`,
-            values
-          );
-        }
-      }
-    });
+    await restoreAllTables(validation.backup.tables);
 
     return { success: true, message: 'Data restored. Please close and reopen the app.' };
   } catch (error) {
@@ -141,5 +166,3 @@ export async function importDatabaseFromJson(): Promise<{ success: boolean; mess
     return { success: false, message: 'An unexpected error occurred during import.' };
   }
 }
-
-type SQLiteParam = string | number | null;

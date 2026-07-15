@@ -4,6 +4,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useColorScheme, AppState } from 'react-native';
 import { BudgetProvider, useBudget } from '../context/BudgetContext';
+import { AuthProvider } from '../context/AuthContext';
 import { authenticateUser } from '../features/biometrics';
 import { AppLockScreen } from '../components/FeatureCards';
 
@@ -71,6 +72,7 @@ function RootNavigator() {
         <Stack.Screen name="card/[id]" options={{ headerShown: true, title: 'Card' }} />
         <Stack.Screen name="recurring/index" options={{ headerShown: true, title: 'Recurring Bills' }} />
         <Stack.Screen name="search" options={{ headerShown: true, title: 'Search' }} />
+        <Stack.Screen name="account/index" options={{ headerShown: true, title: 'Account' }} />
       </Stack>
       {locked && <AppLockScreen onUnlock={runAuth} />}
     </>
@@ -80,9 +82,11 @@ function RootNavigator() {
 export default function RootLayout() {
   const scheme = useColorScheme();
   return (
-    <BudgetProvider>
-      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-      <RootNavigator />
-    </BudgetProvider>
+    <AuthProvider>
+      <BudgetProvider>
+        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+        <RootNavigator />
+      </BudgetProvider>
+    </AuthProvider>
   );
 }
