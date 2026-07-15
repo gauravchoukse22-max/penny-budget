@@ -29,6 +29,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Saving a transaction gives a success buzz, and categories you use most float to the top of the picker.',
       'Swiping between months slides instead of jumping.',
       'Optional accounts: you can now create an account to back up and restore your budget to the cloud — completely optional, the app still works fully offline.',
+      'You can now sign in with Apple as a one-tap, private alternative to email and password (iOS only).',
       'You can permanently delete your account and cloud backup from Settings → Account at any time.',
     ],
   },

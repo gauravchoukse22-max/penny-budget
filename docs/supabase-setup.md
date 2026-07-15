@@ -56,7 +56,27 @@ The function deletes only the caller (`auth.uid()`), so a signed-in user can
 never delete anyone else. The cloud backup object is removed client-side before
 this runs; there are no other per-user tables to clean up.
 
-## 4. Configure the app
+## 4. Sign in with Apple (optional, iOS only)
+
+The app offers a native "Sign in with Apple" button on the Account screen
+(alongside email/password). It uses Apple's identity token directly with
+Supabase — the **native flow needs no nonce and no OAuth web config**.
+
+1. **Supabase → Authentication → Providers → Apple**: toggle it on.
+2. In the **Client IDs** field, add the app's bundle identifier:
+   `com.gary.pennybudget`. (This is the only value required for a native-only
+   app — leave the Services ID / secret key fields blank; those are only for
+   web OAuth.)
+3. **Apple side:** the "Sign In with Apple" capability must be enabled on the
+   App ID. EAS does this automatically during the build because
+   `ios.usesAppleSignIn: true` is set in `app.json` — no manual Developer
+   portal step is normally needed.
+
+Apple sign-in is a native module: it does **not** work in Expo Go or on web,
+only in a device build (dev/preview/production). On web and Android the button
+is hidden automatically (`AppleAuthentication.isAvailableAsync()`).
+
+## 5. Configure the app
 
 Add the two values from step 1 to `.env.local` (gitignored — see `.env.example` for the template):
 

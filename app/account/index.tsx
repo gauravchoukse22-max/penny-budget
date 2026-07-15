@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, Platform, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { useAuth } from '../../context/AuthContext';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
@@ -10,8 +11,14 @@ import { backupToCloud, restoreFromCloud, getLastCloudBackupTimestamp } from '..
 
 export default function AccountScreen() {
   const theme = useTheme();
-  const { isConfigured, loading, user, signIn, signUp, signOut, deleteAccount } = useAuth();
+  const isDark = useColorScheme() === 'dark';
+  const { isConfigured, loading, user, signIn, signUp, signInWithApple, signOut, deleteAccount } = useAuth();
   const { refresh } = useBudget();
+
+  const [appleAvailable, setAppleAvailable] = useState(false);
+  useEffect(() => {
+    if (Platform.OS === 'ios') AppleAuthentication.isAvailableAsync().then(setAppleAvailable);
+  }, []);
 
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
   const [email, setEmail] = useState('');
@@ -44,6 +51,19 @@ export default function AccountScreen() {
       } else {
         setPassword('');
       }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const doAppleSignIn = async () => {
+    setError(null);
+    setInfo(null);
+    setSubmitting(true);
+    try {
+      const result = await signInWithApple();
+      // An empty message means the user cancelled the Apple sheet — stay quiet.
+      if (!result.success && result.message) setError(result.message);
     } finally {
       setSubmitting(false);
     }
@@ -229,6 +249,27 @@ export default function AccountScreen() {
               {mode === 'signIn' ? "Don't have an account? Create one" : 'Already have an account? Sign in'}
             </Text>
           </Pressable>
+
+          {appleAvailable && (
+            <>
+              <View style={styles.orRow}>
+                <View style={[styles.orLine, { backgroundColor: theme.separator }]} />
+                <Text style={[styles.orText, { color: theme.tertiaryLabel }]}>or</Text>
+                <View style={[styles.orLine, { backgroundColor: theme.separator }]} />
+              </View>
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                buttonStyle={
+                  isDark
+                    ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                    : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                }
+                cornerRadius={radius.md}
+                style={styles.appleButton}
+                onPress={doAppleSignIn}
+              />
+            </>
+          )}
         </Surface>
       </ScrollView>
     </SafeAreaView>
@@ -247,4 +288,8 @@ const styles = StyleSheet.create({
   secondaryButton: { borderWidth: 1.5 },
   actionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11 },
   divider: { height: StyleSheet.hairlineWidth },
+  orRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg, marginBottom: spacing.md },
+  orLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  orText: { marginHorizontal: 12, fontSize: 13, fontWeight: '600' },
+  appleButton: { height: 48, width: '100%' },
 });

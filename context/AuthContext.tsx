@@ -1,4 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { Platform } from 'react-native';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { deleteCloudBackup } from '../features/cloud-backup';
@@ -12,6 +14,7 @@ type AuthContextValue = {
   user: User | null;
   signIn: (email: string, password: string) => Promise<AuthResult>;
   signUp: (email: string, password: string) => Promise<AuthResult>;
+  signInWithApple: () => Promise<AuthResult>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<AuthResult>;
 };
@@ -59,6 +62,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { success: true, message: 'Account created.' };
   }, []);
 
+  // Native Sign in with Apple (iOS only). Uses Apple's identity token directly
+  // with Supabase — no nonce or OAuth web config needed for the native flow;
+  // the app's bundle id just has to be listed under the Supabase Apple provider.
+  const signInWithApple = useCallback(async (): Promise<AuthResult> => {
+    if (!isSupabaseConfigured) {
+      return { success: false, message: "Cloud accounts aren't configured for this build." };
+    }
+    if (Platform.OS !== 'ios') {
+      return { success: false, message: 'Sign in with Apple is only available on iOS.' };
+    }
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (!credential.identityToken) {
+        return { success: false, message: "Apple didn't return an identity token. Please try again." };
+      }
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+      });
+      if (error) return { success: false, message: error.message };
+      return { success: true, message: 'Signed in with Apple.' };
+    } catch (e: any) {
+      // The user cancelling the native sheet is not an error worth surfacing.
+      if (e?.code === 'ERR_REQUEST_CANCELED') {
+        return { success: false, message: '' };
+      }
+      return { success: false, message: e?.message ?? 'Sign in with Apple failed.' };
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     if (!isSupabaseConfigured) return;
     await supabase.auth.signOut();
@@ -98,6 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user: session?.user ?? null,
     signIn,
     signUp,
+    signInWithApple,
     signOut,
     deleteAccount,
   };

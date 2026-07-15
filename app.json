@@ -12,6 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.gary.pennybudget",
       "buildNumber": "7",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -34,6 +35,7 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
+      "expo-apple-authentication",
       [
         "expo-local-authentication",
         {
