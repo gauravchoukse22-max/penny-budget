@@ -1,6 +1,6 @@
-import * as FileSystem from 'expo-file-system/legacy';
 import * as DocumentPicker from 'expo-document-picker';
 import { parseCsvLine } from '../lib/csv';
+import { readPickedFileAsText } from '../lib/files';
 import { listAllTransactions, createTransaction } from '../lib/queries';
 import { listRecurringTransactions } from './recurring-transactions';
 import { suggestCategory } from './smart-categorizer';
@@ -79,7 +79,7 @@ export async function importCreditCardStatement(cardId: string): Promise<Stateme
   const picked = await DocumentPicker.getDocumentAsync({ type: 'text/csv', copyToCacheDirectory: true });
   if (picked.canceled || !picked.assets?.[0]) return null;
 
-  const content = await FileSystem.readAsStringAsync(picked.assets[0].uri);
+  const content = await readPickedFileAsText(picked.assets[0]);
   const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 2) {
     return { imported: 0, duplicatesSkipped: 0, recurringSkipped: 0, uncategorized: 0, malformedRows: 0 };

@@ -1,20 +1,15 @@
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { transactionsToCsv } from './queries';
 import { createCard, createTransaction, listCards, listCategories } from './queries';
 import { parseParticularsCsv, categorizeRows } from './particulars';
+import { readPickedFileAsText, downloadOrShareFile } from './files';
 import type { Card, Category } from './models';
 
 const FALLBACK_CARD_NAME = 'Unassigned (imported)';
 
 export async function exportTransactionsCsv(transactions: Parameters<typeof transactionsToCsv>[0], categories: Category[], cards: Card[]) {
   const csv = transactionsToCsv(transactions, categories, cards);
-  const path = FileSystem.cacheDirectory + `penny-budget-export-${Date.now()}.csv`;
-  await FileSystem.writeAsStringAsync(path, csv);
-  if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(path, { mimeType: 'text/csv', dialogTitle: 'Export Transactions' });
-  }
+  await downloadOrShareFile(csv, `penny-budget-export-${Date.now()}.csv`, 'text/csv', 'Export Transactions');
 }
 
 export function parseCsvLine(line: string): string[] {
@@ -98,7 +93,7 @@ export async function importTransactionsCsv(): Promise<{ imported: number; skipp
   const result = await DocumentPicker.getDocumentAsync({ type: 'text/csv', copyToCacheDirectory: true });
   if (result.canceled || !result.assets?.[0]) return null;
 
-  const content = await FileSystem.readAsStringAsync(result.assets[0].uri);
+  const content = await readPickedFileAsText(result.assets[0]);
   const records = parseCsv(content);
   if (records.length <= 1) return { imported: 0, skipped: 0 };
 
@@ -147,7 +142,7 @@ export async function importParticularsCsv(
   const result = await DocumentPicker.getDocumentAsync({ type: 'text/csv', copyToCacheDirectory: true });
   if (result.canceled || !result.assets?.[0]) return null;
 
-  const content = await FileSystem.readAsStringAsync(result.assets[0].uri);
+  const content = await readPickedFileAsText(result.assets[0]);
   const rows = parseParticularsCsv(content);
   if (rows.length === 0) return { imported: 0, skipped: 0, savingsTransfers: 0, uncategorized: 0 };
 

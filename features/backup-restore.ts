@@ -1,7 +1,6 @@
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { getDb } from '../lib/db';
+import { readPickedFileAsText, downloadOrShareFile } from '../lib/files';
 
 // Full-database JSON backup & restore.
 //
@@ -104,7 +103,8 @@ export function validateBackup(backup: unknown): { valid: true; backup: BackupDa
 }
 
 /**
- * Serializes every user table into a JSON file and opens the native share sheet.
+ * Serializes every user table into a JSON file and delivers it to the user
+ * (native share sheet, or a direct browser download on web).
  */
 export async function exportDatabaseToJson(): Promise<boolean> {
   try {
@@ -115,18 +115,8 @@ export async function exportDatabaseToJson(): Promise<boolean> {
       timestamp: new Date().toISOString(),
       tables,
     };
-
-    const fileUri = `${FileSystem.cacheDirectory}penny-budget-backup-${Date.now()}.json`;
-    await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(backup, null, 2));
-
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(fileUri, {
-        mimeType: 'application/json',
-        dialogTitle: 'Back up Penny Budget',
-      });
-      return true;
-    }
-    return false;
+    const json = JSON.stringify(backup, null, 2);
+    return await downloadOrShareFile(json, `penny-budget-backup-${Date.now()}.json`, 'application/json', 'Back up Penny Budget');
   } catch (error) {
     console.error('Failed to export database:', error);
     return false;
@@ -149,7 +139,7 @@ export async function importDatabaseFromJson(): Promise<{ success: boolean; mess
       return { success: false, message: 'Import cancelled' };
     }
 
-    const fileContent = await FileSystem.readAsStringAsync(result.assets[0].uri);
+    const fileContent = await readPickedFileAsText(result.assets[0]);
 
     let parsed: unknown;
     try {

@@ -16,6 +16,16 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-07-15-web-backup',
+    version: '1.0.1',
+    date: 'July 2026',
+    title: 'Backup & CSV now work on the web version',
+    changes: [
+      'On the web app, "Back up all data (JSON)" and "Export CSV" now download a real file to your computer, instead of silently failing.',
+      '"Restore from backup", "Import CSV", "Import Monthly Log", and "Import Credit Card Statement" now correctly read the file you choose on the web app.',
+    ],
+  },
+  {
     id: '2026-07-15-qa-fixes',
     version: '1.0.1',
     date: 'July 2026',
