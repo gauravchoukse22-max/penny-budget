@@ -7,6 +7,8 @@ import * as Haptics from 'expo-haptics';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { CategoryIcon } from '../../components/CategoryIcon';
+import { suggestCategory } from '../../features/smart-categorizer';
+import type { SmartSuggestion } from '../../features/models';
 
 function todayIso(): string {
   const d = new Date();
@@ -24,6 +26,21 @@ export default function AddTransactionScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [categoryId, setCategoryId] = useState<string | null>(categories[0]?.id ?? null);
   const [cardId, setCardId] = useState<string | null>(cards[0]?.id ?? null);
+  const [suggestion, setSuggestion] = useState<SmartSuggestion | null>(null);
+  const [isRefund, setIsRefund] = useState(false);
+
+  const suggestFromNote = async () => {
+    const text = note.trim();
+    if (text.length < 2) {
+      setSuggestion(null);
+      return;
+    }
+    const s = await suggestCategory(text);
+    // Only surface it if it points somewhere other than the current selection.
+    setSuggestion(s && s.categoryId !== categoryId ? s : null);
+  };
+
+  const suggestedCategory = suggestion ? categories.find((c) => c.id === suggestion.categoryId) : undefined;
 
   if (cards.length === 0) {
     return (
@@ -50,11 +67,13 @@ export default function AddTransactionScreen() {
 
   const save = async (addAnother: boolean) => {
     if (!canSave || !cardId) return;
-    await addTransaction({ amount: parseFloat(amount), date, categoryId, cardId, note: note.trim() || null });
+    const signedAmount = (isRefund ? -1 : 1) * parseFloat(amount);
+    await addTransaction({ amount: signedAmount, date, categoryId, cardId, note: note.trim() || null });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     if (addAnother) {
       setAmount('');
       setNote('');
+      setIsRefund(false);
     } else {
       router.back();
     }
@@ -72,16 +91,33 @@ export default function AddTransactionScreen() {
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.amountRow}>
-        <Text style={[styles.currencySymbol, { color: theme.secondaryLabel }]}>$</Text>
+        <Text style={[styles.currencySymbol, { color: isRefund ? theme.systemGreen : theme.secondaryLabel }]}>
+          {isRefund ? '+' : '$'}
+        </Text>
         <TextInput
-          style={[styles.amountInput, { color: theme.label }]}
-          keyboardType="decimal-pad"
+          style={[styles.amountInput, { color: isRefund ? theme.systemGreen : theme.label }]}
+          keyboardType="numeric"
           placeholder="0.00"
           placeholderTextColor={theme.tertiaryLabel}
           value={amount}
           onChangeText={setAmount}
           autoFocus
         />
+      </View>
+
+      <View style={styles.typeRow}>
+        <Pressable
+          onPress={() => setIsRefund(false)}
+          style={[styles.typeChip, { backgroundColor: !isRefund ? theme.accent : theme.fieldBackground }]}
+        >
+          <Text style={{ color: !isRefund ? '#FFF' : theme.secondaryLabel, fontWeight: '700' }}>Expense</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setIsRefund(true)}
+          style={[styles.typeChip, { backgroundColor: isRefund ? theme.systemGreen : theme.fieldBackground }]}
+        >
+          <Text style={{ color: isRefund ? '#FFF' : theme.secondaryLabel, fontWeight: '700' }}>Refund / Credit</Text>
+        </Pressable>
       </View>
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Category</Text>
@@ -137,7 +173,24 @@ export default function AddTransactionScreen() {
         placeholderTextColor={theme.tertiaryLabel}
         value={note}
         onChangeText={setNote}
+        onBlur={suggestFromNote}
       />
+      {suggestion && suggestedCategory && (
+        <Pressable
+          style={[styles.suggestionChip, { backgroundColor: theme.fieldBackground, borderColor: suggestedCategory.color }]}
+          onPress={() => {
+            setCategoryId(suggestedCategory.id);
+            setSuggestion(null);
+          }}
+        >
+          <Ionicons name="sparkles" size={14} color={suggestedCategory.color} />
+          <Text style={{ color: theme.label, fontSize: 13, flex: 1 }}>
+            Suggested: <Text style={{ fontWeight: '700' }}>{suggestedCategory.name}</Text>
+            {suggestion.source === 'naive_bayes' ? `  (${Math.round(suggestion.confidence * 100)}%)` : ''}
+          </Text>
+          <Text style={{ color: suggestedCategory.color, fontWeight: '700', fontSize: 13 }}>Apply</Text>
+        </Pressable>
+      )}
 
       <View style={styles.buttonRow}>
         <Pressable
@@ -168,6 +221,8 @@ const styles = StyleSheet.create({
   amountRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
   currencySymbol: { fontSize: 32, fontWeight: '400', marginRight: 4 },
   amountInput: { fontSize: 52, fontWeight: '700', minWidth: 140, textAlign: 'center' },
+  typeRow: { flexDirection: 'row', gap: 8, justifyContent: 'center', marginBottom: spacing.md },
+  typeChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: radius.md },
   label: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.lg, marginBottom: spacing.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   gridItem: { alignItems: 'center', width: 72 },
@@ -178,6 +233,7 @@ const styles = StyleSheet.create({
   cardChipText: { color: '#FFF', fontWeight: '600' },
   dateBox: { padding: 12, borderRadius: radius.sm },
   noteInput: { padding: 12, borderRadius: radius.sm, fontSize: 15 },
+  suggestionChip: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.sm, borderWidth: 1, marginTop: 8 },
   buttonRow: { flexDirection: 'row', gap: 12, marginTop: spacing.xl },
   button: { flex: 1, paddingVertical: 15, borderRadius: radius.md, alignItems: 'center' },
   secondaryButton: { borderWidth: 1.5 },

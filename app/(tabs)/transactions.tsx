@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, SectionList, Pressable, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, SectionList, ScrollView, Pressable, TextInput, Alert, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,17 +7,72 @@ import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler'
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius, type } from '../../theme/colors';
 import { TransactionRow } from '../../components/TransactionRow';
+import { CategoryIcon } from '../../components/CategoryIcon';
 import { formatDayLabel } from '../../lib/format';
+import { bulkUpdateCategory, bulkUpdateCard, bulkDeleteTransactions } from '../../features/bulk-actions';
 import type { Transaction } from '../../lib/models';
 
 export default function TransactionsScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { transactions, categories, cards, settings, removeTransaction } = useBudget();
+  const { transactions, categories, cards, settings, removeTransaction, refresh } = useBudget();
 
   const [search, setSearch] = useState('');
   const [cardFilter, setCardFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [picker, setPicker] = useState<'category' | 'card' | null>(null);
+
+  const enterSelect = (id: string) => {
+    setSelectMode(true);
+    setSelectedIds(new Set([id]));
+  };
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const exitSelect = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setPicker(null);
+  };
+
+  const selectedArray = () => Array.from(selectedIds);
+
+  const doBulkDelete = () => {
+    const ids = selectedArray();
+    if (ids.length === 0) return;
+    Alert.alert('Delete transactions?', `Delete ${ids.length} selected transaction(s)? This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await bulkDeleteTransactions(ids);
+          await refresh();
+          exitSelect();
+        },
+      },
+    ]);
+  };
+
+  const doBulkCategory = async (categoryId: string | null) => {
+    await bulkUpdateCategory(selectedArray(), categoryId);
+    await refresh();
+    exitSelect();
+  };
+
+  const doBulkCard = async (cardId: string) => {
+    await bulkUpdateCard(selectedArray(), cardId);
+    await refresh();
+    exitSelect();
+  };
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const cardById = new Map(cards.map((c) => [c.id, c]));
@@ -58,12 +113,32 @@ export default function TransactionsScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={[styles.container, { backgroundColor: theme.groupedBackground }]} edges={['top']}>
-        <View style={styles.headerRow}>
-          <Text style={[type.title1, { color: theme.label }]}>Transactions</Text>
-          <Pressable onPress={() => router.push('/transaction/add')} hitSlop={8}>
-            <Ionicons name="add-circle" size={30} color={theme.accent} />
-          </Pressable>
-        </View>
+        {selectMode ? (
+          <View style={styles.headerRow}>
+            <Pressable onPress={exitSelect} hitSlop={8}>
+              <Text style={{ color: theme.accent, fontSize: 16 }}>Cancel</Text>
+            </Pressable>
+            <Text style={[type.headline, { color: theme.label }]}>{selectedIds.size} selected</Text>
+            <View style={styles.selectActions}>
+              <Pressable onPress={() => selectedIds.size > 0 && setPicker('category')} hitSlop={8}>
+                <Ionicons name="pricetag-outline" size={24} color={selectedIds.size > 0 ? theme.accent : theme.tertiaryLabel} />
+              </Pressable>
+              <Pressable onPress={() => selectedIds.size > 0 && setPicker('card')} hitSlop={8}>
+                <Ionicons name="card-outline" size={24} color={selectedIds.size > 0 ? theme.accent : theme.tertiaryLabel} />
+              </Pressable>
+              <Pressable onPress={doBulkDelete} hitSlop={8}>
+                <Ionicons name="trash-outline" size={24} color={selectedIds.size > 0 ? theme.systemRed : theme.tertiaryLabel} />
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.headerRow}>
+            <Text style={[type.title1, { color: theme.label }]}>Transactions</Text>
+            <Pressable onPress={() => router.push('/transaction/add')} hitSlop={8}>
+              <Ionicons name="add-circle" size={30} color={theme.accent} />
+            </Pressable>
+          </View>
+        )}
 
         <View style={[styles.searchBox, { backgroundColor: theme.fieldBackground }]}>
           <Ionicons name="search" size={16} color={theme.tertiaryLabel} />
@@ -104,29 +179,72 @@ export default function TransactionsScreen() {
               {formatDayLabel(section.title)}
             </Text>
           )}
-          renderItem={({ item }) => (
-            <Swipeable
-              renderRightActions={() => (
-                <Pressable style={[styles.deleteAction, { backgroundColor: theme.systemRed }]} onPress={() => confirmDelete(item)}>
-                  <Ionicons name="trash" size={20} color="#FFF" />
-                </Pressable>
-              )}
-            >
+          renderItem={({ item }) => {
+            const row = (
               <View style={{ backgroundColor: theme.groupedBackground, paddingHorizontal: 4 }}>
                 <TransactionRow
                   transaction={item}
                   category={item.categoryId ? categoryById.get(item.categoryId) : undefined}
                   card={cardById.get(item.cardId)}
                   currency={settings.currency}
-                  onPress={() => router.push(`/transaction/${item.id}`)}
+                  selectable={selectMode}
+                  selected={selectedIds.has(item.id)}
+                  onLongPress={() => !selectMode && enterSelect(item.id)}
+                  onPress={() => (selectMode ? toggleSelect(item.id) : router.push(`/transaction/${item.id}`))}
                 />
               </View>
-            </Swipeable>
-          )}
+            );
+            if (selectMode) return row;
+            return (
+              <Swipeable
+                renderRightActions={() => (
+                  <Pressable style={[styles.deleteAction, { backgroundColor: theme.systemRed }]} onPress={() => confirmDelete(item)}>
+                    <Ionicons name="trash" size={20} color="#FFF" />
+                  </Pressable>
+                )}
+              >
+                {row}
+              </Swipeable>
+            );
+          }}
           ListEmptyComponent={
             <Text style={{ color: theme.tertiaryLabel, textAlign: 'center', marginTop: 40 }}>No transactions found</Text>
           }
         />
+
+        <Modal visible={picker !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPicker(null)}>
+          <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
+            <Text style={[type.title2, { color: theme.label, marginBottom: spacing.lg }]}>
+              {picker === 'category' ? 'Move to category' : 'Move to card'}
+            </Text>
+            <ScrollView>
+              {picker === 'category' && (
+                <>
+                  {categories.map((c) => (
+                    <Pressable key={c.id} style={styles.pickerRow} onPress={() => doBulkCategory(c.id)}>
+                      <CategoryIcon icon={c.icon} color={c.color} size={18} />
+                      <Text style={{ color: theme.label, fontSize: 16 }}>{c.name}</Text>
+                    </Pressable>
+                  ))}
+                  <Pressable style={styles.pickerRow} onPress={() => doBulkCategory(null)}>
+                    <Ionicons name="close-circle-outline" size={20} color={theme.tertiaryLabel} />
+                    <Text style={{ color: theme.secondaryLabel, fontSize: 16 }}>Uncategorized</Text>
+                  </Pressable>
+                </>
+              )}
+              {picker === 'card' &&
+                cards.map((c) => (
+                  <Pressable key={c.id} style={styles.pickerRow} onPress={() => doBulkCard(c.id)}>
+                    <View style={[styles.cardDot, { backgroundColor: c.color }]} />
+                    <Text style={{ color: theme.label, fontSize: 16 }}>{c.name}</Text>
+                  </Pressable>
+                ))}
+            </ScrollView>
+            <Pressable style={[styles.modalCancel, { borderColor: theme.separator }]} onPress={() => setPicker(null)}>
+              <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
+            </Pressable>
+          </View>
+        </Modal>
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -199,4 +317,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     marginVertical: 4,
   },
+  selectActions: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center' },
+  modalContent: { flex: 1, padding: spacing.xl, paddingTop: 40 },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
+  cardDot: { width: 18, height: 18, borderRadius: 9 },
+  modalCancel: { paddingVertical: 14, borderRadius: radius.md, alignItems: 'center', borderWidth: 1, marginTop: spacing.md },
 });

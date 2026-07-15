@@ -20,10 +20,12 @@ export default function EditTransactionScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [cardId, setCardId] = useState<string | null>(null);
+  const [isRefund, setIsRefund] = useState(false);
 
   useEffect(() => {
     if (transaction) {
-      setAmount(String(transaction.amount));
+      setAmount(String(Math.abs(transaction.amount)));
+      setIsRefund(transaction.amount < 0);
       setNote(transaction.note ?? '');
       setDate(transaction.date);
       setCategoryId(transaction.categoryId);
@@ -43,7 +45,8 @@ export default function EditTransactionScreen() {
 
   const save = async () => {
     if (!canSave || !cardId) return;
-    await editTransaction(transaction.id, { amount: parseFloat(amount), date, categoryId, cardId, note: note.trim() || null });
+    const signedAmount = (isRefund ? -1 : 1) * parseFloat(amount);
+    await editTransaction(transaction.id, { amount: signedAmount, date, categoryId, cardId, note: note.trim() || null });
     router.back();
   };
 
@@ -73,13 +76,30 @@ export default function EditTransactionScreen() {
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.amountRow}>
-        <Text style={[styles.currencySymbol, { color: theme.secondaryLabel }]}>$</Text>
+        <Text style={[styles.currencySymbol, { color: isRefund ? theme.systemGreen : theme.secondaryLabel }]}>
+          {isRefund ? '+' : '$'}
+        </Text>
         <TextInput
-          style={[styles.amountInput, { color: theme.label }]}
-          keyboardType="decimal-pad"
+          style={[styles.amountInput, { color: isRefund ? theme.systemGreen : theme.label }]}
+          keyboardType="numeric"
           value={amount}
           onChangeText={setAmount}
         />
+      </View>
+
+      <View style={styles.typeRow}>
+        <Pressable
+          onPress={() => setIsRefund(false)}
+          style={[styles.typeChip, { backgroundColor: !isRefund ? theme.accent : theme.fieldBackground }]}
+        >
+          <Text style={{ color: !isRefund ? '#FFF' : theme.secondaryLabel, fontWeight: '700' }}>Expense</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setIsRefund(true)}
+          style={[styles.typeChip, { backgroundColor: isRefund ? theme.systemGreen : theme.fieldBackground }]}
+        >
+          <Text style={{ color: isRefund ? '#FFF' : theme.secondaryLabel, fontWeight: '700' }}>Refund / Credit</Text>
+        </Pressable>
       </View>
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Category</Text>
@@ -151,6 +171,8 @@ const styles = StyleSheet.create({
   amountRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
   currencySymbol: { fontSize: 32, fontWeight: '400', marginRight: 4 },
   amountInput: { fontSize: 52, fontWeight: '700', minWidth: 140, textAlign: 'center' },
+  typeRow: { flexDirection: 'row', gap: 8, justifyContent: 'center', marginBottom: spacing.md },
+  typeChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: radius.md },
   label: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.lg, marginBottom: spacing.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   gridItem: { alignItems: 'center', width: 72 },

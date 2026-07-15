@@ -1,5 +1,6 @@
 import { getDb } from './db';
 import { uuid } from './uuid';
+import { queueSyncMutation } from '../features/cloudkit-sync';
 import type {
   AppSettings,
   BudgetStatus,
@@ -22,12 +23,16 @@ export async function getAppSettings(): Promise<AppSettings> {
     salaryMode: 'fixed' | 'variable';
     fixedSalary: number;
     onboarded: number;
-  }>('SELECT currency, salaryMode, fixedSalary, onboarded FROM app_settings WHERE id = 1');
+    biometricLock: number;
+    cloudSyncEnabled: number;
+  }>('SELECT currency, salaryMode, fixedSalary, onboarded, biometricLock, cloudSyncEnabled FROM app_settings WHERE id = 1');
   return {
     currency: row?.currency ?? 'USD',
     salaryMode: row?.salaryMode ?? 'fixed',
     fixedSalary: row?.fixedSalary ?? 0,
     onboarded: !!row?.onboarded,
+    biometricLock: !!row?.biometricLock,
+    cloudSyncEnabled: !!row?.cloudSyncEnabled,
   };
 }
 
@@ -35,12 +40,17 @@ export async function updateAppSettings(patch: Partial<AppSettings>): Promise<vo
   const db = await getDb();
   const current = await getAppSettings();
   const next = { ...current, ...patch };
-  await db.runAsync('UPDATE app_settings SET currency = ?, salaryMode = ?, fixedSalary = ?, onboarded = ? WHERE id = 1', [
-    next.currency,
-    next.salaryMode,
-    next.fixedSalary,
-    next.onboarded ? 1 : 0,
-  ]);
+  await db.runAsync(
+    'UPDATE app_settings SET currency = ?, salaryMode = ?, fixedSalary = ?, onboarded = ?, biometricLock = ?, cloudSyncEnabled = ? WHERE id = 1',
+    [
+      next.currency,
+      next.salaryMode,
+      next.fixedSalary,
+      next.onboarded ? 1 : 0,
+      next.biometricLock ? 1 : 0,
+      next.cloudSyncEnabled ? 1 : 0,
+    ]
+  );
 }
 
 // ---------- Cards ----------
@@ -64,6 +74,7 @@ export async function createCard(input: Omit<Card, 'id' | 'sortOrder' | 'billDay
     card.billDay,
     card.dueDay,
   ]);
+  await queueSyncMutation('CREATE', 'cards', card.id, card);
   return card;
 }
 
@@ -81,6 +92,7 @@ export async function updateCard(id: string, patch: Partial<Omit<Card, 'id'>>): 
     next.dueDay,
     id,
   ]);
+  await queueSyncMutation('UPDATE', 'cards', id, next);
 }
 
 /** Days until a card's next due date (day-of-month), or null if not tracked. Wraps to next month if the day already passed. */
@@ -96,6 +108,7 @@ export function daysUntilDue(dueDay: number | null, today = new Date()): number 
 export async function deleteCard(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM cards WHERE id = ?', [id]);
+  await queueSyncMutation('DELETE', 'cards', id, { id });
 }
 
 // ---------- Categories ----------
@@ -118,6 +131,7 @@ export async function createCategory(input: Omit<Category, 'id' | 'sortOrder'>):
     category.monthlyLimit,
     category.sortOrder,
   ]);
+  await queueSyncMutation('CREATE', 'categories', category.id, category);
   return category;
 }
 
@@ -134,11 +148,13 @@ export async function updateCategory(id: string, patch: Partial<Omit<Category, '
     next.sortOrder,
     id,
   ]);
+  await queueSyncMutation('UPDATE', 'categories', id, next);
 }
 
 export async function deleteCategory(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM categories WHERE id = ?', [id]);
+  await queueSyncMutation('DELETE', 'categories', id, { id });
 }
 
 // ---------- Savings Goals ----------
@@ -159,6 +175,7 @@ export async function createSavingsGoal(input: Omit<SavingsGoal, 'id' | 'sortOrd
     goal.monthlyAmount,
     goal.sortOrder,
   ]);
+  await queueSyncMutation('CREATE', 'savings_goals', goal.id, goal);
   return goal;
 }
 
@@ -173,11 +190,13 @@ export async function updateSavingsGoal(id: string, patch: Partial<Omit<SavingsG
     next.sortOrder,
     id,
   ]);
+  await queueSyncMutation('UPDATE', 'savings_goals', id, next);
 }
 
 export async function deleteSavingsGoal(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM savings_goals WHERE id = ?', [id]);
+  await queueSyncMutation('DELETE', 'savings_goals', id, { id });
 }
 
 export function resolvedGoalAmount(goal: SavingsGoal, overrides?: Map<string, number>): number {
@@ -328,6 +347,7 @@ export async function createTransaction(
     'INSERT INTO transactions (id, amount, date, categoryId, cardId, note, source, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [tx.id, tx.amount, tx.date, tx.categoryId, tx.cardId, tx.note, tx.source, tx.createdAt]
   );
+  await queueSyncMutation('CREATE', 'transactions', tx.id, tx);
   return tx;
 }
 
@@ -345,11 +365,13 @@ export async function updateTransaction(id: string, patch: Partial<Omit<Transact
     next.source,
     id,
   ]);
+  await queueSyncMutation('UPDATE', 'transactions', id, next);
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM transactions WHERE id = ?', [id]);
+  await queueSyncMutation('DELETE', 'transactions', id, { id });
 }
 
 // ---------- Core calculations (spec Section 5) ----------

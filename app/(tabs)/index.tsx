@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, PanResponder } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,8 +10,10 @@ import { ProgressBar } from '../../components/ProgressBar';
 import { Surface } from '../../components/Surface';
 import { GradientCard } from '../../components/GradientCard';
 import { TransactionRow } from '../../components/TransactionRow';
+import { StreakBadge } from '../../components/FeatureCards';
 import { formatMonthLabel, daysLeftInMonth, formatCurrency } from '../../lib/format';
 import { totalSavingsGoals } from '../../lib/queries';
+import { getStreaks } from '../../features/streaks-and-gamification';
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -29,6 +31,13 @@ export default function HomeScreen() {
     savingsGoals,
     uncategorizedCount,
   } = useBudget();
+
+  const [streak, setStreak] = useState<{ current: number; longest: number }>({ current: 0, longest: 0 });
+  useEffect(() => {
+    getStreaks().then(({ logging }) =>
+      setStreak({ current: logging?.currentStreak ?? 0, longest: logging?.longestStreak ?? 0 })
+    );
+  }, [transactions.length]);
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const cardById = new Map(cards.map((c) => [c.id, c]));
@@ -66,6 +75,12 @@ export default function HomeScreen() {
             <Ionicons name="chevron-forward" size={20} color={theme.secondaryLabel} />
           </Pressable>
         </View>
+
+        {streak.current > 0 && (
+          <View style={{ alignItems: 'center' }}>
+            <StreakBadge currentStreak={streak.current} longestStreak={streak.longest} />
+          </View>
+        )}
 
         {uncategorizedCount > 0 && (
           <Pressable onPress={() => router.push('/(tabs)/transactions')}>

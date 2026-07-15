@@ -19,7 +19,7 @@ export type Category = {
   sortOrder: number;
 };
 
-export type TransactionSource = 'manual' | 'imported';
+export type TransactionSource = 'manual' | 'imported' | 'recurring';
 
 export type Transaction = {
   id: string;
@@ -59,6 +59,10 @@ export type AppSettings = {
   salaryMode: SalaryMode;
   fixedSalary: number;
   onboarded: boolean;
+  /** Require Face ID / Touch ID to open the app. */
+  biometricLock: boolean;
+  /** Whether optional iCloud (CloudKit) sync is enabled. */
+  cloudSyncEnabled: boolean;
 };
 
 export type BudgetStatus = 'green' | 'amber' | 'red';

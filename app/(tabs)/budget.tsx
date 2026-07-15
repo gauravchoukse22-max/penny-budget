@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Modal, Alert, Platform, KeyboardAvoidingView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,6 +29,7 @@ export default function BudgetScreen() {
     setSavingsGoalAmountForSelectedMonth,
     transferStatus,
     addCategory,
+    setCategoryLimitForSelectedMonth,
   } = useBudget();
 
   const [salaryDraft, setSalaryDraft] = useState(String(settings.salaryMode === 'fixed' ? settings.fixedSalary : surplus.salary));
@@ -61,17 +62,22 @@ export default function BudgetScreen() {
         <Surface>
           <Text style={[styles.sectionTitle, { color: theme.label }]}>Categories</Text>
           {categorySummaries.map((s) => (
-            <Pressable key={s.category.id} onPress={() => router.push(`/category/${s.category.id}`)} style={styles.categoryRow}>
-              <CategoryIcon icon={s.category.icon} color={s.category.color} size={17} />
-              <View style={styles.categoryMiddle}>
-                <Text style={[styles.categoryName, { color: theme.label }]}>{s.category.name}</Text>
-                <ProgressBar percent={s.percent} status={s.status} />
-              </View>
+            <View key={s.category.id} style={styles.categoryRow}>
+              <Pressable onPress={() => router.push(`/category/${s.category.id}`)} style={styles.categoryTapArea}>
+                <CategoryIcon icon={s.category.icon} color={s.category.color} size={17} />
+                <View style={styles.categoryMiddle}>
+                  <Text style={[styles.categoryName, { color: theme.label }]}>{s.category.name}</Text>
+                  <ProgressBar percent={s.percent} status={s.status} />
+                </View>
+              </Pressable>
               <View style={{ alignItems: 'flex-end' }}>
                 <AmountText amount={s.spend} currency={settings.currency} size={14} weight="semibold" />
-                <Text style={{ color: theme.tertiaryLabel, fontSize: 11 }}>of {s.category.monthlyLimit}</Text>
+                <CategoryLimitInlineInput
+                  value={s.category.monthlyLimit}
+                  onSave={(limit) => setCategoryLimitForSelectedMonth(s.category.id, limit)}
+                />
               </View>
-            </Pressable>
+            </View>
           ))}
           <Pressable style={styles.addRow} onPress={() => setShowAddCategory(true)}>
             <Ionicons name="add-circle" size={20} color={theme.accent} />
@@ -98,7 +104,7 @@ export default function BudgetScreen() {
           <View style={styles.inlineInputRow}>
             <TextInput
               style={[styles.inlineInput, { backgroundColor: theme.fieldBackground, color: theme.label }]}
-              keyboardType="decimal-pad"
+              keyboardType="numeric"
               value={salaryDraft}
               onChangeText={setSalaryDraft}
               onBlur={saveSalary}
@@ -154,7 +160,7 @@ export default function BudgetScreen() {
               style={[styles.goalAmountInput, { backgroundColor: theme.fieldBackground, color: theme.label }]}
               placeholder="$"
               placeholderTextColor={theme.tertiaryLabel}
-              keyboardType="decimal-pad"
+              keyboardType="numeric"
               value={goalAmount}
               onChangeText={setGoalAmount}
             />
@@ -170,6 +176,28 @@ export default function BudgetScreen() {
   );
 }
 
+function CategoryLimitInlineInput({ value, onSave }: { value: number; onSave: (limit: number) => void }) {
+  const theme = useTheme();
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  return (
+    <View style={styles.inlineLimitRow}>
+      <Text style={{ color: theme.tertiaryLabel, fontSize: 11 }}>of </Text>
+      <TextInput
+        style={[styles.inlineLimitInput, { color: theme.tertiaryLabel }]}
+        keyboardType="numeric"
+        value={draft}
+        onChangeText={setDraft}
+        onBlur={() => onSave(parseFloat(draft) || 0)}
+      />
+    </View>
+  );
+}
+
 function GoalAmountInput({ value, onSave }: { value: number; onSave: (amount: number) => void }) {
   const theme = useTheme();
   const [draft, setDraft] = useState(String(value));
@@ -181,7 +209,7 @@ function GoalAmountInput({ value, onSave }: { value: number; onSave: (amount: nu
   return (
     <TextInput
       style={[styles.goalAmountEditInput, { color: theme.label, backgroundColor: theme.fieldBackground }]}
-      keyboardType="decimal-pad"
+      keyboardType="numeric"
       value={draft}
       onChangeText={setDraft}
       onBlur={() => onSave(parseFloat(draft) || 0)}
@@ -223,39 +251,48 @@ function AddCategoryModal({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
-        <Text style={[styles.sectionTitle, { color: theme.label }]}>New Category</Text>
-        <TextInput
-          style={[styles.goalInput, { backgroundColor: theme.fieldBackground, color: theme.label, marginBottom: 12 }]}
-          placeholder="Name"
-          placeholderTextColor={theme.tertiaryLabel}
-          value={name}
-          onChangeText={setName}
-        />
-        <TextInput
-          style={[styles.goalInput, { backgroundColor: theme.fieldBackground, color: theme.label, marginBottom: 12 }]}
-          placeholder="Monthly ideal limit"
-          placeholderTextColor={theme.tertiaryLabel}
-          keyboardType="decimal-pad"
-          value={limit}
-          onChangeText={setLimit}
-        />
-        <View style={styles.iconGrid}>
-          {CATEGORY_ICON_CHOICES.map((ic) => (
-            <Pressable key={ic} onPress={() => setIcon(ic)} style={[styles.iconChoice, icon === ic && { borderColor: theme.accent, borderWidth: 2 }]}>
-              <CategoryIcon icon={ic} color={theme.secondaryLabel} />
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: theme.groupedBackground }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.modalContent}
+          keyboardShouldPersistTaps="handled"
+          style={{ backgroundColor: theme.groupedBackground }}
+        >
+          <Text style={[styles.sectionTitle, { color: theme.label }]}>New Category</Text>
+          <TextInput
+            style={[styles.goalInput, { backgroundColor: theme.fieldBackground, color: theme.label, marginBottom: 12 }]}
+            placeholder="Name"
+            placeholderTextColor={theme.tertiaryLabel}
+            value={name}
+            onChangeText={setName}
+          />
+          <TextInput
+            style={[styles.goalInput, { backgroundColor: theme.fieldBackground, color: theme.label, marginBottom: 12 }]}
+            placeholder="Monthly ideal limit"
+            placeholderTextColor={theme.tertiaryLabel}
+            keyboardType="numeric"
+            value={limit}
+            onChangeText={setLimit}
+          />
+          <View style={styles.iconGrid}>
+            {CATEGORY_ICON_CHOICES.map((ic) => (
+              <Pressable key={ic} onPress={() => setIcon(ic)} style={[styles.iconChoice, icon === ic && { borderColor: theme.accent, borderWidth: 2 }]}>
+                <CategoryIcon icon={ic} color={theme.secondaryLabel} />
+              </Pressable>
+            ))}
+          </View>
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+            <Pressable style={[styles.button, { borderColor: theme.separator, borderWidth: 1 }]} onPress={onClose}>
+              <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
             </Pressable>
-          ))}
-        </View>
-        <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
-          <Pressable style={[styles.button, { borderColor: theme.separator, borderWidth: 1 }]} onPress={onClose}>
-            <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
-          </Pressable>
-          <Pressable style={[styles.button, { backgroundColor: theme.accent }]} onPress={save}>
-            <Text style={{ color: '#FFF', fontWeight: '600' }}>Add</Text>
-          </Pressable>
-        </View>
-      </View>
+            <Pressable style={[styles.button, { backgroundColor: theme.accent }]} onPress={save}>
+              <Text style={{ color: '#FFF', fontWeight: '600' }}>Add</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -266,7 +303,10 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 17, fontWeight: '700', marginBottom: 10 },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   categoryRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  categoryTapArea: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   categoryMiddle: { flex: 1, gap: 6 },
+  inlineLimitRow: { flexDirection: 'row', alignItems: 'center' },
+  inlineLimitInput: { fontSize: 11, minWidth: 36, padding: 0, textAlign: 'right' },
   categoryName: { fontSize: 14, fontWeight: '500' },
   addRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 10 },
   salaryModeRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
@@ -279,7 +319,7 @@ const styles = StyleSheet.create({
   goalAddRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
   goalInput: { flex: 1, padding: 10, borderRadius: radius.sm },
   goalAmountInput: { width: 80, padding: 10, borderRadius: radius.sm },
-  modalContent: { flex: 1, padding: 20, paddingTop: 40 },
+  modalContent: { flexGrow: 1, padding: 20, paddingTop: 40, paddingBottom: 40 },
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   iconChoice: { borderRadius: 22, padding: 2 },
   button: { flex: 1, paddingVertical: 14, borderRadius: radius.md, alignItems: 'center' },

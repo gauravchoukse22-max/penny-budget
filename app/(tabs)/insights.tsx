@@ -10,15 +10,43 @@ import { BarChart } from '../../components/charts/BarChart';
 import { computeTrendSeries } from '../../lib/queries';
 import type { TrendPoint } from '../../lib/models';
 import { formatMonthLabel } from '../../lib/format';
+import { SmartForecastCard, AnomalyAlertBanner, MonthlySummaryCard } from '../../components/FeatureCards';
+import { getHistoricalCategoryProjections, detectAnomalies } from '../../features/predictive-engine';
+import { generateMonthlySummary } from '../../features/streaks-and-gamification';
+import type { CategoryProjection, AnomalyAlert, MonthlySummary } from '../../features/models';
 
 export default function InsightsScreen() {
   const theme = useTheme();
-  const { selectedMonth, categorySummaries, cardTotals, cards, settings } = useBudget();
+  const { selectedMonth, categories, categorySummaries, cardTotals, cards, settings } = useBudget();
   const [trend, setTrend] = useState<TrendPoint[]>([]);
+  const [projections, setProjections] = useState<CategoryProjection[]>([]);
+  const [anomalies, setAnomalies] = useState<AnomalyAlert[]>([]);
+  const [summary, setSummary] = useState<MonthlySummary | null>(null);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     computeTrendSeries(selectedMonth, 6).then(setTrend);
+    getHistoricalCategoryProjections(3).then(setProjections);
+    detectAnomalies(selectedMonth).then(setAnomalies);
+    generateMonthlySummary(selectedMonth).then(setSummary);
+    setDismissed(new Set());
   }, [selectedMonth]);
+
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const projectionCards = projections
+    .filter((p) => p.budgetLimit > 0)
+    .map((p) => {
+      const cat = categoryById.get(p.categoryId);
+      return {
+        categoryName: cat?.name ?? 'Category',
+        categoryColor: cat?.color ?? theme.accent,
+        currentSpend: p.currentSpend,
+        projectedSpend: p.projectedFinalSpend,
+        budgetLimit: p.budgetLimit,
+        status: p.status,
+      };
+    });
+  const visibleAnomalies = anomalies.filter((a) => !dismissed.has(a.transactionId));
 
   const donutSlices = categorySummaries
     .filter((s) => s.spend > 0)
@@ -41,6 +69,32 @@ export default function InsightsScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={[type.title1, { color: theme.label }]}>Insights</Text>
         <Text style={{ color: theme.secondaryLabel, marginTop: -12 }}>{formatMonthLabel(selectedMonth)}</Text>
+
+        {visibleAnomalies.map((a) => (
+          <AnomalyAlertBanner
+            key={a.transactionId}
+            explanation={a.explanation}
+            severity={a.severity}
+            onDismiss={() => setDismissed((prev) => new Set(prev).add(a.transactionId))}
+          />
+        ))}
+
+        {summary && summary.transactionCount > 0 && (
+          <MonthlySummaryCard
+            summary={{
+              totalSpent: summary.totalSpent,
+              transactionCount: summary.transactionCount,
+              topCategoryName: summary.topCategories[0]?.name,
+              topCategoryAmount: summary.topCategories[0]?.total,
+              biggestNote: summary.biggestPurchase?.note ?? undefined,
+              biggestAmount: summary.biggestPurchase?.amount,
+              budgetScore: summary.budgetScore,
+            }}
+            currency={settings.currency}
+          />
+        )}
+
+        {projectionCards.length > 0 && <SmartForecastCard projections={projectionCards} currency={settings.currency} />}
 
         <Surface>
           <Text style={[styles.sectionTitle, { color: theme.label }]}>Spend Trend (6 months)</Text>

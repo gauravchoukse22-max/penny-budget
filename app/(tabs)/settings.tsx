@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Switch, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,6 +8,9 @@ import { useTheme, spacing, radius, type } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
 import { listAllTransactions } from '../../lib/queries';
 import { exportTransactionsCsv, importTransactionsCsv, importParticularsCsv } from '../../lib/csv';
+import { exportDatabaseToJson, importDatabaseFromJson } from '../../features/backup-restore';
+import { checkBiometricsSupport, authenticateUser } from '../../features/biometrics';
+import { importCreditCardStatement } from '../../features/statement-import';
 import { formatMonthLabel } from '../../lib/format';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR'];
@@ -17,6 +20,22 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { settings, categories, cards, selectedMonth, updateSettings, refresh } = useBudget();
   const [busy, setBusy] = useState(false);
+  const [biometricType, setBiometricType] = useState<string | null>(null);
+  const [pickingCardFor, setPickingCardFor] = useState(false);
+
+  useEffect(() => {
+    checkBiometricsSupport().then((s) => setBiometricType(s.supported ? s.type : null));
+  }, []);
+
+  const toggleBiometricLock = async (value: boolean) => {
+    if (value) {
+      // Require a successful auth before turning the lock on, so a user can't
+      // accidentally lock themselves out with an enrollment that doesn't work.
+      const ok = await authenticateUser('Confirm to enable app lock');
+      if (!ok) return;
+    }
+    await updateSettings({ biometricLock: value });
+  };
 
   const doExport = async () => {
     setBusy(true);
@@ -36,6 +55,64 @@ export default function SettingsScreen() {
         Alert.alert('Import complete', `Imported ${result.imported} transactions, skipped ${result.skipped}.`);
         await refresh();
       }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doBackup = async () => {
+    setBusy(true);
+    try {
+      const ok = await exportDatabaseToJson();
+      if (!ok) Alert.alert('Backup unavailable', 'Sharing is not available on this device.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doRestore = () => {
+    Alert.alert(
+      'Restore from backup?',
+      'This replaces ALL current data in the app with the contents of the backup file. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Choose file & restore',
+          style: 'destructive',
+          onPress: async () => {
+            setBusy(true);
+            try {
+              const result = await importDatabaseFromJson();
+              Alert.alert(result.success ? 'Restore complete' : 'Restore failed', result.message);
+              if (result.success) await refresh();
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const doImportStatement = async (cardId: string) => {
+    setPickingCardFor(false);
+    setBusy(true);
+    try {
+      const result = await importCreditCardStatement(cardId);
+      if (result === null) return; // user cancelled the file picker
+      if ('unrecognizedFormat' in result) {
+        Alert.alert('Unrecognized format', "Couldn't find date, description, and amount columns in that file.");
+        return;
+      }
+      const notes = [
+        `Imported ${result.imported} transaction(s).`,
+        result.duplicatesSkipped > 0 ? `${result.duplicatesSkipped} already-imported charge(s) skipped.` : null,
+        result.recurringSkipped > 0 ? `${result.recurringSkipped} charge(s) skipped — already tracked as a recurring bill.` : null,
+        result.uncategorized > 0 ? `${result.uncategorized} item(s) need a category.` : null,
+        result.malformedRows > 0 ? `${result.malformedRows} row(s) couldn't be read.` : null,
+      ].filter(Boolean);
+      Alert.alert('Import complete', notes.join('\n'));
+      await refresh();
     } finally {
       setBusy(false);
     }
@@ -88,7 +165,24 @@ export default function SettingsScreen() {
           <SettingsLink label="Categories" onPress={() => router.push('/(tabs)/budget')} />
           <View style={[styles.divider, { backgroundColor: theme.separator }]} />
           <SettingsLink label="Cards" onPress={() => router.push('/(tabs)/cards')} />
+          <View style={[styles.divider, { backgroundColor: theme.separator }]} />
+          <SettingsLink label="Recurring Bills" onPress={() => router.push('/recurring')} />
+          <View style={[styles.divider, { backgroundColor: theme.separator }]} />
+          <SettingsLink label="Search Transactions" onPress={() => router.push('/search')} />
         </Surface>
+
+        {biometricType && (
+          <Surface>
+            <Text style={[styles.sectionTitle, { color: theme.label }]}>Security</Text>
+            <View style={styles.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.label, fontSize: 15 }}>Require {biometricType}</Text>
+                <Text style={{ color: theme.tertiaryLabel, fontSize: 12, marginTop: 2 }}>Lock the app when opened or reopened.</Text>
+              </View>
+              <Switch value={settings.biometricLock} onValueChange={toggleBiometricLock} />
+            </View>
+          </Surface>
+        )}
 
         <Surface>
           <Text style={[styles.sectionTitle, { color: theme.label }]}>Data</Text>
@@ -110,10 +204,71 @@ export default function SettingsScreen() {
             For a line-item sheet (name + amount per row, no dates or cards) — everything lands in{' '}
             {formatMonthLabel(selectedMonth)} on a shared "Unassigned" card.
           </Text>
+          <View style={[styles.divider, { backgroundColor: theme.separator, marginTop: 10 }]} />
+          <Pressable
+            style={styles.actionRow}
+            onPress={() => (cards.length > 0 ? setPickingCardFor(true) : Alert.alert('Add a card first'))}
+            disabled={busy}
+          >
+            <Ionicons name="albums-outline" size={20} color={theme.accent} />
+            <Text style={{ color: theme.accent, marginLeft: 10, fontWeight: '600' }}>Import Credit Card Statement</Text>
+          </Pressable>
+          <Text style={[styles.hint, { color: theme.tertiaryLabel }]}>
+            For a bank/card export with Date, Description, and Amount columns. Charges that match an active recurring
+            bill, or that were already imported, are skipped automatically.
+          </Text>
         </Surface>
 
-        <Text style={[styles.footer, { color: theme.tertiaryLabel }]}>Penny Budget — local-only, your data stays on this device.</Text>
+        <Surface>
+          <Text style={[styles.sectionTitle, { color: theme.label }]}>iCloud Sync</Text>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: theme.label, fontSize: 15 }}>Sync across devices</Text>
+              <Text style={{ color: theme.tertiaryLabel, fontSize: 12, marginTop: 2 }}>
+                Keeps a private copy in your iCloud account. Activates on a build with iCloud configured.
+              </Text>
+            </View>
+            <Switch value={settings.cloudSyncEnabled} onValueChange={(v) => updateSettings({ cloudSyncEnabled: v })} />
+          </View>
+        </Surface>
+
+        <Surface>
+          <Text style={[styles.sectionTitle, { color: theme.label }]}>Backup</Text>
+          <Pressable style={styles.actionRow} onPress={doBackup} disabled={busy}>
+            <Ionicons name="save-outline" size={20} color={theme.accent} />
+            <Text style={{ color: theme.accent, marginLeft: 10, fontWeight: '600' }}>Back up all data (JSON)</Text>
+          </Pressable>
+          <View style={[styles.divider, { backgroundColor: theme.separator }]} />
+          <Pressable style={styles.actionRow} onPress={doRestore} disabled={busy}>
+            <Ionicons name="refresh-outline" size={20} color={theme.systemRed} />
+            <Text style={{ color: theme.systemRed, marginLeft: 10, fontWeight: '600' }}>Restore from backup</Text>
+          </Pressable>
+          <Text style={[styles.hint, { color: theme.tertiaryLabel }]}>
+            A full snapshot of every category, card, transaction, budget, and goal. Restoring replaces all current data.
+          </Text>
+        </Surface>
+
+        <Text style={[styles.footer, { color: theme.tertiaryLabel }]}>
+          Penny Budget — your data stays on this device unless you turn on iCloud Sync.
+        </Text>
       </ScrollView>
+
+      <Modal visible={pickingCardFor} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPickingCardFor(false)}>
+        <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
+          <Text style={[type.title2, { color: theme.label, marginBottom: spacing.lg }]}>Which card is this statement for?</Text>
+          <ScrollView>
+            {cards.map((c) => (
+              <Pressable key={c.id} style={styles.pickerRow} onPress={() => doImportStatement(c.id)}>
+                <View style={[styles.cardDot, { backgroundColor: c.color }]} />
+                <Text style={{ color: theme.label, fontSize: 16 }}>{c.name}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          <Pressable style={[styles.modalCancel, { borderColor: theme.separator }]} onPress={() => setPickingCardFor(false)}>
+            <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
+          </Pressable>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -136,6 +291,11 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.md },
   hint: { fontSize: 12, marginTop: 10 },
   actionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11 },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
   divider: { height: StyleSheet.hairlineWidth },
   footer: { textAlign: 'center', fontSize: 12, marginTop: 8 },
+  modalContent: { flex: 1, padding: spacing.xl, paddingTop: 40 },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
+  cardDot: { width: 18, height: 18, borderRadius: 9 },
+  modalCancel: { paddingVertical: 14, borderRadius: radius.md, alignItems: 'center', borderWidth: 1, marginTop: spacing.md },
 });

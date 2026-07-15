@@ -112,7 +112,85 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
     await db.execAsync('ALTER TABLE cards ADD COLUMN dueDay INTEGER;');
   }
 
+  await migrateFeatureTables(db);
+
   return db;
+}
+
+/**
+ * Tables and columns for the post-launch feature set (recurring bills, smart
+ * categorization rules, engagement streaks, the sync outbox). Runs on every
+ * launch alongside the core migrations above — every statement is idempotent,
+ * so existing installs pick up the new tables without a reinstall.
+ */
+async function migrateFeatureTables(db: SQLite.SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS recurring_transactions (
+      id            TEXT PRIMARY KEY NOT NULL,
+      note          TEXT NOT NULL,
+      amount        REAL NOT NULL,
+      categoryId    TEXT,
+      cardId        TEXT NOT NULL,
+      dayOfMonth    INTEGER NOT NULL,
+      nextPostDate  TEXT NOT NULL,
+      active        INTEGER NOT NULL DEFAULT 1,
+      FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE SET NULL,
+      FOREIGN KEY (cardId)     REFERENCES cards(id)      ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS category_rules (
+      id          TEXT PRIMARY KEY NOT NULL,
+      keyword     TEXT NOT NULL COLLATE NOCASE,
+      categoryId  TEXT NOT NULL,
+      FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS streaks (
+      id              TEXT PRIMARY KEY NOT NULL,
+      type            TEXT NOT NULL,
+      currentStreak   INTEGER NOT NULL DEFAULT 0,
+      longestStreak   INTEGER NOT NULL DEFAULT 0,
+      lastActiveDate  TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS outbox (
+      id          TEXT PRIMARY KEY NOT NULL,
+      action      TEXT NOT NULL,
+      tableName   TEXT NOT NULL,
+      recordId    TEXT NOT NULL,
+      payload     TEXT NOT NULL,
+      createdAt   TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sync_meta (
+      id          TEXT PRIMARY KEY NOT NULL,
+      syncToken   TEXT
+    );
+  `);
+
+  // Self-heal columns added on top of tables that predate the feature set.
+  const categoryColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(categories)');
+  if (!new Set(categoryColumns.map((c) => c.name)).has('rolloverEnabled')) {
+    await db.execAsync('ALTER TABLE categories ADD COLUMN rolloverEnabled INTEGER NOT NULL DEFAULT 0;');
+  }
+
+  const txColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(transactions)');
+  const txColumnNames = new Set(txColumns.map((c) => c.name));
+  if (!txColumnNames.has('receiptUri')) {
+    await db.execAsync('ALTER TABLE transactions ADD COLUMN receiptUri TEXT;');
+  }
+  if (!txColumnNames.has('memo')) {
+    await db.execAsync('ALTER TABLE transactions ADD COLUMN memo TEXT;');
+  }
+
+  const settingsColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(app_settings)');
+  const settingsColumnNames = new Set(settingsColumns.map((c) => c.name));
+  if (!settingsColumnNames.has('biometricLock')) {
+    await db.execAsync('ALTER TABLE app_settings ADD COLUMN biometricLock INTEGER NOT NULL DEFAULT 0;');
+  }
+  if (!settingsColumnNames.has('cloudSyncEnabled')) {
+    await db.execAsync('ALTER TABLE app_settings ADD COLUMN cloudSyncEnabled INTEGER NOT NULL DEFAULT 0;');
+  }
 }
 
 export const DEFAULT_CATEGORIES: Array<{ name: string; icon: string; limit: number }> = [

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { CategoryIcon } from './CategoryIcon';
 import { AmountText } from './AmountText';
 import { useTheme } from '../theme/colors';
@@ -11,17 +12,41 @@ export function TransactionRow({
   card,
   currency,
   onPress,
+  onLongPress,
+  selected,
+  selectable,
 }: {
   transaction: Transaction;
   category?: Category;
   card?: Card;
   currency: string;
   onPress?: () => void;
+  onLongPress?: () => void;
+  /** When true, shows a selection checkbox in place of the category icon. */
+  selectable?: boolean;
+  /** Whether this row is currently selected (only meaningful when selectable). */
+  selected?: boolean;
 }) {
   const theme = useTheme();
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, { opacity: pressed ? 0.6 : 1 }]}>
-      <CategoryIcon icon={category?.icon ?? 'help-circle'} color={category?.color ?? theme.secondaryLabel} size={17} />
+    <Pressable
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={({ pressed }) => [
+        styles.row,
+        { opacity: pressed ? 0.6 : 1 },
+        selected && { backgroundColor: theme.fieldBackground, borderRadius: 8 },
+      ]}
+    >
+      {selectable ? (
+        <Ionicons
+          name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+          size={22}
+          color={selected ? theme.accent : theme.tertiaryLabel}
+        />
+      ) : (
+        <CategoryIcon icon={category?.icon ?? 'help-circle'} color={category?.color ?? theme.secondaryLabel} size={17} />
+      )}
       <View style={styles.middle}>
         <Text style={[styles.title, { color: theme.label }]} numberOfLines={1}>
           {transaction.note || category?.name || 'Uncategorized'}

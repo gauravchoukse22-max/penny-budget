@@ -6,6 +6,9 @@ import {
   currentYearMonth,
 } from '../lib/db';
 import * as q from '../lib/queries';
+import { processRecurringTransactions } from '../features/recurring-transactions';
+import { updateLoggingStreak } from '../features/streaks-and-gamification';
+import { setSyncEnabled, getCloudKitAdapter, runCloudKitSyncCycle } from '../features/cloudkit-sync';
 import type {
   AppSettings,
   Card,
@@ -75,6 +78,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     salaryMode: 'fixed',
     fixedSalary: 0,
     onboarded: false,
+    biometricLock: false,
+    cloudSyncEnabled: false,
   });
   const [cards, setCards] = useState<Card[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -116,8 +121,18 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       await seedDefaultCategoriesIfEmpty();
       await addPostLaunchCategoriesIfMissing();
       await seedDefaultSavingsGoalsIfEmpty();
+      // Mirror the persisted sync preference so writes journal to the outbox.
+      const initialSettings = await q.getAppSettings();
+      setSyncEnabled(initialSettings.cloudSyncEnabled);
+      // Auto-post any recurring bills that have come due since the last launch.
+      await processRecurringTransactions();
       await refresh();
       setReady(true);
+      // Only sync when enabled AND a real remote adapter is registered (native
+      // build). With the JS-only mock this is skipped so the outbox is preserved.
+      if (initialSettings.cloudSyncEnabled && getCloudKitAdapter().isAvailable) {
+        runCloudKitSyncCycle();
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -133,6 +148,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const updateSettings = useCallback(
     async (patch: Partial<AppSettings>) => {
       await q.updateAppSettings(patch);
+      if (patch.cloudSyncEnabled !== undefined) setSyncEnabled(patch.cloudSyncEnabled);
       await refresh();
     },
     [refresh]
@@ -228,6 +244,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const addTransaction = useCallback(
     async (input: Omit<Transaction, 'id' | 'createdAt' | 'source'> & { source?: Transaction['source'] }) => {
       await q.createTransaction(input);
+      await updateLoggingStreak();
       await refresh();
     },
     [refresh]

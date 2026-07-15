@@ -17,7 +17,7 @@ export async function exportTransactionsCsv(transactions: Parameters<typeof tran
   }
 }
 
-function parseCsvLine(line: string): string[] {
+export function parseCsvLine(line: string): string[] {
   const fields: string[] = [];
   let cur = '';
   let inQuotes = false;
@@ -64,7 +64,7 @@ export async function importTransactionsCsv(): Promise<{ imported: number; skipp
     const [date, amountStr, categoryName, cardName, note, source] = parseCsvLine(line);
     const amount = parseFloat(amountStr);
     const cardId = cardByName.get((cardName ?? '').toLowerCase());
-    if (!date || !(amount > 0) || !cardId) {
+    if (!date || !Number.isFinite(amount) || amount === 0 || !cardId) {
       skipped++;
       continue;
     }

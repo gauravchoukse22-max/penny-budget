@@ -94,7 +94,7 @@ export default function SetupWizard() {
                 />
                 <TextInput
                   style={[styles.limitInput, { backgroundColor: theme.fieldBackground, color: theme.label }]}
-                  keyboardType="decimal-pad"
+                  keyboardType="numeric"
                   value={String(c.monthlyLimit)}
                   onChangeText={(text) => editCategory(c.id, { monthlyLimit: parseFloat(text) || 0 })}
                 />
@@ -127,7 +127,7 @@ export default function SetupWizard() {
                 style={[styles.wideInput, { backgroundColor: theme.fieldBackground, color: theme.label }]}
                 placeholder="Monthly salary"
                 placeholderTextColor={theme.tertiaryLabel}
-                keyboardType="decimal-pad"
+                keyboardType="numeric"
                 value={salary}
                 onChangeText={setSalary}
               />
@@ -150,7 +150,7 @@ export default function SetupWizard() {
                 style={[styles.goalAmountInput, { backgroundColor: theme.fieldBackground, color: theme.label }]}
                 placeholder="$"
                 placeholderTextColor={theme.tertiaryLabel}
-                keyboardType="decimal-pad"
+                keyboardType="numeric"
                 value={goalAmount}
                 onChangeText={setGoalAmount}
               />
