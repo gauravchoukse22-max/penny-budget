@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Switch, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Switch, Modal, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -229,18 +229,21 @@ export default function SettingsScreen() {
           </Text>
         </Surface>
 
-        <Surface>
-          <Text style={[styles.sectionTitle, { color: theme.label }]}>iCloud Sync</Text>
-          <View style={styles.toggleRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.label, fontSize: 15 }}>Sync across devices</Text>
-              <Text style={{ color: theme.tertiaryLabel, fontSize: 12, marginTop: 2 }}>
-                Keeps a private copy in your iCloud account. Activates on a build with iCloud configured.
-              </Text>
+        {Platform.OS === 'ios' && (
+          <Surface>
+            <Text style={[styles.sectionTitle, { color: theme.label }]}>iCloud Sync</Text>
+            <View style={styles.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.tertiaryLabel, fontSize: 15 }}>Sync across devices</Text>
+                <Text style={{ color: theme.tertiaryLabel, fontSize: 12, marginTop: 2 }}>
+                  Coming in a future update. For now, use the optional account above to back up and restore
+                  between devices.
+                </Text>
+              </View>
+              <Switch value={false} disabled />
             </View>
-            <Switch value={settings.cloudSyncEnabled} onValueChange={(v) => updateSettings({ cloudSyncEnabled: v })} />
-          </View>
-        </Surface>
+          </Surface>
+        )}
 
         <Surface>
           <Text style={[styles.sectionTitle, { color: theme.label }]}>Backup</Text>

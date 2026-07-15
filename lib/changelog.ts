@@ -16,6 +16,16 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-07-15-icloud-toggle',
+    version: '1.0.1',
+    date: 'July 2026',
+    title: 'Clearer iCloud Sync status',
+    changes: [
+      'The "iCloud Sync" toggle in Settings was turning on with no real backend behind it yet — confusing since nothing visibly happened. It now shows as "Coming in a future update" on iOS, and no longer appears at all on Android or web, where it was never applicable. Your data is unaffected either way.',
+      'To move your budget between devices today, use the optional account: Settings → Account → Back up now / Restore latest backup.',
+    ],
+  },
+  {
     id: '2026-07-15-web-backup',
     version: '1.0.1',
     date: 'July 2026',
