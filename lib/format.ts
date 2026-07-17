@@ -6,6 +6,12 @@ export function formatCurrency(amount: number, currency = 'USD'): string {
   }
 }
 
+/** Masked stand-in for an amount when "Hide amounts" is on — keeps the currency
+ * symbol so the layout and context read the same, hides the digits. */
+export function maskedAmount(currency = 'USD'): string {
+  return `${currencySymbol(currency)}••••`;
+}
+
 /** The lone currency symbol for the active currency (e.g. "$", "€", "₹", "¥"). */
 export function currencySymbol(currency = 'USD'): string {
   try {

@@ -40,6 +40,15 @@
   <li><strong>When it happens:</strong> only when you manually create an account and manually trigger a backup. Nothing is uploaded automatically or in the background.</li>
 </ul>
 
+<h2>Data Retention, Location, and Security</h2>
+<ul>
+  <li><strong>What's in a cloud backup:</strong> the budget figures you entered — transactions, categories, cards (name and last four digits only, never a full card number), salary, and savings goals — plus the email address on your account. Penny Budget never asks for, stores, or has access to your bank login or full card numbers.</li>
+  <li><strong>Where it's stored:</strong> on Supabase's cloud infrastructure. You can see Supabase's data-region and sub-processor details in their documentation.</li>
+  <li><strong>How long:</strong> your cloud backup and account are kept until you delete them. There is only ever one backup per account, and each new backup overwrites the last. Deleting your account removes both immediately.</li>
+  <li><strong>In transit:</strong> all communication uses encrypted HTTPS/TLS connections.</li>
+  <li><strong>On your device:</strong> the token that keeps you signed in is stored encrypted, with the key held in your device's secure hardware store (iOS Keychain / Android Keystore).</li>
+</ul>
+
 <h2>Third-Party Service Providers</h2>
 <p>Cloud accounts and backup are provided using <a href="https://supabase.com/privacy">Supabase</a>, which handles authentication and stores your backup on our behalf. Your email and backup data are held on Supabase's infrastructure and transmitted over encrypted (HTTPS/TLS) connections. Supabase acts as a data processor for the app; see the Supabase Privacy Policy for details on their practices.</p>
 <p>The app includes no third-party analytics, advertising, or tracking software development kits (SDKs).</p>

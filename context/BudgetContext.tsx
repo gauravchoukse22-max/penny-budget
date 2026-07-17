@@ -79,6 +79,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     fixedSalary: 0,
     onboarded: false,
     biometricLock: false,
+    autoLockGraceMinutes: 1,
+    hideAmounts: false,
     cloudSyncEnabled: false,
   });
   const [cards, setCards] = useState<Card[]>([]);

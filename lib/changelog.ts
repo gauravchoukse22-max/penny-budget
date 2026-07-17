@@ -16,6 +16,24 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-07-17-account-security',
+    version: '1.0.1',
+    date: 'July 2026',
+    title: 'A real account page — and much stronger security',
+    changes: [
+      'The Sign In / Account screen was rebuilt: a cleaner grouped layout, a show/hide eye on the password, a password-strength meter and rules while you type, inline errors that actually explain what went wrong, and Password AutoFill support.',
+      'Forgot your password? There\'s now a proper reset flow — we email you a 6-digit code (or a link) to set a new one right in the app.',
+      'Confirming a new account is easier: enter the 6-digit code from your email instead of bouncing out to a browser and back.',
+      'New Security screen (Account → Security): turn on two-factor authentication — you\'ll be asked for a code from your authenticator app each time you sign in — plus change your email or password and sign out of all devices.',
+      'Signed up with Apple? You can now add a password, so you can also sign in with your email on Android and the web.',
+      'Your sign-in token is now stored encrypted on your device instead of in plain text.',
+      'Signing out now only signs out this device — it no longer unexpectedly signs out your other devices.',
+      'App Lock is sturdier: it never silently unlocks itself, offers a passcode fallback, and you can choose how quickly it re-locks (immediately, 1, 5, or 15 minutes).',
+      'New "Hide amounts" switch (Settings → Security) masks your money figures as ••••  to keep them private in public.',
+      'Added a Terms of Use, and Terms/Privacy links right where you create an account.',
+    ],
+  },
+  {
     id: '2026-07-15-icloud-toggle',
     version: '1.0.1',
     date: 'July 2026',

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security — Penny Budget</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 680px; margin: 0 auto; padding: 40px 20px 80px; color: #1c1c1e; line-height: 1.6; }
+  h1 { font-size: 28px; margin-bottom: 4px; }
+  h2 { font-size: 18px; margin-top: 32px; }
+  .updated { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
+  code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }
+  a { color: #6a5cf5; }
+  .lead { font-size: 17px; }
+</style>
+</head>
+<body>
+<h1>Security at Penny Budget</h1>
+<p class="updated">Last updated: July 17, 2026</p>
+
+<p class="lead">Penny Budget is a personal budgeting app for figures <em>you</em> type in. It never connects to your bank, never asks for banking credentials, and cannot move, send, or transfer money. This page describes the protections that are live in the app today — we don't claim anything here until it has actually shipped.</p>
+
+<h2>The biggest one: no bank connection</h2>
+<p>Many budgeting apps link directly to your bank and store credentials or access tokens that can read (and sometimes move) your money. Penny Budget does none of that. There is no bank login to steal, because there is no bank login. The most sensitive thing the app holds is a list of amounts and notes you entered yourself.</p>
+
+<h2>Your data stays on your device by default</h2>
+<p>Everything you enter is stored locally on your device. The app is fully usable with no account and no internet connection. There is no analytics, advertising, or tracking.</p>
+
+<h2>Optional account &amp; cloud backup</h2>
+<ul>
+  <li><strong>Encrypted in transit.</strong> All communication with our backup provider (Supabase) uses HTTPS/TLS.</li>
+  <li><strong>Private to you.</strong> Cloud backups are access-controlled per account (row-level security) so one account cannot read another's data.</li>
+  <li><strong>Optional two-factor authentication.</strong> You can turn on a time-based one-time code (TOTP) from an authenticator app for your account.</li>
+  <li><strong>Sign out everywhere &amp; delete anytime.</strong> You can end sessions on all devices, and permanently delete your account and cloud backup from inside the app. For Sign in with Apple accounts, deletion also revokes the app's Apple access.</li>
+</ul>
+
+<h2>On-device protections</h2>
+<ul>
+  <li><strong>Encrypted session token.</strong> The token that keeps you signed in is stored encrypted (AES-256), with the key held in the device's secure hardware-backed store (iOS Keychain / Android Keystore) and pinned so it never leaves the device in a backup.</li>
+  <li><strong>App lock.</strong> You can require Face ID / Touch ID / Fingerprint (or your device passcode) to open the app, with a configurable auto-lock delay. The lock fails closed — if identity can't be verified, the app stays locked.</li>
+  <li><strong>Shoulder-surfing defenses.</strong> A "Hide amounts" mode masks figures on screen, and on iOS the app blurs its preview in the multitasking switcher while the lock is on.</li>
+</ul>
+
+<h2>Reporting a vulnerability</h2>
+<p>If you believe you've found a security issue, please email <code>gauravchoukse22@gmail.com</code> with details and steps to reproduce. Please give us a reasonable chance to fix it before public disclosure. There is no bug-bounty program, but responsible reports are genuinely appreciated.</p>
+
+<h2>What we deliberately don't do</h2>
+<p>We don't use marketing terms like "bank-grade" — the honest framing is that Penny Budget can't leak your bank credentials because it never asks for them. We describe protections here only after they ship.</p>
+
+<p><a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Use</a></p>
+</body>
+</html>

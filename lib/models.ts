@@ -61,6 +61,10 @@ export type AppSettings = {
   onboarded: boolean;
   /** Require Face ID / Touch ID to open the app. */
   biometricLock: boolean;
+  /** Minutes the app can be backgrounded before it re-locks (0 = immediately). */
+  autoLockGraceMinutes: number;
+  /** Blur/mask money figures until revealed (shoulder-surfing defense). */
+  hideAmounts: boolean;
   /** Whether optional iCloud (CloudKit) sync is enabled. */
   cloudSyncEnabled: boolean;
 };

@@ -191,6 +191,12 @@ async function migrateFeatureTables(db: SQLite.SQLiteDatabase): Promise<void> {
   if (!settingsColumnNames.has('cloudSyncEnabled')) {
     await db.execAsync('ALTER TABLE app_settings ADD COLUMN cloudSyncEnabled INTEGER NOT NULL DEFAULT 0;');
   }
+  if (!settingsColumnNames.has('autoLockGraceMinutes')) {
+    await db.execAsync('ALTER TABLE app_settings ADD COLUMN autoLockGraceMinutes INTEGER NOT NULL DEFAULT 1;');
+  }
+  if (!settingsColumnNames.has('hideAmounts')) {
+    await db.execAsync('ALTER TABLE app_settings ADD COLUMN hideAmounts INTEGER NOT NULL DEFAULT 0;');
+  }
 }
 
 export const DEFAULT_CATEGORIES: Array<{ name: string; icon: string; limit: number }> = [

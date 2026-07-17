@@ -1,0 +1,5 @@
+Contact: mailto:gauravchoukse22@gmail.com
+Preferred-Languages: en
+Canonical: https://gauravchoukse22-max.github.io/penny-budget/.well-known/security.txt
+Policy: https://gauravchoukse22-max.github.io/penny-budget/security.html
+Expires: 2027-07-17T00:00:00.000Z

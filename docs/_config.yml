@@ -5,3 +5,4 @@
 # guarantees the assets are served even if Jekyll still runs.)
 include:
   - "_expo"
+  - ".well-known"

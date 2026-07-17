@@ -16,6 +16,13 @@ import { formatMonthLabel } from '../../lib/format';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR'];
 
+const GRACE_OPTIONS = [
+  { value: 0, label: 'Immediately' },
+  { value: 1, label: '1 min' },
+  { value: 5, label: '5 min' },
+  { value: 15, label: '15 min' },
+];
+
 export default function SettingsScreen() {
   const theme = useTheme();
   const router = useRouter();
@@ -181,18 +188,51 @@ export default function SettingsScreen() {
           <SettingsLink label="Search Transactions" onPress={() => router.push('/search')} />
         </Surface>
 
-        {biometricType && (
-          <Surface>
-            <Text style={[styles.sectionTitle, { color: theme.label }]}>Security</Text>
-            <View style={styles.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: theme.label, fontSize: 15 }}>Require {biometricType}</Text>
-                <Text style={{ color: theme.tertiaryLabel, fontSize: 12, marginTop: 2 }}>Lock the app when opened or reopened.</Text>
+        <Surface>
+          <Text style={[styles.sectionTitle, { color: theme.label }]}>Security</Text>
+
+          {biometricType && (
+            <>
+              <View style={styles.toggleRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.label, fontSize: 15 }}>Require {biometricType}</Text>
+                  <Text style={{ color: theme.tertiaryLabel, fontSize: 12, marginTop: 2 }}>Lock the app when opened or reopened.</Text>
+                </View>
+                <Switch value={settings.biometricLock} onValueChange={toggleBiometricLock} />
               </View>
-              <Switch value={settings.biometricLock} onValueChange={toggleBiometricLock} />
+
+              {settings.biometricLock && (
+                <View style={{ marginTop: 10 }}>
+                  <Text style={{ color: theme.secondaryLabel, fontSize: 13, marginBottom: 6 }}>Lock after</Text>
+                  <View style={styles.row}>
+                    {GRACE_OPTIONS.map((opt) => (
+                      <Pressable
+                        key={opt.value}
+                        onPress={() => updateSettings({ autoLockGraceMinutes: opt.value })}
+                        style={[styles.chip, { backgroundColor: settings.autoLockGraceMinutes === opt.value ? theme.accent : theme.fieldBackground }]}
+                      >
+                        <Text style={{ color: settings.autoLockGraceMinutes === opt.value ? '#FFFFFF' : theme.secondaryLabel, fontWeight: '700' }}>
+                          {opt.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              )}
+              <View style={[styles.divider, { backgroundColor: theme.separator, marginVertical: 12 }]} />
+            </>
+          )}
+
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: theme.label, fontSize: 15 }}>Hide amounts</Text>
+              <Text style={{ color: theme.tertiaryLabel, fontSize: 12, marginTop: 2 }}>
+                Mask money figures (shown as {'••••'}) to keep them private over your shoulder.
+              </Text>
             </View>
-          </Surface>
-        )}
+            <Switch value={settings.hideAmounts} onValueChange={(v) => updateSettings({ hideAmounts: v })} />
+          </View>
+        </Surface>
 
         <Surface>
           <Text style={[styles.sectionTitle, { color: theme.label }]}>Data</Text>
@@ -267,7 +307,7 @@ export default function SettingsScreen() {
         </Surface>
 
         <Text style={[styles.footer, { color: theme.tertiaryLabel }]}>
-          Penny Budget — your data stays on this device unless you turn on iCloud Sync.
+          Penny Budget — your data stays on this device unless you turn on an optional account and back it up.
         </Text>
       </ScrollView>
 

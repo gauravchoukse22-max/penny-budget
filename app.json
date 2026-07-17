@@ -41,7 +41,9 @@
         {
           "faceIDPermission": "Penny Budget uses Face ID to unlock the app and keep your budget private."
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "extra": {
       "router": {},

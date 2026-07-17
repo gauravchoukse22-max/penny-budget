@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Text, TextStyle, Platform, Animated } from 'react-native';
 import { useTheme } from '../theme/colors';
-import { formatCurrency } from '../lib/format';
+import { formatCurrency, maskedAmount } from '../lib/format';
+import { useBudget } from '../context/BudgetContext';
 
 type Props = {
   amount: number;
@@ -21,6 +22,7 @@ type Props = {
  */
 export function AnimatedAmount({ amount, currency = 'USD', size = 17, weight = 'regular', color, style, duration = 650 }: Props) {
   const theme = useTheme();
+  const { settings } = useBudget();
   const fontWeight = weight === 'bold' ? '700' : weight === 'semibold' ? '600' : '400';
   const driver = useRef(new Animated.Value(amount)).current;
   const [display, setDisplay] = useState(amount);
@@ -53,7 +55,7 @@ export function AnimatedAmount({ amount, currency = 'USD', size = 17, weight = '
         style,
       ]}
     >
-      {formatCurrency(display, currency)}
+      {settings.hideAmounts ? maskedAmount(currency) : formatCurrency(display, currency)}
     </Text>
   );
 }
