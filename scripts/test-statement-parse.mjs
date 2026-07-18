@@ -19,7 +19,9 @@ const root = join(__dirname, '..');
 
 const { parseCsv } = await import(await transform(join(root, 'lib/csv.ts'), ['expo-document-picker', './queries', './particulars', './files', './models']));
 const parse = await import(await transform(join(root, 'lib/statement-parse.ts'), []));
-const { parseStatementRecords, parseStatementAmount, parseStatementDate, detectDateOrder, detectSignConvention } = parse;
+const { parseStatementRecords, parseStatementAmount, parseStatementDate, detectDateOrder, detectSignConvention, findStatementYear } = parse;
+const layout = await import(await transform(join(root, 'lib/pdf-layout.ts'), []));
+const { clusterRowsFromRuns, pageToRecords, documentToRecords } = layout;
 
 // Deterministic "now" so year inference doesn't drift with the calendar.
 const TODAY = new Date(2026, 6, 18); // 2026-07-18
@@ -160,6 +162,206 @@ run('Embedded newline in quoted note stays one row', embeddedNewline, [
   { date: '2026-07-01', note: 'COFFEE SHOP\nDOWNTOWN', amount: 6.25 },
   { date: '2026-07-02', note: 'LUNCH', amount: 14 },
 ]);
+
+// ── PDF layout: synthetic Synchrony page (positioned runs -> records) ─
+// Mirrors the user's screenshot: Date | Reference # | Description | Amount,
+// section rows with subtotals, right-aligned amounts, year only in the period
+// header line.
+const synchronyRuns = [
+  { str: 'Statement Period 06/01/26 - 06/30/26', x: 50, y: 720, width: 180 },
+  { str: 'Transaction Detail', x: 50, y: 700, width: 96 },
+  { str: 'Date', x: 50, y: 680, width: 21 },
+  { str: 'Reference #', x: 110, y: 680, width: 54 },
+  { str: 'Description', x: 250, y: 680, width: 50 },
+  { str: 'Amount', x: 520, y: 680, width: 34 },
+  { str: 'Payments', x: 50, y: 660, width: 44 },
+  { str: '-$489.44', x: 500, y: 660, width: 40 },
+  { str: '06/28', x: 50, y: 640, width: 25 },
+  { str: '8521333J400XS6H17', x: 110, y: 640, width: 98 },
+  { str: 'ONLINE PAYMENT THANK YOU', x: 250, y: 640, width: 150 },
+  { str: '-$489.44', x: 500, y: 640, width: 40 },
+  { str: 'Other Credits', x: 50, y: 622, width: 60 },
+  { str: '-$251.03', x: 500, y: 622, width: 40 },
+  { str: '06/15', x: 50, y: 604, width: 25 },
+  { str: '3521999HR21BN16NM', x: 110, y: 604, width: 105 },
+  { str: 'SAMS CLUB 6647 HUNTSVILLE AL', x: 250, y: 604, width: 162 },
+  { str: '-$251.03', x: 500, y: 604, width: 40 },
+  { str: 'Purchases', x: 50, y: 586, width: 48 },
+  { str: '$63.95', x: 505, y: 586, width: 35 },
+  { str: '06/03', x: 50, y: 568, width: 25 },
+  { str: '55432110098812340', x: 110, y: 568, width: 98 },
+  { str: 'STARBUCKS STORE 4412', x: 250, y: 568, width: 120 },
+  { str: '5.75', x: 515, y: 568, width: 25 },
+  { str: '06/07', x: 50, y: 550, width: 25 },
+  { str: '55432110098812341', x: 110, y: 550, width: 98 },
+  { str: 'SHELL OIL 574123', x: 250, y: 550, width: 90 },
+  { str: '48.20', x: 510, y: 550, width: 30 },
+];
+{
+  const records = documentToRecords([synchronyRuns]);
+  const year = findStatementYear('Statement Period 06/01/26 - 06/30/26');
+  eq(year, 2026, 'pdf: statement year from period line');
+  const result = parseStatementRecords(records, { statementYear: year, today: TODAY });
+  if ('unrecognizedFormat' in result) {
+    failed++;
+    failures.push('✗ pdf synchrony: unrecognizedFormat');
+  } else {
+    eq(result.rows, [
+      { date: '2026-06-28', note: 'ONLINE PAYMENT THANK YOU', amount: -489.44 },
+      { date: '2026-06-15', note: 'SAMS CLUB 6647 HUNTSVILLE AL', amount: -251.03 },
+      { date: '2026-06-03', note: 'STARBUCKS STORE 4412', amount: 5.75 },
+      { date: '2026-06-07', note: 'SHELL OIL 574123', amount: 48.2 },
+    ], 'pdf synchrony: 4 txns, section subtotals excluded, year applied');
+  }
+}
+
+// ── PDF layout: synthetic Chase page (two-line header, all-negative sales) ─
+// Mirrors the user's screenshot: "Date of / Transaction" stacked header,
+// "Merchant Name or Transaction Description", "$ Amount"; purchases negative.
+const chaseRuns = [
+  { str: 'Opening/Closing Date 06/01/26 - 06/30/26', x: 60, y: 730, width: 200 },
+  { str: 'Date of', x: 76, y: 710, width: 36 },
+  { str: 'Transaction', x: 76, y: 698, width: 55 },
+  { str: 'Merchant Name or Transaction Description', x: 250, y: 698, width: 200 },
+  { str: '$ Amount', x: 520, y: 698, width: 45 },
+  { str: 'PAYMENTS AND OTHER CREDITS', x: 76, y: 678, width: 170 },
+  { str: '06/03', x: 76, y: 660, width: 26 },
+  { str: 'Amazon.com Amzn.com/bill WA', x: 250, y: 660, width: 150 },
+  { str: '-14.17', x: 530, y: 660, width: 33 },
+  { str: '06/08', x: 76, y: 642, width: 26 },
+  { str: 'Payment Thank You-Mobile', x: 250, y: 642, width: 130 },
+  { str: '-212.30', x: 526, y: 642, width: 38 },
+  { str: 'PURCHASE', x: 76, y: 622, width: 60 },
+  { str: '06/11', x: 76, y: 604, width: 26 },
+  { str: 'CHIPOTLE 1842', x: 250, y: 604, width: 80 },
+  { str: '14.28', x: 532, y: 604, width: 30 },
+  { str: '06/14', x: 76, y: 586, width: 26 },
+  { str: 'DELTA AIR LINES', x: 250, y: 586, width: 90 },
+  { str: '412.60', x: 528, y: 586, width: 35 },
+];
+{
+  const records = documentToRecords([chaseRuns]);
+  const year = findStatementYear('Opening/Closing Date 06/01/26 - 06/30/26');
+  const result = parseStatementRecords(records, { statementYear: year, today: TODAY });
+  if ('unrecognizedFormat' in result) {
+    failed++;
+    failures.push('✗ pdf chase: unrecognizedFormat (records: ' + JSON.stringify(records.slice(0, 3)) + ')');
+  } else {
+    eq(result.rows, [
+      { date: '2026-06-03', note: 'Amazon.com Amzn.com/bill WA', amount: -14.17 },
+      { date: '2026-06-08', note: 'Payment Thank You-Mobile', amount: -212.3 },
+      { date: '2026-06-11', note: 'CHIPOTLE 1842', amount: 14.28 },
+      { date: '2026-06-14', note: 'DELTA AIR LINES', amount: 412.6 },
+    ], 'pdf chase: stacked header parsed, credits negative, purchases positive');
+  }
+}
+
+// ── PDF layout: wrapped description joins its row ─
+const wrapRuns = [
+  { str: 'Date', x: 50, y: 700, width: 21 },
+  { str: 'Description', x: 150, y: 700, width: 50 },
+  { str: 'Amount', x: 500, y: 700, width: 34 },
+  { str: '06/10/2026', x: 50, y: 680, width: 48 },
+  { str: 'A Very Long Merchant Name That', x: 150, y: 680, width: 160 },
+  { str: '12.00', x: 505, y: 680, width: 28 },
+  { str: 'wraps onto a second line', x: 150, y: 668, width: 120 },
+];
+{
+  const records = documentToRecords([wrapRuns]);
+  const result = parseStatementRecords(records, { today: TODAY });
+  if ('unrecognizedFormat' in result) {
+    failed++;
+    failures.push('✗ pdf wrap: unrecognizedFormat');
+  } else {
+    eq(result.rows, [
+      { date: '2026-06-10', note: 'A Very Long Merchant Name That wraps onto a second line', amount: 12 },
+    ], 'pdf wrap: continuation line appended to description');
+  }
+}
+
+// ── PDF end-to-end: real pdfjs extraction through the whole pipeline ─
+// Builds an actual PDF file in memory, extracts it with the same pdfjs build
+// the app uses, and runs the result through layout + interpretation.
+{
+  const lines = [
+    'BT /F1 12 Tf 50 720 Td (Statement Period 06/01/26 - 06/30/26) Tj ET',
+    'BT /F1 10 Tf 50 680 Td (Date) Tj ET',
+    'BT /F1 10 Tf 110 680 Td (Reference #) Tj ET',
+    'BT /F1 10 Tf 250 680 Td (Description) Tj ET',
+    'BT /F1 10 Tf 520 680 Td (Amount) Tj ET',
+    'BT /F1 10 Tf 50 660 Td (Payments) Tj ET',
+    'BT /F1 10 Tf 500 660 Td (-$489.44) Tj ET',
+    'BT /F1 10 Tf 50 640 Td (06/28) Tj ET',
+    'BT /F1 10 Tf 110 640 Td (8521333J400XS6H17) Tj ET',
+    'BT /F1 10 Tf 250 640 Td (ONLINE PAYMENT THANK YOU) Tj ET',
+    'BT /F1 10 Tf 500 640 Td (-$489.44) Tj ET',
+    'BT /F1 10 Tf 50 620 Td (06/15) Tj ET',
+    'BT /F1 10 Tf 250 620 Td (SAMS CLUB 6647 HUNTSVILLE AL) Tj ET',
+    'BT /F1 10 Tf 500 620 Td (-$251.03) Tj ET',
+    'BT /F1 10 Tf 50 600 Td (06/03) Tj ET',
+    'BT /F1 10 Tf 250 600 Td (STARBUCKS STORE 4412) Tj ET',
+    'BT /F1 10 Tf 515 600 Td (5.75) Tj ET',
+    'BT /F1 10 Tf 50 580 Td (06/07) Tj ET',
+    'BT /F1 10 Tf 250 580 Td (SHELL OIL 574123) Tj ET',
+    'BT /F1 10 Tf 510 580 Td (48.20) Tj ET',
+    'BT /F1 10 Tf 50 560 Td (06/12) Tj ET',
+    'BT /F1 10 Tf 250 560 Td (NETFLIX.COM) Tj ET',
+    'BT /F1 10 Tf 510 560 Td (15.49) Tj ET',
+  ];
+  const stream = lines.join('\n');
+  const objects = [
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
+    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n',
+    `4 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`,
+    '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets = [];
+  for (const obj of objects) {
+    offsets.push(pdf.length);
+    pdf += obj;
+  }
+  const xrefPos = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const off of offsets) pdf += `${String(off).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`;
+
+  const { createRequire } = await import('node:module');
+  const req = createRequire(join(root, 'package.json'));
+  const pdfjs = await import('file://' + req.resolve('pdfjs-dist/legacy/build/pdf.js').replace(/\\/g, '/'));
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(Buffer.from(pdf, 'latin1')), isEvalSupported: false, useSystemFonts: true, disableFontFace: true }).promise;
+  const pages = [];
+  const textParts = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    const runs = [];
+    for (const item of content.items) {
+      if (typeof item.str !== 'string' || !item.transform) continue;
+      runs.push({ str: item.str, x: item.transform[4], y: item.transform[5], width: item.width ?? 0 });
+      if (item.str.trim()) textParts.push(item.str);
+    }
+    pages.push(runs);
+  }
+  await doc.destroy();
+
+  const records = documentToRecords(pages);
+  const year = findStatementYear(textParts.join('\n'));
+  const result = parseStatementRecords(records, { statementYear: year, today: TODAY });
+  if ('unrecognizedFormat' in result) {
+    failed++;
+    failures.push('✗ pdf e2e: unrecognizedFormat');
+  } else {
+    eq(result.rows, [
+      { date: '2026-06-28', note: 'ONLINE PAYMENT THANK YOU', amount: -489.44 },
+      { date: '2026-06-15', note: 'SAMS CLUB 6647 HUNTSVILLE AL', amount: -251.03 },
+      { date: '2026-06-03', note: 'STARBUCKS STORE 4412', amount: 5.75 },
+      { date: '2026-06-07', note: 'SHELL OIL 574123', amount: 48.2 },
+      { date: '2026-06-12', note: 'NETFLIX.COM', amount: 15.49 },
+    ], 'pdf e2e: bytes -> pdfjs -> layout -> transactions');
+  }
+}
 
 // ── Report ───────────────────────────────────────────────────────────
 console.log('');

@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: 'July 2026',
     title: 'Credit card statement import that actually works',
     changes: [
+      'You can now import the PDF statement itself — not just a CSV. The app reads the statement\'s table directly (tested against Chase and Synchrony layouts), including headers that wrap onto two lines and long descriptions that continue on the next line.',
       'Statement import no longer throws away rows it can\'t read. It now handles dates without a year (like 06/28), figures out the year from the statement itself, and understands more date and amount formats.',
       'It auto-detects your bank\'s sign convention — so cards that export purchases as negative numbers (like Chase) no longer import every purchase as a refund.',
       'Section subtotal lines like "Payments and Other Credits" are recognized and excluded, instead of importing as fake transactions.',

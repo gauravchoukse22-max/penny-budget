@@ -110,6 +110,10 @@ export default function SettingsScreen() {
     try {
       const result = await pickAndParseStatement();
       if (result === null) return; // user cancelled the file picker
+      if ('pdfUnsupported' in result) {
+        Alert.alert('PDF import unavailable', result.reason);
+        return;
+      }
       if ('unrecognizedFormat' in result) {
         Alert.alert(
           'Unrecognized format',
@@ -278,8 +282,8 @@ export default function SettingsScreen() {
             <Text style={{ color: theme.accent, marginLeft: 10, fontWeight: '600' }}>Import Credit Card Statement</Text>
           </Pressable>
           <Text style={[styles.hint, { color: theme.tertiaryLabel }]}>
-            For a bank/card export (CSV) with Date, Description, and Amount columns. You'll review and confirm every
-            transaction before anything is added — duplicates and recurring bills are flagged for you.
+            Works with a CSV export or the PDF statement itself. You'll review and confirm every transaction before
+            anything is added — duplicates and recurring bills are flagged for you.
           </Text>
         </Surface>
 

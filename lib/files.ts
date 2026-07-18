@@ -17,6 +17,40 @@ export async function readPickedFileAsText(asset: DocumentPickerAsset): Promise<
   return FileSystem.readAsStringAsync(asset.uri);
 }
 
+const B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/** Manual base64 decode — atob isn't guaranteed on Hermes. */
+function base64ToBytes(b64: string): Uint8Array {
+  const clean = b64.replace(/[^A-Za-z0-9+/]/g, '');
+  const len = Math.floor((clean.length * 3) / 4);
+  const out = new Uint8Array(len);
+  let o = 0;
+  for (let i = 0; i + 1 < clean.length; i += 4) {
+    const a = B64_ALPHABET.indexOf(clean[i]);
+    const b = B64_ALPHABET.indexOf(clean[i + 1]);
+    const c = i + 2 < clean.length ? B64_ALPHABET.indexOf(clean[i + 2]) : -1;
+    const d = i + 3 < clean.length ? B64_ALPHABET.indexOf(clean[i + 3]) : -1;
+    out[o++] = (a << 2) | (b >> 4);
+    if (c !== -1) out[o++] = ((b & 15) << 4) | (c >> 2);
+    if (d !== -1) out[o++] = ((c & 3) << 6) | d;
+  }
+  return out.subarray(0, o);
+}
+
+/**
+ * Reads a DocumentPicker asset as raw bytes (for binary formats like PDF).
+ * Web reads the browser File directly; native reads the picked URI as base64
+ * through expo-file-system and decodes it.
+ */
+export async function readPickedFileAsBytes(asset: DocumentPickerAsset): Promise<Uint8Array> {
+  if (Platform.OS === 'web') {
+    if (!asset.file) throw new Error('No file content available.');
+    return new Uint8Array(await asset.file.arrayBuffer());
+  }
+  const b64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' as any });
+  return base64ToBytes(b64);
+}
+
 /**
  * Delivers text content to the user as a file. On web there's no share sheet
  * or writable cache directory (expo-file-system/legacy is a no-op shim there),

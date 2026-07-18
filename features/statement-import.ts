@@ -1,6 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { parseCsv } from '../lib/csv';
-import { readPickedFileAsText } from '../lib/files';
+import { readPickedFileAsText, readPickedFileAsBytes } from '../lib/files';
+import { documentToRecords } from '../lib/pdf-layout';
 import { listAllTransactions, createTransaction } from '../lib/queries';
 import { listRecurringTransactions } from './recurring-transactions';
 import { suggestCategory } from './smart-categorizer';
@@ -44,7 +45,11 @@ export type StatementPreview = {
   filename: string;
 };
 
-export type StatementPickResult = StatementPreview | { unrecognizedFormat: true } | null;
+export type StatementPickResult =
+  | StatementPreview
+  | { unrecognizedFormat: true }
+  | { pdfUnsupported: true; reason: string }
+  | null;
 
 // Banks serve CSV under a grab-bag of MIME types (text/csv, application/csv,
 // vnd.ms-excel, octet-stream, or nothing). Restricting the picker to 'text/csv'
@@ -55,10 +60,17 @@ const PICKER_TYPES = [
   'text/comma-separated-values',
   'application/csv',
   'application/vnd.ms-excel',
+  'application/pdf',
   'text/plain',
   'application/octet-stream',
   '*/*',
 ];
+
+function looksLikePdf(asset: DocumentPicker.DocumentPickerAsset): boolean {
+  const name = (asset.name ?? '').toLowerCase();
+  const mime = (asset.mimeType ?? '').toLowerCase();
+  return name.endsWith('.pdf') || mime === 'application/pdf';
+}
 
 /**
  * Prompts for a file and returns a reviewable preview. Returns null if the user
@@ -70,9 +82,23 @@ export async function pickAndParseStatement(): Promise<StatementPickResult> {
   if (picked.canceled || !picked.assets?.[0]) return null;
 
   const asset = picked.assets[0];
-  const content = await readPickedFileAsText(asset);
-  const records = parseCsv(content);
-  const statementYear = findStatementYear(content);
+
+  let records: string[][];
+  let statementYear: number | null;
+  if (looksLikePdf(asset)) {
+    // PDF path: positioned text runs -> row/column matrix (lib/pdf-layout),
+    // then the SAME interpreter as CSV, so both formats share year inference,
+    // sign detection, and section-subtotal exclusion.
+    const { extractPdfRuns } = await import('./pdf-extract');
+    const extracted = await extractPdfRuns(await readPickedFileAsBytes(asset));
+    if ('pdfUnsupported' in extracted) return extracted;
+    records = documentToRecords(extracted.pages);
+    statementYear = findStatementYear(extracted.fullText);
+  } else {
+    const content = await readPickedFileAsText(asset);
+    records = parseCsv(content);
+    statementYear = findStatementYear(content);
+  }
   const parsed = parseStatementRecords(records, { statementYear });
 
   if ('unrecognizedFormat' in parsed) return { unrecognizedFormat: true };
