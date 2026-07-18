@@ -15,6 +15,7 @@ import {
   discoverRecurringPatterns,
 } from '../../features/recurring-transactions';
 import type { RecurringTransaction } from '../../features/models';
+import { parseMoneyInput } from '../../lib/parse-number';
 
 export default function RecurringScreen() {
   const theme = useTheme();
@@ -45,13 +46,14 @@ export default function RecurringScreen() {
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const dayNum = Math.max(1, Math.min(31, parseInt(day, 10) || 1));
-  const canAdd = note.trim().length > 0 && parseFloat(amount) > 0 && !!cardId;
+  const parsedAmount = parseMoneyInput(amount);
+  const canAdd = note.trim().length > 0 && parsedAmount !== null && parsedAmount > 0 && !!cardId;
 
   const add = async () => {
-    if (!canAdd || !cardId) return;
+    if (!canAdd || !cardId || parsedAmount === null) return;
     await createRecurringTransaction({
       note: note.trim(),
-      amount: parseFloat(amount),
+      amount: parsedAmount,
       categoryId,
       cardId,
       dayOfMonth: dayNum,

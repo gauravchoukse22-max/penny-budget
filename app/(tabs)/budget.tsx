@@ -14,6 +14,7 @@ import { NumberEditorSheet } from '../../components/NumberEditorSheet';
 import { CategoryIcon, CATEGORY_ICON_CHOICES } from '../../components/CategoryIcon';
 import { formatMonthLabel, formatCurrency } from '../../lib/format';
 import { tapLight, success } from '../../lib/haptics';
+import { parseMoneyInput } from '../../lib/parse-number';
 
 // What the single money-editor sheet is currently editing.
 type EditorState =
@@ -63,8 +64,8 @@ export default function BudgetScreen() {
   };
 
   const addGoal = async () => {
-    const amount = parseFloat(goalAmount);
-    if (!goalName.trim() || !(amount > 0)) return;
+    const amount = parseMoneyInput(goalAmount);
+    if (!goalName.trim() || amount === null || !(amount > 0)) return;
     await addSavingsGoal({ name: goalName.trim(), monthlyAmount: amount });
     success();
     setGoalName('');
@@ -291,7 +292,7 @@ function AddCategoryModal({
       name: name.trim(),
       icon,
       color: CATEGORY_PALETTE[usedCount % CATEGORY_PALETTE.length],
-      monthlyLimit: parseFloat(limit) || 0,
+      monthlyLimit: parseMoneyInput(limit) ?? 0,
     });
     success();
     setName('');

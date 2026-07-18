@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Platform, Alert, KeyboardAvoidingView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { CategoryIcon } from '../../components/CategoryIcon';
+import { DateField } from '../../components/DateField';
+import { parseMoneyInput } from '../../lib/parse-number';
 
 export default function EditTransactionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -17,7 +18,6 @@ export default function EditTransactionScreen() {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [date, setDate] = useState('');
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [cardId, setCardId] = useState<string | null>(null);
   const [isRefund, setIsRefund] = useState(false);
@@ -41,11 +41,12 @@ export default function EditTransactionScreen() {
     );
   }
 
-  const canSave = parseFloat(amount) > 0 && !!cardId;
+  const parsedAmount = parseMoneyInput(amount);
+  const canSave = parsedAmount !== null && parsedAmount > 0 && !!cardId;
 
   const save = async () => {
-    if (!canSave || !cardId) return;
-    const signedAmount = (isRefund ? -1 : 1) * parseFloat(amount);
+    if (!canSave || !cardId || parsedAmount === null) return;
+    const signedAmount = (isRefund ? -1 : 1) * parsedAmount;
     await editTransaction(transaction.id, { amount: signedAmount, date, categoryId, cardId, note: note.trim() || null });
     router.back();
   };
@@ -130,23 +131,7 @@ export default function EditTransactionScreen() {
       </ScrollView>
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Date</Text>
-      <Pressable style={[styles.dateBox, { backgroundColor: theme.fieldBackground }]} onPress={() => setShowDatePicker(true)}>
-        <Text style={{ color: theme.label }}>{date}</Text>
-      </Pressable>
-      {showDatePicker && (
-        <DateTimePicker
-          value={new Date(date + 'T00:00:00')}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'inline' : 'default'}
-          onChange={(_, selected) => {
-            setShowDatePicker(Platform.OS === 'ios');
-            if (selected) {
-              const d = selected;
-              setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
-            }
-          }}
-        />
-      )}
+      <DateField value={date} onChange={setDate} />
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Note</Text>
       <TextInput
@@ -181,7 +166,6 @@ const styles = StyleSheet.create({
   cardRow: { flexDirection: 'row' },
   cardChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.md, marginRight: 8 },
   cardChipText: { color: '#FFF', fontWeight: '600' },
-  dateBox: { padding: 12, borderRadius: radius.sm },
   noteInput: { padding: 12, borderRadius: radius.sm, fontSize: 15 },
   button: { paddingVertical: 15, borderRadius: radius.md, alignItems: 'center' },
   deleteButton: { borderWidth: 1.5, marginTop: 12 },

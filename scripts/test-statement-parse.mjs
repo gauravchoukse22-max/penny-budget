@@ -17,11 +17,12 @@ import { transform } from './lib/strip-types.mjs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
-const { parseCsv } = await import(await transform(join(root, 'lib/csv.ts'), ['expo-document-picker', './queries', './particulars', './files', './models']));
+const { parseCsv } = await import(await transform(join(root, 'lib/csv.ts'), ['expo-document-picker', './queries', './particulars', './files', './models', './parse-number']));
 const parse = await import(await transform(join(root, 'lib/statement-parse.ts'), []));
 const { parseStatementRecords, parseStatementAmount, parseStatementDate, detectDateOrder, detectSignConvention, findStatementYear } = parse;
 const layout = await import(await transform(join(root, 'lib/pdf-layout.ts'), []));
 const { clusterRowsFromRuns, pageToRecords, documentToRecords } = layout;
+const { parseMoneyInput } = await import(await transform(join(root, 'lib/parse-number.ts'), []));
 
 // Deterministic "now" so year inference doesn't drift with the calendar.
 const TODAY = new Date(2026, 6, 18); // 2026-07-18
@@ -52,6 +53,22 @@ function run(name, csv, expectedRows, opts = {}) {
   eq(result.rows, expectedRows, name);
   return result;
 }
+
+// ── Unit: parseMoneyInput (the app-wide typed-money gate) ────────────
+eq(parseMoneyInput('1,000'), 1000, 'money: "1,000" is 1000, not 1');
+eq(parseMoneyInput('1,500'), 1500, 'money: "1,500" is 1500');
+eq(parseMoneyInput('12,345.67'), 12345.67, 'money: "12,345.67"');
+eq(parseMoneyInput('$25.50'), 25.5, 'money: currency symbol tolerated');
+eq(parseMoneyInput('abc'), null, 'money: "abc" rejected');
+eq(parseMoneyInput('12abc'), null, 'money: "12abc" rejected, no partial parse');
+eq(parseMoneyInput('1e9'), null, 'money: scientific notation rejected');
+eq(parseMoneyInput('1.2.3'), null, 'money: double dot rejected');
+eq(parseMoneyInput(''), null, 'money: empty rejected');
+eq(parseMoneyInput('-500'), null, 'money: negative rejected by default');
+eq(parseMoneyInput('-500', { allowNegative: true }), -500, 'money: negative allowed when opted in');
+eq(parseMoneyInput('(12.34)', { allowNegative: true }), -12.34, 'money: parens negative');
+eq(parseMoneyInput('9999999999999999'), null, 'money: absurd magnitude rejected');
+eq(parseMoneyInput('.5'), 0.5, 'money: ".5" is 50 cents');
 
 // ── Unit: amount parsing ─────────────────────────────────────────────
 eq(parseStatementAmount('$1,234.56'), 1234.56, 'amount: $1,234.56');

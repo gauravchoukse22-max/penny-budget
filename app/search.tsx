@@ -9,6 +9,7 @@ import { Surface } from '../components/Surface';
 import { TransactionRow } from '../components/TransactionRow';
 import { searchTransactions, type SearchFilters } from '../features/search-engine';
 import type { Transaction } from '../lib/models';
+import { parseMoneyInput } from '../lib/parse-number';
 
 function isoOf(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -35,8 +36,10 @@ export default function SearchScreen() {
   const runSearch = async () => {
     const filters: SearchFilters = { limit: 200 };
     if (query.trim()) filters.query = query.trim();
-    if (parseFloat(minAmount) >= 0 && minAmount.trim()) filters.minAmount = parseFloat(minAmount);
-    if (parseFloat(maxAmount) >= 0 && maxAmount.trim()) filters.maxAmount = parseFloat(maxAmount);
+    const min = parseMoneyInput(minAmount);
+    const max = parseMoneyInput(maxAmount);
+    if (min !== null) filters.minAmount = min;
+    if (max !== null) filters.maxAmount = max;
     if (categoryId !== undefined) filters.categoryId = categoryId;
     if (cardId !== undefined) filters.cardId = cardId;
     if (startDate) filters.startDate = startDate;

@@ -16,6 +16,19 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-07-18-input-hardening',
+    version: '1.0.1',
+    date: 'July 2026',
+    title: 'Money fields you can trust',
+    changes: [
+      'Typing an amount with a comma — like 1,000 — now saves as one thousand, not one dollar. This affected every money field in the app (transactions, budgets, salary, goals, recurring bills, search).',
+      'Nonsense input ("abc", "1e9") and negative amounts are now rejected with a clear message instead of silently saving as $0 or corrupting your budget.',
+      'On the web app, you can finally change a transaction\'s date — the date field is now a real date picker there. (It always worked on iPhone/Android.)',
+      'Card "last 4 digits" only accepts digits now, and tells you what\'s wrong instead of ignoring the tap.',
+      'Setup polish: a category can\'t end up with an invisible empty name, your existing savings goals are shown (no more accidental duplicates), and every Add button explains itself when something\'s missing.',
+    ],
+  },
+  {
     id: '2026-07-18-bank-linking',
     version: '1.0.1',
     date: 'July 2026',

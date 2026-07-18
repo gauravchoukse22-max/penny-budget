@@ -4,6 +4,7 @@ import { createCard, createTransaction, listCards, listCategories } from './quer
 import { parseParticularsCsv, categorizeRows } from './particulars';
 import { readPickedFileAsText, downloadOrShareFile } from './files';
 import type { Card, Category } from './models';
+import { parseMoneyInput } from './parse-number';
 
 const FALLBACK_CARD_NAME = 'Unassigned (imported)';
 
@@ -106,9 +107,11 @@ export async function importTransactionsCsv(): Promise<{ imported: number; skipp
 
   for (const record of records.slice(1)) {
     const [date, amountStr, categoryName, cardName, note, source] = record;
-    const amount = parseFloat(amountStr);
+    // Strict parse (negative = refund is legal here); tolerates a hand-edited
+    // file with "1,234.56"-style amounts instead of importing it as 1.
+    const amount = parseMoneyInput(amountStr ?? '', { allowNegative: true });
     const cardId = cardByName.get((cardName ?? '').toLowerCase());
-    if (!date || !Number.isFinite(amount) || amount === 0 || !cardId) {
+    if (!date || amount === null || amount === 0 || !cardId) {
       skipped++;
       continue;
     }

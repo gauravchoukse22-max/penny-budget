@@ -2,10 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Platform, KeyboardAvoidingView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { currencySymbol } from '../../lib/format';
+import { parseMoneyInput } from '../../lib/parse-number';
+import { DateField } from '../../components/DateField';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { PressableScale } from '../../components/PressableScale';
 import { suggestCategory } from '../../features/smart-categorizer';
@@ -35,7 +36,6 @@ export default function AddTransactionScreen() {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [date, setDate] = useState(todayIso());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [categoryId, setCategoryId] = useState<string | null>(categories[0]?.id ?? null);
   const [cardId, setCardId] = useState<string | null>(cards[0]?.id ?? null);
   const [suggestion, setSuggestion] = useState<SmartSuggestion | null>(null);
@@ -75,11 +75,12 @@ export default function AddTransactionScreen() {
     );
   }
 
-  const canSave = parseFloat(amount) > 0 && !!cardId;
+  const parsedAmount = parseMoneyInput(amount);
+  const canSave = parsedAmount !== null && parsedAmount > 0 && !!cardId;
 
   const save = async (addAnother: boolean) => {
-    if (!canSave || !cardId) return;
-    const signedAmount = (isRefund ? -1 : 1) * parseFloat(amount);
+    if (!canSave || !cardId || parsedAmount === null) return;
+    const signedAmount = (isRefund ? -1 : 1) * parsedAmount;
     await addTransaction({ amount: signedAmount, date, categoryId, cardId, note: note.trim() || null });
     success();
     if (addAnother) {
@@ -192,23 +193,7 @@ export default function AddTransactionScreen() {
       </ScrollView>
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Date</Text>
-      <Pressable style={[styles.dateBox, { backgroundColor: theme.fieldBackground }]} onPress={() => setShowDatePicker(true)}>
-        <Text style={{ color: theme.label }}>{date}</Text>
-      </Pressable>
-      {showDatePicker && (
-        <DateTimePicker
-          value={new Date(date + 'T00:00:00')}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'inline' : 'default'}
-          onChange={(_, selected) => {
-            setShowDatePicker(Platform.OS === 'ios');
-            if (selected) {
-              const d = selected;
-              setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
-            }
-          }}
-        />
-      )}
+      <DateField value={date} onChange={setDate} />
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Note</Text>
       <TextInput
@@ -276,7 +261,6 @@ const styles = StyleSheet.create({
   cardRow: { flexDirection: 'row' },
   cardChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.md, marginRight: 8 },
   cardChipText: { color: '#FFF', fontWeight: '600' },
-  dateBox: { padding: 12, borderRadius: radius.sm },
   noteInput: { padding: 12, borderRadius: radius.sm, fontSize: 15 },
   suggestionChip: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.sm, borderWidth: 1, marginTop: 8 },
   buttonRow: { flexDirection: 'row', gap: 12, marginTop: spacing.xl },

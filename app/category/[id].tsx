@@ -19,6 +19,7 @@ import {
   getCategoryBudgetWithRollover,
 } from '../../features/streaks-and-gamification';
 import type { CategoryRule } from '../../features/models';
+import { parseMoneyInput } from '../../lib/parse-number';
 
 export default function CategoryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -102,7 +103,7 @@ export default function CategoryDetailScreen() {
   const cardById = new Map(cards.map((c) => [c.id, c]));
 
   const saveLimit = () => {
-    setCategoryLimitForSelectedMonth(category.id, parseFloat(limitDraft) || 0);
+    setCategoryLimitForSelectedMonth(category.id, parseMoneyInput(limitDraft) ?? 0);
   };
 
   const confirmDelete = () => {

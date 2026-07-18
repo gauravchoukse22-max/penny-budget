@@ -4,14 +4,55 @@ import { useRouter } from 'expo-router';
 import { useBudget } from '../context/BudgetContext';
 import { useTheme, CATEGORY_PALETTE, spacing, radius } from '../theme/colors';
 import { CategoryIcon } from '../components/CategoryIcon';
+import { parseMoneyInput } from '../lib/parse-number';
+import { formatCurrency } from '../lib/format';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR'];
 const STEPS = ['Currency', 'Categories', 'Salary', 'Savings', 'Cards'] as const;
 
+/**
+ * Draft-while-typing, strict-parse-on-blur money field for the category rows.
+ * Committing per keystroke with a strict parser would wipe partial input
+ * ("1," → 0 mid-typing); committing on blur keeps typing natural while still
+ * rejecting junk — an unparseable draft reverts to the last good value.
+ */
+function LimitField({
+  initial,
+  fieldBackground,
+  color,
+  onCommit,
+}: {
+  initial: number;
+  fieldBackground: string;
+  color: string;
+  onCommit: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(initial));
+  const commit = () => {
+    const parsed = parseMoneyInput(draft);
+    if (parsed === null) {
+      setDraft(String(initial));
+      return;
+    }
+    setDraft(String(parsed));
+    onCommit(parsed);
+  };
+  return (
+    <TextInput
+      style={[styles.limitInput, { backgroundColor: fieldBackground, color }]}
+      keyboardType="numeric"
+      value={draft}
+      onChangeText={setDraft}
+      onBlur={commit}
+      onEndEditing={commit}
+    />
+  );
+}
+
 export default function SetupWizard() {
   const theme = useTheme();
   const router = useRouter();
-  const { categories, updateSettings, editCategory, addCategory, removeCategory, addSavingsGoal, addCard, settings } = useBudget();
+  const { categories, updateSettings, editCategory, addCategory, removeCategory, addSavingsGoal, addCard, settings, savingsGoals } = useBudget();
 
   const [step, setStep] = useState(0);
   const [currency, setCurrency] = useState(settings.currency);
@@ -23,23 +64,43 @@ export default function SetupWizard() {
   const [cardLastFour, setCardLastFour] = useState('');
   const [addedCardCount, setAddedCardCount] = useState(0);
   const [addedGoalCount, setAddedGoalCount] = useState(0);
+  const [goalError, setGoalError] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<string | null>(null);
 
-  const next = () => setStep((s) => Math.min(STEPS.length - 1, s + 1));
+  const next = () => {
+    // Leaving the Categories step: a category was left with an empty name —
+    // it would render as an invisible row everywhere. Give it a name.
+    if (step === 1) {
+      for (const c of categories) {
+        if (!c.name.trim()) editCategory(c.id, { name: 'Category' });
+      }
+    }
+    setStep((s) => Math.min(STEPS.length - 1, s + 1));
+  };
   const back = () => setStep((s) => Math.max(0, s - 1));
 
   const finish = async () => {
     await updateSettings({
       currency,
       salaryMode,
-      fixedSalary: salaryMode === 'fixed' ? parseFloat(salary) || 0 : 0,
+      // Strict parse: junk or negative simply means "no salary yet".
+      fixedSalary: salaryMode === 'fixed' ? (parseMoneyInput(salary) ?? 0) : 0,
       onboarded: true,
     });
     router.replace('/(tabs)');
   };
 
   const addGoal = async () => {
-    const amount = parseFloat(goalAmount);
-    if (!goalName.trim() || !(amount > 0)) return;
+    const amount = parseMoneyInput(goalAmount);
+    if (!goalName.trim()) {
+      setGoalError('Give the goal a name.');
+      return;
+    }
+    if (amount === null || !(amount > 0)) {
+      setGoalError('Enter a monthly amount above zero (numbers only).');
+      return;
+    }
+    setGoalError(null);
     await addSavingsGoal({ name: goalName.trim(), monthlyAmount: amount });
     setGoalName('');
     setGoalAmount('');
@@ -47,7 +108,15 @@ export default function SetupWizard() {
   };
 
   const addNewCard = async () => {
-    if (!cardName.trim() || cardLastFour.trim().length !== 4) return;
+    if (!cardName.trim()) {
+      setCardError('Give the card a name.');
+      return;
+    }
+    if (!/^\d{4}$/.test(cardLastFour.trim())) {
+      setCardError('Last 4 digits must be exactly 4 numbers.');
+      return;
+    }
+    setCardError(null);
     await addCard({ name: cardName.trim(), lastFour: cardLastFour.trim(), color: CATEGORY_PALETTE[addedCardCount % CATEGORY_PALETTE.length] });
     setCardName('');
     setCardLastFour('');
@@ -90,13 +159,14 @@ export default function SetupWizard() {
                 <TextInput
                   style={[styles.categoryNameInput, { color: theme.label }]}
                   value={c.name}
+                  maxLength={40}
                   onChangeText={(text) => editCategory(c.id, { name: text })}
                 />
-                <TextInput
-                  style={[styles.limitInput, { backgroundColor: theme.fieldBackground, color: theme.label }]}
-                  keyboardType="numeric"
-                  value={String(c.monthlyLimit)}
-                  onChangeText={(text) => editCategory(c.id, { monthlyLimit: parseFloat(text) || 0 })}
+                <LimitField
+                  initial={c.monthlyLimit}
+                  fieldBackground={theme.fieldBackground}
+                  color={theme.label}
+                  onCommit={(value) => editCategory(c.id, { monthlyLimit: value })}
                 />
                 <Pressable onPress={() => removeCategory(c.id)}>
                   <Text style={{ color: theme.systemRed }}>Remove</Text>
@@ -138,6 +208,15 @@ export default function SetupWizard() {
         {step === 3 && (
           <View style={styles.section}>
             <Text style={[styles.helper, { color: theme.secondaryLabel }]}>Add savings goals — skippable, editable later.</Text>
+            {savingsGoals.length > 0 && (
+              <View style={{ marginBottom: spacing.md }}>
+                {savingsGoals.map((g) => (
+                  <Text key={g.id} style={{ color: theme.secondaryLabel, marginBottom: 2 }}>
+                    {g.name} — {formatCurrency(g.monthlyAmount, currency)}/month
+                  </Text>
+                ))}
+              </View>
+            )}
             <View style={styles.goalAddRow}>
               <TextInput
                 style={[styles.goalInput, { backgroundColor: theme.fieldBackground, color: theme.label }]}
@@ -145,6 +224,7 @@ export default function SetupWizard() {
                 placeholderTextColor={theme.tertiaryLabel}
                 value={goalName}
                 onChangeText={setGoalName}
+                maxLength={40}
               />
               <TextInput
                 style={[styles.goalAmountInput, { backgroundColor: theme.fieldBackground, color: theme.label }]}
@@ -158,6 +238,7 @@ export default function SetupWizard() {
                 <Text style={{ color: theme.accent, fontWeight: '600' }}>Add</Text>
               </Pressable>
             </View>
+            {goalError && <Text style={{ color: theme.systemRed, marginTop: 8 }}>{goalError}</Text>}
             {addedGoalCount > 0 && <Text style={{ color: theme.secondaryLabel, marginTop: 8 }}>{addedGoalCount} goal(s) added</Text>}
           </View>
         )}
@@ -171,6 +252,7 @@ export default function SetupWizard() {
               placeholderTextColor={theme.tertiaryLabel}
               value={cardName}
               onChangeText={setCardName}
+              maxLength={40}
             />
             <TextInput
               style={[styles.wideInput, { backgroundColor: theme.fieldBackground, color: theme.label }]}
@@ -179,11 +261,12 @@ export default function SetupWizard() {
               keyboardType="number-pad"
               maxLength={4}
               value={cardLastFour}
-              onChangeText={setCardLastFour}
+              onChangeText={(text) => setCardLastFour(text.replace(/\D/g, ''))}
             />
             <Pressable onPress={addNewCard}>
               <Text style={{ color: theme.accent, fontWeight: '600', marginTop: 4 }}>+ Add Card</Text>
             </Pressable>
+            {cardError && <Text style={{ color: theme.systemRed, marginTop: 8 }}>{cardError}</Text>}
             {addedCardCount > 0 && <Text style={{ color: theme.secondaryLabel, marginTop: 8 }}>{addedCardCount} card(s) added</Text>}
           </View>
         )}

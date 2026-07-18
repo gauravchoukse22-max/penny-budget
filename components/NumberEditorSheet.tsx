@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, Pressable, TextInput, Platform, Keyboard
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, radius, type } from '../theme/colors';
 import { formatCurrency, currencySymbol } from '../lib/format';
+import { parseMoneyInput } from '../lib/parse-number';
 import { PressableScale } from './PressableScale';
 import { tapLight, tapMedium, success } from '../lib/haptics';
 
@@ -44,7 +45,12 @@ export function NumberEditorSheet({
     if (visible) setDraft(initialValue ? String(initialValue) : '');
   }, [visible, initialValue]);
 
-  const numeric = parseFloat(draft) || 0;
+  // Strict parse: "1,500" is 1500, junk ("abc", "1e9", "-20") is invalid and
+  // blocks Save — this sheet edits salaries, limits, and goals, none of which
+  // may go negative. Previously raw parseFloat made "1,500" save as $1.
+  const parsed = parseMoneyInput(draft);
+  const invalid = draft.trim() !== '' && parsed === null;
+  const numeric = parsed ?? 0;
 
   const bump = (delta: number) => {
     const next = Math.max(0, numeric + delta);
@@ -53,6 +59,7 @@ export function NumberEditorSheet({
   };
 
   const commit = async () => {
+    if (invalid) return;
     tapMedium();
     await onSave(numeric);
     success();
@@ -70,15 +77,17 @@ export function NumberEditorSheet({
             <Text style={{ color: theme.secondaryLabel, fontSize: 16 }}>Cancel</Text>
           </Pressable>
           <Text style={[type.headline, { color: theme.label }]}>{title}</Text>
-          <Pressable onPress={commit} hitSlop={10}>
-            <Text style={{ color: theme.accent, fontSize: 16, fontWeight: '700' }}>Save</Text>
+          <Pressable onPress={commit} hitSlop={10} disabled={invalid}>
+            <Text style={{ color: invalid ? theme.tertiaryLabel : theme.accent, fontSize: 16, fontWeight: '700' }}>Save</Text>
           </Pressable>
         </View>
 
         {subtitle ? <Text style={[styles.subtitle, { color: theme.tertiaryLabel }]}>{subtitle}</Text> : null}
 
         <View style={styles.amountArea}>
-          <Text style={[styles.preview, { color: theme.tertiaryLabel }]}>{formatCurrency(numeric, currency)}</Text>
+          <Text style={[styles.preview, { color: invalid ? theme.systemRed : theme.tertiaryLabel }]}>
+            {invalid ? 'Enter a valid amount' : formatCurrency(numeric, currency)}
+          </Text>
           <View style={styles.inputRow}>
             <Text style={[styles.currency, { color: theme.secondaryLabel }]}>{currencySymbol(currency)}</Text>
             <TextInput

@@ -67,8 +67,8 @@ function AddCardModal({
   const [lastFour, setLastFour] = useState('');
 
   const save = async () => {
-    if (!name.trim() || lastFour.trim().length !== 4) {
-      Alert.alert('Enter a name and 4-digit last four');
+    if (!name.trim() || !/^\d{4}$/.test(lastFour.trim())) {
+      Alert.alert('Check the card details', 'Enter a card name and the last 4 digits (numbers only).');
       return;
     }
     await onSave({ name: name.trim(), lastFour: lastFour.trim(), color: CATEGORY_PALETTE[usedCount % CATEGORY_PALETTE.length] });
@@ -87,6 +87,7 @@ function AddCardModal({
           placeholderTextColor={theme.tertiaryLabel}
           value={name}
           onChangeText={setName}
+          maxLength={40}
         />
         <TextInput
           style={[styles.input, { backgroundColor: theme.fieldBackground, color: theme.label }]}
@@ -95,7 +96,7 @@ function AddCardModal({
           keyboardType="number-pad"
           maxLength={4}
           value={lastFour}
-          onChangeText={setLastFour}
+          onChangeText={(text) => setLastFour(text.replace(/\D/g, ''))}
         />
         <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
           <Pressable style={[styles.button, { borderColor: theme.separator, borderWidth: 1 }]} onPress={onClose}>
