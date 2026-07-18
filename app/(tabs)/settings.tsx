@@ -11,7 +11,8 @@ import { listAllTransactions } from '../../lib/queries';
 import { exportTransactionsCsv, importTransactionsCsv, importParticularsCsv } from '../../lib/csv';
 import { exportDatabaseToJson, importDatabaseFromJson } from '../../features/backup-restore';
 import { checkBiometricsSupport, authenticateUser } from '../../features/biometrics';
-import { importCreditCardStatement } from '../../features/statement-import';
+import { pickAndParseStatement } from '../../features/statement-import';
+import { setPendingImport } from '../../features/import-preview-store';
 import { formatMonthLabel } from '../../lib/format';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR'];
@@ -107,21 +108,25 @@ export default function SettingsScreen() {
     setPickingCardFor(false);
     setBusy(true);
     try {
-      const result = await importCreditCardStatement(cardId);
+      const result = await pickAndParseStatement();
       if (result === null) return; // user cancelled the file picker
       if ('unrecognizedFormat' in result) {
-        Alert.alert('Unrecognized format', "Couldn't find date, description, and amount columns in that file.");
+        Alert.alert(
+          'Unrecognized format',
+          "Couldn't find date, description, and amount columns in that file. Export it as a CSV with those columns and try again."
+        );
         return;
       }
-      const notes = [
-        `Imported ${result.imported} transaction(s).`,
-        result.duplicatesSkipped > 0 ? `${result.duplicatesSkipped} already-imported charge(s) skipped.` : null,
-        result.recurringSkipped > 0 ? `${result.recurringSkipped} charge(s) skipped — already tracked as a recurring bill.` : null,
-        result.uncategorized > 0 ? `${result.uncategorized} item(s) need a category.` : null,
-        result.malformedRows > 0 ? `${result.malformedRows} row(s) couldn't be read.` : null,
-      ].filter(Boolean);
-      Alert.alert('Import complete', notes.join('\n'));
-      await refresh();
+      if (result.rows.length === 0) {
+        const reason = result.skipped.length > 0
+          ? `All ${result.skipped.length} row(s) were skipped — nothing matched a date + amount.`
+          : 'No transactions were found in that file.';
+        Alert.alert('Nothing to import', reason);
+        return;
+      }
+      // Hand off to the preview screen for review before anything is written.
+      setPendingImport({ cardId, preview: result });
+      router.push('/import/preview');
     } finally {
       setBusy(false);
     }
@@ -273,8 +278,8 @@ export default function SettingsScreen() {
             <Text style={{ color: theme.accent, marginLeft: 10, fontWeight: '600' }}>Import Credit Card Statement</Text>
           </Pressable>
           <Text style={[styles.hint, { color: theme.tertiaryLabel }]}>
-            For a bank/card export with Date, Description, and Amount columns. Charges that match an active recurring
-            bill, or that were already imported, are skipped automatically.
+            For a bank/card export (CSV) with Date, Description, and Amount columns. You'll review and confirm every
+            transaction before anything is added — duplicates and recurring bills are flagged for you.
           </Text>
         </Surface>
 

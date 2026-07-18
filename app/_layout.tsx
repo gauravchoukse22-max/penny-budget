@@ -115,6 +115,7 @@ function RootNavigator() {
         <Stack.Screen name="account/change-password" options={{ presentation: 'modal', headerShown: true, title: 'Change Password' }} />
         <Stack.Screen name="account/security" options={{ headerShown: true, title: 'Security' }} />
         <Stack.Screen name="household/index" options={{ headerShown: true, title: 'Family Sharing', headerLargeTitle: true }} />
+        <Stack.Screen name="import/preview" options={{ presentation: 'modal', headerShown: true, title: 'Review Import', gestureEnabled: false }} />
         <Stack.Screen name="whats-new/index" options={{ presentation: 'modal', headerShown: true, title: "What's New" }} />
       </Stack>
       {locked && <AppLockScreen onUnlock={runAuth} />}

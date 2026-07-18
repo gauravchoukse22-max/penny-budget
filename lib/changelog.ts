@@ -16,6 +16,20 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-07-18-statement-import',
+    version: '1.0.1',
+    date: 'July 2026',
+    title: 'Credit card statement import that actually works',
+    changes: [
+      'Statement import no longer throws away rows it can\'t read. It now handles dates without a year (like 06/28), figures out the year from the statement itself, and understands more date and amount formats.',
+      'It auto-detects your bank\'s sign convention — so cards that export purchases as negative numbers (like Chase) no longer import every purchase as a refund.',
+      'Section subtotal lines like "Payments and Other Credits" are recognized and excluded, instead of importing as fake transactions.',
+      'New review screen: before anything is added, you see every transaction with its date, amount, and a suggested category. Toggle rows off, fix categories, or flip an amount\'s sign — nothing is saved until you tap Import.',
+      'Duplicates and charges already tracked as recurring bills are flagged and pre-unchecked, and any lines that couldn\'t be read are shown to you rather than silently dropped.',
+      'The file picker now accepts the CSV files real banks actually hand out, which previously could be unselectable.',
+    ],
+  },
+  {
     id: '2026-07-17-family-sharing',
     version: '1.0.1',
     date: 'July 2026',

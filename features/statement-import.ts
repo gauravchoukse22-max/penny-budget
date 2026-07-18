@@ -1,103 +1,83 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { parseCsvLine } from '../lib/csv';
+import { parseCsv } from '../lib/csv';
 import { readPickedFileAsText } from '../lib/files';
 import { listAllTransactions, createTransaction } from '../lib/queries';
 import { listRecurringTransactions } from './recurring-transactions';
 import { suggestCategory } from './smart-categorizer';
+import {
+  parseStatementRecords,
+  findStatementYear,
+  type ParsedStatementRow,
+  type StatementParseResult,
+} from '../lib/statement-parse';
 
-// Imports a bank/credit-card statement export (a generic Date/Description/
-// Amount CSV — the format most banks export, distinct from the app's own
-// export format in lib/csv.ts). Column names are matched loosely by keyword
-// so it tolerates the header variations different banks use.
+// Imports a bank / credit-card statement export. The parsing (dates, amount
+// signs, section subtotals, header detection) lives in lib/statement-parse.ts,
+// which is pure and fixture-tested (scripts/test-statement-parse.mjs). This
+// module owns the two things that can't be unit-tested: picking the file and
+// writing to the database.
 //
-// Dedup rules, so re-uploading an overlapping statement (or one that covers a
-// bill also handled by Recurring Bills) doesn't create duplicate transactions:
-//   1. Exact match (date + amount + note) against existing transactions is
-//      skipped — the row was already imported.
-//   2. A row matching an ACTIVE recurring transaction's (note, amount) is
-//      skipped — that charge is already tracked automatically by the
-//      recurring engine, so it shouldn't also land here as a one-off import.
-// Everything else imports normally, even if a merchant with the same name
-// appeared last month — only exact re-imports and recognized recurring bills
-// are excluded.
+// The flow is two-phase so nothing is written blind:
+//   1. pickAndParseStatement() reads the file and returns a PREVIEW — every
+//      parsed row plus a category guess and a duplicate flag — for the user to
+//      review and correct.
+//   2. commitStatementRows() writes the rows the user kept.
+// The old one-shot importer silently dropped anything it couldn't parse; the
+// preview surfaces those instead (result.skipped) so a bad parse is visible,
+// not invisible.
 
-export type StatementImportResult = {
-  imported: number;
-  duplicatesSkipped: number;
-  recurringSkipped: number;
-  uncategorized: number;
-  malformedRows: number;
-} | { unrecognizedFormat: true };
+export type StatementPreviewRow = ParsedStatementRow & {
+  /** Best-guess category (name resolved by the UI from its category list). */
+  categoryId: string | null;
+  /** Matches an existing transaction (already imported) — default to skipping. */
+  duplicate: boolean;
+  /** Matches an active recurring bill — already tracked, default to skipping. */
+  recurring: boolean;
+};
 
-function findColumn(headers: string[], keywords: string[]): number {
-  return headers.findIndex((h) => keywords.some((k) => h.includes(k)));
-}
+export type StatementPreview = {
+  rows: StatementPreviewRow[];
+  skipped: StatementParseResult['skipped'];
+  signFlipped: boolean;
+  dateOrder: StatementParseResult['dateOrder'];
+  inferredYear: number | null;
+  filename: string;
+};
 
-/** Parses "$1,234.56", "-12.34", "(12.34)" (parens = negative), "+5" etc. */
-function parseStatementAmount(raw: string): number | null {
-  let s = raw.trim();
-  if (!s) return null;
-  let negative = false;
-  if (s.startsWith('(') && s.endsWith(')')) {
-    negative = true;
-    s = s.slice(1, -1);
-  }
-  s = s.replace(/[$,]/g, '');
-  if (s.startsWith('-')) {
-    negative = true;
-    s = s.slice(1);
-  } else if (s.startsWith('+')) {
-    s = s.slice(1);
-  }
-  const n = parseFloat(s);
-  if (!Number.isFinite(n)) return null;
-  return negative ? -n : n;
-}
+export type StatementPickResult = StatementPreview | { unrecognizedFormat: true } | null;
 
-/** Accepts ISO (YYYY-MM-DD) or US-style (MM/DD/YYYY, MM/DD/YY) dates. */
-function parseStatementDate(raw: string): string | null {
-  const s = raw.trim();
-  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
-
-  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-  if (m) {
-    let year = m[3];
-    if (year.length === 2) year = (parseInt(year, 10) > 70 ? '19' : '20') + year;
-    return `${year}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
-  }
-  return null;
-}
+// Banks serve CSV under a grab-bag of MIME types (text/csv, application/csv,
+// vnd.ms-excel, octet-stream, or nothing). Restricting the picker to 'text/csv'
+// made real exports unselectable on iOS/Android, so accept broadly and let the
+// parser reject anything that isn't a statement.
+const PICKER_TYPES = [
+  'text/csv',
+  'text/comma-separated-values',
+  'application/csv',
+  'application/vnd.ms-excel',
+  'text/plain',
+  'application/octet-stream',
+  '*/*',
+];
 
 /**
- * Prompts for a CSV file and imports it as transactions on `cardId`.
- * Returns null if the user cancels the file picker, or
- * `{ unrecognizedFormat: true }` if no date/description/amount columns
- * could be identified from the header row.
+ * Prompts for a file and returns a reviewable preview. Returns null if the user
+ * cancels, or `{ unrecognizedFormat: true }` if no date/description/amount
+ * columns could be identified.
  */
-export async function importCreditCardStatement(cardId: string): Promise<StatementImportResult | null> {
-  const picked = await DocumentPicker.getDocumentAsync({ type: 'text/csv', copyToCacheDirectory: true });
+export async function pickAndParseStatement(): Promise<StatementPickResult> {
+  const picked = await DocumentPicker.getDocumentAsync({ type: PICKER_TYPES, copyToCacheDirectory: true });
   if (picked.canceled || !picked.assets?.[0]) return null;
 
-  const content = await readPickedFileAsText(picked.assets[0]);
-  const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length < 2) {
-    return { imported: 0, duplicatesSkipped: 0, recurringSkipped: 0, uncategorized: 0, malformedRows: 0 };
-  }
+  const asset = picked.assets[0];
+  const content = await readPickedFileAsText(asset);
+  const records = parseCsv(content);
+  const statementYear = findStatementYear(content);
+  const parsed = parseStatementRecords(records, { statementYear });
 
-  const headers = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
-  const dateIdx = findColumn(headers, ['transaction date', 'date']);
-  const descIdx = findColumn(headers, ['description', 'merchant', 'payee', 'particular']);
-  const amountIdx = findColumn(headers, ['amount']);
-  const debitIdx = findColumn(headers, ['debit']);
-  const creditIdx = findColumn(headers, ['credit']);
-
-  if (dateIdx === -1 || descIdx === -1 || (amountIdx === -1 && debitIdx === -1 && creditIdx === -1)) {
-    return { unrecognizedFormat: true };
-  }
+  if ('unrecognizedFormat' in parsed) return { unrecognizedFormat: true };
 
   const [existingTransactions, recurring] = await Promise.all([listAllTransactions(), listRecurringTransactions()]);
-
   const existingKeys = new Set(
     existingTransactions.map((t) => `${t.date}|${t.amount.toFixed(2)}|${(t.note ?? '').trim().toLowerCase()}`)
   );
@@ -105,60 +85,58 @@ export async function importCreditCardStatement(cardId: string): Promise<Stateme
     recurring.filter((r) => r.active).map((r) => `${r.amount.toFixed(2)}|${r.note.trim().toLowerCase()}`)
   );
 
-  let imported = 0;
-  let duplicatesSkipped = 0;
-  let recurringSkipped = 0;
-  let uncategorized = 0;
-  let malformedRows = 0;
-
-  for (const line of lines.slice(1)) {
-    const fields = parseCsvLine(line);
-    const note = (fields[descIdx] ?? '').trim();
-    const date = parseStatementDate(fields[dateIdx] ?? '');
-
-    let amount: number | null = null;
-    if (amountIdx !== -1) {
-      amount = parseStatementAmount(fields[amountIdx] ?? '');
-    } else {
-      const debit = debitIdx !== -1 ? parseStatementAmount(fields[debitIdx] ?? '') : null;
-      const credit = creditIdx !== -1 ? parseStatementAmount(fields[creditIdx] ?? '') : null;
-      if (debit) amount = Math.abs(debit);
-      else if (credit) amount = -Math.abs(credit);
-    }
-
-    if (!date || !note || amount === null || amount === 0) {
-      malformedRows++;
-      continue;
-    }
-
-    const normalizedNote = note.toLowerCase();
-    const exactKey = `${date}|${amount.toFixed(2)}|${normalizedNote}`;
-    if (existingKeys.has(exactKey)) {
-      duplicatesSkipped++;
-      continue;
-    }
-
-    const recurringKey = `${amount.toFixed(2)}|${normalizedNote}`;
-    if (recurringKeys.has(recurringKey)) {
-      recurringSkipped++;
-      continue;
-    }
-
-    const suggestion = await suggestCategory(note);
-    if (!suggestion) uncategorized++;
-
-    await createTransaction({
-      amount,
-      date,
+  const rows: StatementPreviewRow[] = [];
+  for (const row of parsed.rows) {
+    const normalizedNote = row.note.trim().toLowerCase();
+    const exactKey = `${row.date}|${row.amount.toFixed(2)}|${normalizedNote}`;
+    const recurringKey = `${row.amount.toFixed(2)}|${normalizedNote}`;
+    const suggestion = await suggestCategory(row.note);
+    rows.push({
+      ...row,
       categoryId: suggestion?.categoryId ?? null,
+      duplicate: existingKeys.has(exactKey),
+      recurring: recurringKeys.has(recurringKey),
+    });
+  }
+
+  return {
+    rows,
+    skipped: parsed.skipped,
+    signFlipped: parsed.signFlipped,
+    dateOrder: parsed.dateOrder,
+    inferredYear: parsed.inferredYear,
+    filename: asset.name ?? 'statement.csv',
+  };
+}
+
+export type CommitResult = { imported: number; uncategorized: number };
+
+/**
+ * Writes the reviewed rows to `cardId`. Only rows the user chose to keep should
+ * be passed in. Deduplicates within the batch so an accidental repeat in one
+ * file doesn't double-write.
+ */
+export async function commitStatementRows(cardId: string, rows: StatementPreviewRow[]): Promise<CommitResult> {
+  let imported = 0;
+  let uncategorized = 0;
+  const seen = new Set<string>();
+
+  for (const row of rows) {
+    const key = `${row.date}|${row.amount.toFixed(2)}|${row.note.trim().toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    if (!row.categoryId) uncategorized++;
+    await createTransaction({
+      amount: row.amount,
+      date: row.date,
+      categoryId: row.categoryId,
       cardId,
-      note,
+      note: row.note,
       source: 'imported',
     });
-    // Guards against duplicate rows within the same file.
-    existingKeys.add(exactKey);
     imported++;
   }
 
-  return { imported, duplicatesSkipped, recurringSkipped, uncategorized, malformedRows };
+  return { imported, uncategorized };
 }
