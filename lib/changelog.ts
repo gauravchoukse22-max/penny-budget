@@ -16,6 +16,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-07-18-bank-linking',
+    version: '1.0.1',
+    date: 'July 2026',
+    title: 'Link your bank (limited rollout)',
+    changes: [
+      'New Linked Banks (Settings → Account → Linked Banks, in builds where it\'s enabled): connect a bank or credit card through Plaid and new transactions import automatically — no more monthly statement downloads.',
+      'You sign in on your bank\'s own page; Penny Budget never sees your bank password. Each linked account shows up as its own card.',
+      'Transactions sync when you open the screen or tap Sync now, and get a suggested category on the way in.',
+      'Unlink anytime — everything already imported stays in your budget and keeps working offline.',
+    ],
+  },
+  {
     id: '2026-07-18-statement-import',
     version: '1.0.1',
     date: 'July 2026',

@@ -107,6 +107,50 @@ every member of that household and are stored in plaintext to project admins
 apart — review the policies before going wide. Client-side payload encryption
 was considered and deferred (a lost passphrase = unrecoverable shared budget).
 
+## 6. Bank linking via Plaid (family-only) — required before Linked Banks works
+
+Runs on Plaid's **Trial plan**: free, real production bank data, but capped at
+**10 connected Items across your whole Plaid account** — fine for a family,
+fatal for the public. The app therefore ships with the feature OFF; only builds
+with `EXPO_PUBLIC_BANK_LINKING=1` (put it in `.env.local`) show the Linked
+Banks screen. Do not enable it in store builds.
+
+**a) Plaid dashboard** (dashboard.plaid.com):
+1. Create a Plaid account, then a team/app. Note the **client_id** and the
+   **Sandbox** and **Production** secrets (Keys page).
+2. Apply for Production access and request the **Transactions** product.
+   Start in Sandbox first — everything works end-to-end with test banks.
+3. Under **Link → Hosted Link**, no extra setup is needed; the functions use
+   Hosted Link so no native Plaid SDK (and no prebuild) is required.
+4. Add `pennybudget://bank-linked` as an **Allowed redirect URI**
+   (API → Allowed redirect URIs). Required for OAuth banks like Chase.
+
+**b) Migration + secrets + deploy:**
+```bash
+supabase db push        # applies migrations/20260718000000_plaid_items.sql
+supabase secrets set PLAID_CLIENT_ID=xxxxxxxxxxxxx
+supabase secrets set PLAID_SECRET=xxxxxxxxxxxxx          # sandbox secret first
+supabase secrets set PLAID_ENV=sandbox                   # flip to production later
+supabase functions deploy plaid-create-link
+supabase functions deploy plaid-finish-link
+supabase functions deploy plaid-sync
+supabase functions deploy plaid-unlink
+```
+
+**c) Verify in Sandbox:** Settings → Linked Banks → Link a bank → pick any
+institution → credentials `user_good` / `pass_good`. Transactions should
+appear as a new card after sync.
+
+**Security notes:** `plaid_items` (which holds access tokens) has RLS enabled
+with **zero policies** — clients can't read it at all; only the Edge Functions
+(service role) touch it. The client never sees a public_token or access_token;
+Hosted Link completion is resolved server-side via `/link/token/get`.
+Unlinking calls `/item/remove`, which also frees the Trial-plan Item slot.
+
+**Privacy note (do before sharing a flagged build even with family):** linked
+transactions leave the device by definition. docs/privacy.html must disclose
+Plaid as a processor for linked accounts — see the compliance task.
+
 ## Already in place (from earlier setup)
 - `delete_user()` SECURITY DEFINER RPC (in-app account deletion)
 - `backups` Storage bucket with per-user RLS

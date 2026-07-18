@@ -40,6 +40,14 @@
   <li><strong>When it happens:</strong> only when you manually create an account and manually trigger a backup. Nothing is uploaded automatically or in the background.</li>
 </ul>
 
+<h2>Optional Bank Linking (limited availability)</h2>
+<p>Some builds of the app include an optional <strong>Linked Banks</strong> feature that can connect a bank or card account so transactions import automatically. This feature is not enabled in standard App Store / Play Store builds, and it never activates on its own — it only does anything if you explicitly link an account after an in-app confirmation.</p>
+<ul>
+  <li><strong>How linking works:</strong> you sign in on your bank's own page through <a href="https://plaid.com/legal/#end-user-privacy-policy">Plaid</a>, a bank-connection provider. Penny Budget never sees, stores, or transmits your bank username or password.</li>
+  <li><strong>What is processed if you link:</strong> the linked account's transaction history (date, merchant description, and amount) and basic account details (account name and last digits) pass through Plaid and the app's cloud infrastructure to reach your device. The connection credential is stored server-side, protected so that only the linking service can use it — it is never available to other users or to the app on your device.</li>
+  <li><strong>Unlinking:</strong> you can unlink at any time in the app; this revokes the connection at Plaid. Transactions already imported remain in your on-device budget, where you can edit or delete them like anything else.</li>
+</ul>
+
 <h2>Data Retention, Location, and Security</h2>
 <ul>
   <li><strong>What's in a cloud backup:</strong> the budget figures you entered — transactions, categories, cards (name and last four digits only, never a full card number), salary, and savings goals — plus the email address on your account. Penny Budget never asks for, stores, or has access to your bank login or full card numbers.</li>

@@ -13,6 +13,7 @@ import { exportDatabaseToJson, importDatabaseFromJson } from '../../features/bac
 import { checkBiometricsSupport, authenticateUser } from '../../features/biometrics';
 import { pickAndParseStatement } from '../../features/statement-import';
 import { setPendingImport } from '../../features/import-preview-store';
+import { BANK_LINKING_ENABLED } from '../../lib/feature-flags';
 import { formatMonthLabel } from '../../lib/format';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR'];
@@ -191,6 +192,12 @@ export default function SettingsScreen() {
                 label={settings.householdId ? 'Family Sharing — on' : 'Family Sharing'}
                 onPress={() => router.push('/household')}
               />
+            </>
+          )}
+          {cloudConfigured && BANK_LINKING_ENABLED && (
+            <>
+              <View style={[styles.divider, { backgroundColor: theme.separator }]} />
+              <SettingsLink label="Linked Banks" onPress={() => router.push('/bank')} />
             </>
           )}
         </Surface>
