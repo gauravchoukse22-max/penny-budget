@@ -85,6 +85,28 @@ HaveIBeenPwned" and set minimum length to 8. (This toggle is on the Pro plan.)
 - `pennybudget://account/index`
 - your web app origin (e.g. `https://gauravchoukse22-max.github.io/penny-budget/app`)
 
+## 5. Family sharing (household co-editing) — required before the feature works
+
+The Family Sharing UI ships in the app but does nothing until the backend tables
+exist. Apply the migration:
+
+```bash
+supabase db push        # applies migrations/20260717010000_household_sharing.sql
+```
+
+This creates `households`, `household_members`, `household_invites`, and
+`household_records` (the shared-budget mirror), all with **RLS scoped to
+household membership** plus SECURITY DEFINER RPCs for create/join/leave/invite.
+No secrets or extra config needed — it's pure schema. After it's applied:
+create a household on one account, generate an invite code, join from a second
+account, and confirm a transaction added on one device appears on the other.
+
+**Security note:** the shared-budget rows in `household_records` are readable by
+every member of that household and are stored in plaintext to project admins
+(same trust model as the cloud backup). RLS is the only thing keeping households
+apart — review the policies before going wide. Client-side payload encryption
+was considered and deferred (a lost passphrase = unrecoverable shared budget).
+
 ## Already in place (from earlier setup)
 - `delete_user()` SECURITY DEFINER RPC (in-app account deletion)
 - `backups` Storage bucket with per-user RLS

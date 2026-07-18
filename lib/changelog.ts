@@ -16,6 +16,19 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-07-17-family-sharing',
+    version: '1.0.1',
+    date: 'July 2026',
+    title: 'Share one budget with your family',
+    changes: [
+      'New Family Sharing (Settings → Account → Family Sharing): create a shared household and everyone in it co-edits the same budget — add a transaction on one phone, see it on the other.',
+      'Invite family with a simple 8-character code (expires in 7 days). They tap Join, enter the code, and you\'re sharing.',
+      'Creating a household seeds it from the budget already on your device; joining one merges your budget with the shared one (back up first if unsure — Settings → Backup).',
+      'Changes sync when the app opens and via a "Sync now" button. You can leave a household anytime — the data on your device stays and keeps working offline.',
+      'Completely optional: if you never create or join a household, nothing changes and your budget stays only on your device.',
+    ],
+  },
+  {
     id: '2026-07-17-account-security',
     version: '1.0.1',
     date: 'July 2026',

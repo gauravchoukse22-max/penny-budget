@@ -67,6 +67,8 @@ export type AppSettings = {
   hideAmounts: boolean;
   /** Whether optional iCloud (CloudKit) sync is enabled. */
   cloudSyncEnabled: boolean;
+  /** The household this device co-edits, or null if sharing is off. */
+  householdId: string | null;
 };
 
 export type BudgetStatus = 'green' | 'amber' | 'red';

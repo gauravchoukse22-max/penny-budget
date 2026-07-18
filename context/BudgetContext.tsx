@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 import {
   seedDefaultCategoriesIfEmpty,
   seedDefaultSavingsGoalsIfEmpty,
@@ -9,6 +10,16 @@ import * as q from '../lib/queries';
 import { processRecurringTransactions } from '../features/recurring-transactions';
 import { updateLoggingStreak } from '../features/streaks-and-gamification';
 import { setSyncEnabled, getCloudKitAdapter, runCloudKitSyncCycle } from '../features/cloudkit-sync';
+import {
+  activateHousehold,
+  deactivateHousehold,
+  getActiveHouseholdId,
+  createHousehold as createHouseholdRpc,
+  joinHousehold as joinHouseholdRpc,
+  leaveHousehold as leaveHouseholdRpc,
+  seedHouseholdFromLocal,
+} from '../features/household';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type {
   AppSettings,
   Card,
@@ -63,6 +74,12 @@ type BudgetContextValue = {
   categorizeAllFromNote: (note: string, categoryId: string) => Promise<void>;
 
   setSalaryForSelectedMonth: (amount: number) => Promise<void>;
+
+  // Family sharing
+  syncNow: () => Promise<void>;
+  createHousehold: (name?: string) => Promise<{ success: boolean; message: string }>;
+  joinHousehold: (code: string) => Promise<{ success: boolean; message: string }>;
+  leaveHousehold: () => Promise<{ success: boolean; message: string }>;
 };
 
 const BudgetContext = createContext<BudgetContextValue | null>(null);
@@ -82,6 +99,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     autoLockGraceMinutes: 1,
     hideAmounts: false,
     cloudSyncEnabled: false,
+    householdId: null,
   });
   const [cards, setCards] = useState<Card[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -123,17 +141,26 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       await seedDefaultCategoriesIfEmpty();
       await addPostLaunchCategoriesIfMissing();
       await seedDefaultSavingsGoalsIfEmpty();
-      // Mirror the persisted sync preference so writes journal to the outbox.
       const initialSettings = await q.getAppSettings();
-      setSyncEnabled(initialSettings.cloudSyncEnabled);
+      // Family sharing: if this device co-edits a household AND the user is
+      // signed in, register the Supabase adapter and enable outbox journaling.
+      // Otherwise stay local-only (mock adapter, no journaling).
+      let householdActive = false;
+      if (initialSettings.householdId && isSupabaseConfigured) {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          activateHousehold(initialSettings.householdId);
+          householdActive = true;
+        }
+      }
+      if (!householdActive) setSyncEnabled(false);
       // Auto-post any recurring bills that have come due since the last launch.
       await processRecurringTransactions();
       await refresh();
       setReady(true);
-      // Only sync when enabled AND a real remote adapter is registered (native
-      // build). With the JS-only mock this is skipped so the outbox is preserved.
-      if (initialSettings.cloudSyncEnabled && getCloudKitAdapter().isAvailable) {
-        runCloudKitSyncCycle();
+      // Pull the shared budget on launch when sharing is active.
+      if (householdActive && getCloudKitAdapter().isAvailable) {
+        runCloudKitSyncCycle().then(() => refresh());
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -155,6 +182,60 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     },
     [refresh]
   );
+
+  // ── Family sharing ────────────────────────────────────────────────────────
+  const syncNow = useCallback(async () => {
+    if (getActiveHouseholdId() && getCloudKitAdapter().isAvailable) {
+      await runCloudKitSyncCycle();
+      await refresh();
+    }
+  }, [refresh]);
+
+  // Create a household seeded from this device's current budget, then co-edit it.
+  const createAndJoinHousehold = useCallback(
+    async (name?: string): Promise<{ success: boolean; message: string }> => {
+      const res = await createHouseholdRpc(name);
+      if (!res.success || !res.data) return res;
+      await seedHouseholdFromLocal(res.data);
+      activateHousehold(res.data);
+      await updateSettings({ householdId: res.data });
+      await runCloudKitSyncCycle();
+      await refresh();
+      return { success: true, message: res.message };
+    },
+    [refresh, updateSettings]
+  );
+
+  // Join an existing household by invite code and pull its shared budget.
+  const joinExistingHousehold = useCallback(
+    async (code: string): Promise<{ success: boolean; message: string }> => {
+      const res = await joinHouseholdRpc(code);
+      if (!res.success || !res.data) return res;
+      activateHousehold(res.data);
+      await updateSettings({ householdId: res.data });
+      await runCloudKitSyncCycle();
+      await refresh();
+      return { success: true, message: res.message };
+    },
+    [refresh, updateSettings]
+  );
+
+  const leaveCurrentHousehold = useCallback(async (): Promise<{ success: boolean; message: string }> => {
+    const hid = getActiveHouseholdId() ?? settings.householdId;
+    if (hid) await leaveHouseholdRpc(hid);
+    deactivateHousehold();
+    await updateSettings({ householdId: null });
+    await refresh();
+    return { success: true, message: 'Left the shared household. Your budget stays on this device.' };
+  }, [refresh, updateSettings, settings.householdId]);
+
+  // Pull shared changes when the app returns to the foreground.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') syncNow();
+    });
+    return () => sub.remove();
+  }, [syncNow]);
 
   const addCard = useCallback(
     async (input: Omit<Card, 'id' | 'sortOrder' | 'billDay' | 'dueDay'> & Partial<Pick<Card, 'billDay' | 'dueDay'>>) => {
@@ -329,6 +410,10 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     categorizeTransaction,
     categorizeAllFromNote,
     setSalaryForSelectedMonth,
+    syncNow,
+    createHousehold: createAndJoinHousehold,
+    joinHousehold: joinExistingHousehold,
+    leaveHousehold: leaveCurrentHousehold,
   };
 
   return <BudgetContext.Provider value={value}>{children}</BudgetContext.Provider>;

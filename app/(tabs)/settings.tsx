@@ -175,6 +175,15 @@ export default function SettingsScreen() {
             label={cloudConfigured && user ? `Signed in as ${user.email}` : 'Sign In / Create Account'}
             onPress={() => router.push('/account')}
           />
+          {cloudConfigured && (
+            <>
+              <View style={[styles.divider, { backgroundColor: theme.separator }]} />
+              <SettingsLink
+                label={settings.householdId ? 'Family Sharing — on' : 'Family Sharing'}
+                onPress={() => router.push('/household')}
+              />
+            </>
+          )}
         </Surface>
 
         <Surface>

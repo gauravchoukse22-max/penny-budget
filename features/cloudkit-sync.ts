@@ -89,7 +89,7 @@ export function getCloudKitAdapter(): CloudKitAdapter {
 
 // Only these tables may be synced / applied from remote — guards against a
 // malformed remote record naming an arbitrary table.
-const SYNCABLE_TABLES = new Set([
+export const SYNCABLE_TABLES = new Set([
   'cards',
   'categories',
   'transactions',

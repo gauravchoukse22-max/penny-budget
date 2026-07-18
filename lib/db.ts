@@ -197,6 +197,9 @@ async function migrateFeatureTables(db: SQLite.SQLiteDatabase): Promise<void> {
   if (!settingsColumnNames.has('hideAmounts')) {
     await db.execAsync('ALTER TABLE app_settings ADD COLUMN hideAmounts INTEGER NOT NULL DEFAULT 0;');
   }
+  if (!settingsColumnNames.has('householdId')) {
+    await db.execAsync('ALTER TABLE app_settings ADD COLUMN householdId TEXT;');
+  }
 }
 
 export const DEFAULT_CATEGORIES: Array<{ name: string; icon: string; limit: number }> = [

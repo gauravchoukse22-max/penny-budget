@@ -27,7 +27,8 @@ export async function getAppSettings(): Promise<AppSettings> {
     cloudSyncEnabled: number;
     autoLockGraceMinutes: number;
     hideAmounts: number;
-  }>('SELECT currency, salaryMode, fixedSalary, onboarded, biometricLock, cloudSyncEnabled, autoLockGraceMinutes, hideAmounts FROM app_settings WHERE id = 1');
+    householdId: string | null;
+  }>('SELECT currency, salaryMode, fixedSalary, onboarded, biometricLock, cloudSyncEnabled, autoLockGraceMinutes, hideAmounts, householdId FROM app_settings WHERE id = 1');
   return {
     currency: row?.currency ?? 'USD',
     salaryMode: row?.salaryMode ?? 'fixed',
@@ -37,6 +38,7 @@ export async function getAppSettings(): Promise<AppSettings> {
     cloudSyncEnabled: !!row?.cloudSyncEnabled,
     autoLockGraceMinutes: row?.autoLockGraceMinutes ?? 1,
     hideAmounts: !!row?.hideAmounts,
+    householdId: row?.householdId ?? null,
   };
 }
 
@@ -45,7 +47,7 @@ export async function updateAppSettings(patch: Partial<AppSettings>): Promise<vo
   const current = await getAppSettings();
   const next = { ...current, ...patch };
   await db.runAsync(
-    'UPDATE app_settings SET currency = ?, salaryMode = ?, fixedSalary = ?, onboarded = ?, biometricLock = ?, cloudSyncEnabled = ?, autoLockGraceMinutes = ?, hideAmounts = ? WHERE id = 1',
+    'UPDATE app_settings SET currency = ?, salaryMode = ?, fixedSalary = ?, onboarded = ?, biometricLock = ?, cloudSyncEnabled = ?, autoLockGraceMinutes = ?, hideAmounts = ?, householdId = ? WHERE id = 1',
     [
       next.currency,
       next.salaryMode,
@@ -55,6 +57,7 @@ export async function updateAppSettings(patch: Partial<AppSettings>): Promise<vo
       next.cloudSyncEnabled ? 1 : 0,
       next.autoLockGraceMinutes ?? 1,
       next.hideAmounts ? 1 : 0,
+      next.householdId ?? null,
     ]
   );
 }
