@@ -52,7 +52,7 @@ export default function SearchScreen() {
       <Surface>
         <TextInput
           style={[styles.input, { backgroundColor: theme.fieldBackground, color: theme.label }]}
-          placeholder="Search note / merchant"
+          placeholder="Search note, merchant, or amount"
           placeholderTextColor={theme.tertiaryLabel}
           value={query}
           onChangeText={setQuery}

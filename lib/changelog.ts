@@ -16,6 +16,15 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-07-18-amount-search',
+    version: '1.0.1',
+    date: 'July 2026',
+    title: 'Search by amount',
+    changes: [
+      'You can now type an amount to find a transaction — "45.99" or just "45" in the Transactions search box finds that charge (refunds included). Works in the full Search screen too (Settings → Manage → Search Transactions).',
+    ],
+  },
+  {
     id: '2026-07-18-input-hardening',
     version: '1.0.1',
     date: 'July 2026',

@@ -85,7 +85,12 @@ export default function TransactionsScreen() {
         const q = search.trim().toLowerCase();
         const noteMatch = (t.note ?? '').toLowerCase().includes(q);
         const catMatch = t.categoryId ? (categoryById.get(t.categoryId)?.name ?? '').toLowerCase().includes(q) : false;
-        if (!noteMatch && !catMatch) return false;
+        // Amount-as-you-type: "45" finds $45.xx, "45.99" finds $45.99 —
+        // prefix match on the absolute amount, so refunds are found too and
+        // "45" doesn't surprise-match $145. Tolerates "$" and "," in the query.
+        const numericQ = q.replace(/[$,\s]/g, '');
+        const amountMatch = /^\d+\.?\d*$/.test(numericQ) && Math.abs(t.amount).toFixed(2).startsWith(numericQ);
+        if (!noteMatch && !catMatch && !amountMatch) return false;
       }
       return true;
     });
@@ -144,7 +149,7 @@ export default function TransactionsScreen() {
           <Ionicons name="search" size={16} color={theme.tertiaryLabel} />
           <TextInput
             style={[styles.searchInput, { color: theme.label }]}
-            placeholder="Search merchant or category"
+            placeholder="Search merchant, category, or amount"
             placeholderTextColor={theme.tertiaryLabel}
             value={search}
             onChangeText={setSearch}
