@@ -8,6 +8,7 @@ import { useTheme, spacing, radius, type } from '../../theme/colors';
 import { formatCurrency } from '../../lib/format';
 import { takePendingImport } from '../../features/import-preview-store';
 import { commitStatementRows, type StatementPreviewRow } from '../../features/statement-import';
+import { confirmAction, notify } from '../../lib/confirm';
 
 // Review-before-write screen for statement import. The parser hands over its
 // best interpretation; this screen makes every decision visible and reversible
@@ -78,7 +79,7 @@ export default function ImportPreviewScreen() {
   const commit = async () => {
     const toImport = rows.filter((r) => r.include);
     if (toImport.length === 0) {
-      Alert.alert('Nothing selected', 'Turn on at least one transaction to import.');
+      notify('Nothing selected', 'Turn on at least one transaction to import.');
       return;
     }
     setCommitting(true);
@@ -86,11 +87,11 @@ export default function ImportPreviewScreen() {
       const result = await commitStatementRows(pending.cardId, toImport);
       await refresh();
       const extra = result.uncategorized > 0 ? `\n${result.uncategorized} still need a category — find them under Uncategorized.` : '';
-      Alert.alert('Import complete', `Added ${result.imported} transaction(s) to ${card?.name ?? 'your card'}.${extra}`, [
-        { text: 'Done', onPress: () => router.back() },
-      ]);
+      if (await confirmAction({ title: 'Import complete', message: `Added ${result.imported} transaction(s) to ${card?.name ?? 'your card'}.${extra}`, confirmLabel: 'Done' })) {
+        router.back();
+      }
     } catch (e) {
-      Alert.alert('Import failed', 'Something went wrong while saving. No partial data was left behind that you can\'t edit.');
+      notify('Import failed', 'Something went wrong while saving. No partial data was left behind that you can\'t edit.');
     } finally {
       setCommitting(false);
     }

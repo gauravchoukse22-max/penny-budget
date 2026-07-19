@@ -24,6 +24,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'New "Sync across my devices" switch (Settings → Account): flip it on and every device signed into your account shares one budget — add a transaction on the web, see it on your phone.',
       'Completely optional and off by default: leave it off and your budget never leaves this device, exactly as before.',
       'Turning it off pauses syncing on that device only — nothing is deleted, and your other devices are unaffected.',
+      'Fixed on the web app: confirmation prompts (delete a card, restore a backup, leave a household, sign out, and more) did nothing when clicked. They now show a proper Yes/No dialog, so those actions work on the web the same as on your phone.',
     ],
   },
   {

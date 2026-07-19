@@ -33,6 +33,7 @@ import { isValidEmail, evaluatePassword, MIN_PASSWORD_LENGTH } from '../../lib/p
 import { openTerms, openPrivacy } from '../../lib/legal';
 import { getPendingVerification } from '../../features/pending-verification';
 import { backupToCloud, restoreFromCloud, getLastCloudBackupTimestamp } from '../../features/cloud-backup';
+import { confirmAction, notify } from '../../lib/confirm';
 
 export default function AccountScreen() {
   const theme = useTheme();
@@ -140,36 +141,30 @@ export default function AccountScreen() {
     setBusy(true);
     try {
       const result = await backupToCloud(user.id);
-      Alert.alert(result.success ? 'Backed up' : 'Backup failed', result.message);
+      notify(result.success ? 'Backed up' : 'Backup failed', result.message);
       if (result.success) setLastBackup(await getLastCloudBackupTimestamp(user.id));
     } finally {
       setBusy(false);
     }
   };
 
-  const doRestore = () => {
+  const doRestore = async () => {
     if (!user) return;
-    Alert.alert(
-      'Restore from cloud backup?',
-      'This replaces ALL current data in the app with the contents of your latest cloud backup. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Restore',
-          style: 'destructive',
-          onPress: async () => {
-            setBusy(true);
-            try {
-              const result = await restoreFromCloud(user.id);
-              Alert.alert(result.success ? 'Restore complete' : 'Restore failed', result.message);
-              if (result.success) await refresh();
-            } finally {
-              setBusy(false);
-            }
-          },
-        },
-      ]
-    );
+    if (await confirmAction({
+      title: 'Restore from cloud backup?',
+      message: 'This replaces ALL current data in the app with the contents of your latest cloud backup. This cannot be undone.',
+      confirmLabel: 'Restore',
+      destructive: true,
+    })) {
+      setBusy(true);
+      try {
+        const result = await restoreFromCloud(user.id);
+        notify(result.success ? 'Restore complete' : 'Restore failed', result.message);
+        if (result.success) await refresh();
+      } finally {
+        setBusy(false);
+      }
+    }
   };
 
   if (loading) {

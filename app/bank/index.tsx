@@ -8,6 +8,7 @@ import { useTheme, spacing, radius, type } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
 import { BANK_LINKING_ENABLED } from '../../lib/feature-flags';
 import { linkBankAccount, syncLinkedBanks, unlinkBank, type LinkedItem } from '../../features/bank-link';
+import { confirmAction, notify } from '../../lib/confirm';
 
 // Linked Banks (Plaid, family-only — hidden unless EXPO_PUBLIC_BANK_LINKING=1).
 // Transactions land in the local database against an auto-created Card per
@@ -39,18 +40,17 @@ export default function BankScreen() {
     else setItems([]);
   }, [user, load]);
 
-  const doLink = () => {
+  const doLink = async () => {
     // Explicit consent before anything leaves the device — linking is the one
     // feature that moves financial data off-device, so it must never happen
     // on a single accidental tap.
-    Alert.alert(
-      'Link a bank account?',
-      'You’ll sign in on your bank’s own page through Plaid, our linking provider. Penny Budget never sees your bank password. Your transactions from the linked account will sync to this device through your Penny Budget account.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Continue', onPress: () => runLink() },
-      ]
-    );
+    if (await confirmAction({
+      title: 'Link a bank account?',
+      message: 'You’ll sign in on your bank’s own page through Plaid, our linking provider. Penny Budget never sees your bank password. Your transactions from the linked account will sync to this device through your Penny Budget account.',
+      confirmLabel: 'Continue',
+    })) {
+      runLink();
+    }
   };
 
   const runLink = async () => {
@@ -58,10 +58,10 @@ export default function BankScreen() {
     try {
       const result = await linkBankAccount();
       if (!result.linked) {
-        Alert.alert('Not linked', result.message);
+        notify('Not linked', result.message);
         return;
       }
-      Alert.alert('Bank linked', `${result.institution ?? 'Your bank'} is connected. Pulling transactions…`);
+      notify('Bank linked', `${result.institution ?? 'Your bank'} is connected. Pulling transactions…`);
       await load();
     } finally {
       setBusy(false);
@@ -73,7 +73,7 @@ export default function BankScreen() {
     try {
       const result = await syncLinkedBanks();
       if ('error' in result) {
-        Alert.alert('Sync failed', result.error);
+        notify('Sync failed', result.error);
         return;
       }
       setItems(result.items);
@@ -83,37 +83,31 @@ export default function BankScreen() {
         result.cardsCreated > 0 ? `${result.cardsCreated} card(s) created for linked accounts.` : null,
         result.uncategorized > 0 ? `${result.uncategorized} need a category.` : null,
       ].filter(Boolean);
-      Alert.alert('Sync complete', notes.join('\n'));
+      notify('Sync complete', notes.join('\n'));
     } finally {
       setBusy(false);
     }
   };
 
-  const doUnlink = (item: LinkedItem) => {
-    Alert.alert(
-      `Unlink ${item.institution_name ?? 'this bank'}?`,
-      'Future transactions will stop syncing. Everything already imported stays in your budget.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Unlink',
-          style: 'destructive',
-          onPress: async () => {
-            setBusy(true);
-            try {
-              const result = await unlinkBank(item.item_id);
-              if (!result.removed) {
-                Alert.alert('Unlink failed', result.message ?? 'Try again.');
-                return;
-              }
-              setItems((prev) => (prev ?? []).filter((i) => i.item_id !== item.item_id));
-            } finally {
-              setBusy(false);
-            }
-          },
-        },
-      ]
-    );
+  const doUnlink = async (item: LinkedItem) => {
+    if (await confirmAction({
+      title: `Unlink ${item.institution_name ?? 'this bank'}?`,
+      message: 'Future transactions will stop syncing. Everything already imported stays in your budget.',
+      confirmLabel: 'Unlink',
+      destructive: true,
+    })) {
+      setBusy(true);
+      try {
+        const result = await unlinkBank(item.item_id);
+        if (!result.removed) {
+          notify('Unlink failed', result.message ?? 'Try again.');
+          return;
+        }
+        setItems((prev) => (prev ?? []).filter((i) => i.item_id !== item.item_id));
+      } finally {
+        setBusy(false);
+      }
+    }
   };
 
   if (!BANK_LINKING_ENABLED) {

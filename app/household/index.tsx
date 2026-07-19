@@ -7,6 +7,7 @@ import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { GroupedSection, AuthTextField, PrimaryButton, TextButton, InlineError, InfoNote } from '../../components/AuthUI';
 import { myHouseholds, listMembers, createInvite, type Household, type HouseholdMember } from '../../features/household';
+import { confirmAction, notify } from '../../lib/confirm';
 
 export default function HouseholdScreen() {
   const theme = useTheme();
@@ -44,52 +45,40 @@ export default function HouseholdScreen() {
     if (inHousehold) loadHousehold();
   }, [inHousehold, loadHousehold]);
 
-  const doCreate = () => {
-    Alert.alert(
-      'Create shared household?',
-      'Your current budget on this device becomes the shared household budget. Anyone you invite can view and edit it.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Create',
-          onPress: async () => {
-            setBusy(true);
-            setError(null);
-            try {
-              const res = await createHousehold(name.trim() || undefined);
-              if (!res.success) setError(res.message);
-              else await loadHousehold();
-            } finally {
-              setBusy(false);
-            }
-          },
-        },
-      ]
-    );
+  const doCreate = async () => {
+    if (await confirmAction({
+      title: 'Create shared household?',
+      message: 'Your current budget on this device becomes the shared household budget. Anyone you invite can view and edit it.',
+      confirmLabel: 'Create',
+    })) {
+      setBusy(true);
+      setError(null);
+      try {
+        const res = await createHousehold(name.trim() || undefined);
+        if (!res.success) setError(res.message);
+        else await loadHousehold();
+      } finally {
+        setBusy(false);
+      }
+    }
   };
 
-  const doJoin = () => {
-    Alert.alert(
-      'Join shared household?',
-      'Your current budget on this device will be merged with the shared household budget. This cannot be undone — consider backing up first (Settings → Backup).',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Join',
-          onPress: async () => {
-            setBusy(true);
-            setError(null);
-            try {
-              const res = await joinHousehold(code.trim());
-              if (!res.success) setError(res.message);
-              else await loadHousehold();
-            } finally {
-              setBusy(false);
-            }
-          },
-        },
-      ]
-    );
+  const doJoin = async () => {
+    if (await confirmAction({
+      title: 'Join shared household?',
+      message: 'Your current budget on this device will be merged with the shared household budget. This cannot be undone — consider backing up first (Settings → Backup).',
+      confirmLabel: 'Join',
+    })) {
+      setBusy(true);
+      setError(null);
+      try {
+        const res = await joinHousehold(code.trim());
+        if (!res.success) setError(res.message);
+        else await loadHousehold();
+      } finally {
+        setBusy(false);
+      }
+    }
   };
 
   const doInvite = async () => {
@@ -116,29 +105,23 @@ export default function HouseholdScreen() {
     }
   };
 
-  const doLeave = () => {
-    Alert.alert(
-      'Leave shared household?',
-      'This device stops syncing with the household. The budget data already on this device stays and keeps working offline.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            setBusy(true);
-            try {
-              await leaveHousehold();
-              setHousehold(null);
-              setMembers([]);
-              setInvite(null);
-            } finally {
-              setBusy(false);
-            }
-          },
-        },
-      ]
-    );
+  const doLeave = async () => {
+    if (await confirmAction({
+      title: 'Leave shared household?',
+      message: 'This device stops syncing with the household. The budget data already on this device stays and keeps working offline.',
+      confirmLabel: 'Leave',
+      destructive: true,
+    })) {
+      setBusy(true);
+      try {
+        await leaveHousehold();
+        setHousehold(null);
+        setMembers([]);
+        setInvite(null);
+      } finally {
+        setBusy(false);
+      }
+    }
   };
 
   // ── Guards ──────────────────────────────────────────────────────────────

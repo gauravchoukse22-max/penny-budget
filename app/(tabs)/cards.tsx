@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, CATEGORY_PALETTE, spacing, radius, type } from '../../theme/colors';
 import { WalletCard } from '../../components/WalletCard';
+import { confirmAction, notify } from '../../lib/confirm';
 import { daysUntilDue } from '../../lib/queries';
 
 export default function CardsScreen() {
@@ -68,7 +69,7 @@ function AddCardModal({
 
   const save = async () => {
     if (!name.trim() || !/^\d{4}$/.test(lastFour.trim())) {
-      Alert.alert('Check the card details', 'Enter a card name and the last 4 digits (numbers only).');
+      notify('Check the card details', 'Enter a card name and the last 4 digits (numbers only).');
       return;
     }
     await onSave({ name: name.trim(), lastFour: lastFour.trim(), color: CATEGORY_PALETTE[usedCount % CATEGORY_PALETTE.length] });

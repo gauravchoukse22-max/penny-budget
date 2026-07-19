@@ -16,6 +16,7 @@ import {
   disableTotp,
   type TotpEnrollment,
 } from '../../features/mfa';
+import { confirmAction, notify } from '../../lib/confirm';
 
 function Row({ icon, label, color, onPress, chevron = true }: { icon: any; label: string; color?: string; onPress: () => void; chevron?: boolean }) {
   const theme = useTheme();
@@ -80,66 +81,56 @@ export default function SecurityScreen() {
     }
   };
 
-  const turnOff = () => {
-    Alert.alert('Turn off two-factor?', 'Your account will no longer require a code from your authenticator app.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Turn off',
-        style: 'destructive',
-        onPress: async () => {
-          if (!(await stepUpReauth('Confirm to turn off two-factor'))) return;
-          setMfaBusy(true);
-          try {
-            const ids = await listTotpFactorIds();
-            for (const id of ids) await disableTotp(id);
-            setTotpOn(false);
-            setMfaInfo('Two-factor authentication is off.');
-          } finally {
-            setMfaBusy(false);
-          }
-        },
-      },
-    ]);
+  const turnOff = async () => {
+    if (await confirmAction({
+      title: 'Turn off two-factor?',
+      message: 'Your account will no longer require a code from your authenticator app.',
+      confirmLabel: 'Turn off',
+      destructive: true,
+    })) {
+      if (!(await stepUpReauth('Confirm to turn off two-factor'))) return;
+      setMfaBusy(true);
+      try {
+        const ids = await listTotpFactorIds();
+        for (const id of ids) await disableTotp(id);
+        setTotpOn(false);
+        setMfaInfo('Two-factor authentication is off.');
+      } finally {
+        setMfaBusy(false);
+      }
+    }
   };
 
-  const doSignOutAll = () => {
-    Alert.alert('Sign out of all devices?', 'You will need to sign in again everywhere. Your budget data stays on each device.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out everywhere',
-        style: 'destructive',
-        onPress: async () => {
-          const result = await signOutAllDevices();
-          if (!result.success) Alert.alert('Could not sign out', result.message);
-          else router.replace('/account');
-        },
-      },
-    ]);
+  const doSignOutAll = async () => {
+    if (await confirmAction({
+      title: 'Sign out of all devices?',
+      message: 'You will need to sign in again everywhere. Your budget data stays on each device.',
+      confirmLabel: 'Sign out everywhere',
+      destructive: true,
+    })) {
+      const result = await signOutAllDevices();
+      if (!result.success) notify('Could not sign out', result.message);
+      else router.replace('/account');
+    }
   };
 
-  const doDelete = () => {
-    Alert.alert(
-      'Delete account?',
-      'This permanently deletes your account and your cloud backup. It cannot be undone. The budget data on this device stays and keeps working offline.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Account',
-          style: 'destructive',
-          onPress: async () => {
-            if (!(await stepUpReauth('Confirm to delete your account'))) return;
-            setBusy(true);
-            try {
-              const result = await deleteAccount();
-              Alert.alert(result.success ? 'Account deleted' : 'Delete failed', result.message);
-              if (result.success) router.replace('/account');
-            } finally {
-              setBusy(false);
-            }
-          },
-        },
-      ]
-    );
+  const doDelete = async () => {
+    if (await confirmAction({
+      title: 'Delete account?',
+      message: 'This permanently deletes your account and your cloud backup. It cannot be undone. The budget data on this device stays and keeps working offline.',
+      confirmLabel: 'Delete Account',
+      destructive: true,
+    })) {
+      if (!(await stepUpReauth('Confirm to delete your account'))) return;
+      setBusy(true);
+      try {
+        const result = await deleteAccount();
+        notify(result.success ? 'Account deleted' : 'Delete failed', result.message);
+        if (result.success) router.replace('/account');
+      } finally {
+        setBusy(false);
+      }
+    }
   };
 
   return (

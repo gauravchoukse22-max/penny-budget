@@ -6,6 +6,7 @@ import { useTheme, spacing, radius } from '../../theme/colors';
 import { WalletCard } from '../../components/WalletCard';
 import { TransactionRow } from '../../components/TransactionRow';
 import { Surface } from '../../components/Surface';
+import { confirmAction, notify } from '../../lib/confirm';
 import { daysUntilDue } from '../../lib/queries';
 
 export default function CardDetailScreen() {
@@ -39,18 +40,11 @@ export default function CardDetailScreen() {
   const saveBillDay = () => editCard(card.id, { billDay: parseDay(billDayDraft) });
   const saveDueDay = () => editCard(card.id, { dueDay: parseDay(dueDayDraft) });
 
-  const confirmDelete = () => {
-    Alert.alert('Delete card?', 'This permanently deletes the card and every transaction on it, across all months. This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await removeCard(card.id);
-          router.back();
-        },
-      },
-    ]);
+  const confirmDelete = async () => {
+    if (await confirmAction({ title: 'Delete card?', message: 'This permanently deletes the card and every transaction on it, across all months. This cannot be undone.', confirmLabel: 'Delete', destructive: true })) {
+      await removeCard(card.id);
+      router.back();
+    }
   };
 
   return (

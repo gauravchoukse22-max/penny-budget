@@ -5,6 +5,7 @@ import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { DateField } from '../../components/DateField';
+import { confirmAction, notify } from '../../lib/confirm';
 import { parseMoneyInput } from '../../lib/parse-number';
 
 export default function EditTransactionScreen() {
@@ -51,18 +52,11 @@ export default function EditTransactionScreen() {
     router.back();
   };
 
-  const confirmDelete = () => {
-    Alert.alert('Delete transaction?', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await removeTransaction(transaction.id);
-          router.back();
-        },
-      },
-    ]);
+  const confirmDelete = async () => {
+    if (await confirmAction({ title: 'Delete transaction?', message: 'This cannot be undone.', confirmLabel: 'Delete', destructive: true })) {
+      await removeTransaction(transaction.id);
+      router.back();
+    }
   };
 
   return (

@@ -10,6 +10,7 @@ import { TransactionRow } from '../../components/TransactionRow';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { formatDayLabel } from '../../lib/format';
 import { bulkUpdateCategory, bulkUpdateCard, bulkDeleteTransactions } from '../../features/bulk-actions';
+import { confirmAction, notify } from '../../lib/confirm';
 import type { Transaction } from '../../lib/models';
 
 export default function TransactionsScreen() {
@@ -45,21 +46,14 @@ export default function TransactionsScreen() {
 
   const selectedArray = () => Array.from(selectedIds);
 
-  const doBulkDelete = () => {
+  const doBulkDelete = async () => {
     const ids = selectedArray();
     if (ids.length === 0) return;
-    Alert.alert('Delete transactions?', `Delete ${ids.length} selected transaction(s)? This cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await bulkDeleteTransactions(ids);
-          await refresh();
-          exitSelect();
-        },
-      },
-    ]);
+    if (await confirmAction({ title: 'Delete transactions?', message: `Delete ${ids.length} selected transaction(s)? This cannot be undone.`, confirmLabel: 'Delete', destructive: true })) {
+      await bulkDeleteTransactions(ids);
+      await refresh();
+      exitSelect();
+    }
   };
 
   const doBulkCategory = async (categoryId: string | null) => {
@@ -108,11 +102,10 @@ export default function TransactionsScreen() {
       .map(([date, data]) => ({ title: date, data }));
   }, [filtered]);
 
-  const confirmDelete = (t: Transaction) => {
-    Alert.alert('Delete transaction?', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => removeTransaction(t.id) },
-    ]);
+  const confirmDelete = async (t: Transaction) => {
+    if (await confirmAction({ title: 'Delete transaction?', message: 'This cannot be undone.', confirmLabel: 'Delete', destructive: true })) {
+      removeTransaction(t.id);
+    }
   };
 
   return (

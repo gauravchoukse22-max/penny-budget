@@ -19,6 +19,7 @@ import {
   getCategoryBudgetWithRollover,
 } from '../../features/streaks-and-gamification';
 import type { CategoryRule } from '../../features/models';
+import { confirmAction, notify } from '../../lib/confirm';
 import { parseMoneyInput } from '../../lib/parse-number';
 
 export default function CategoryDetailScreen() {
@@ -106,18 +107,11 @@ export default function CategoryDetailScreen() {
     setCategoryLimitForSelectedMonth(category.id, parseMoneyInput(limitDraft) ?? 0);
   };
 
-  const confirmDelete = () => {
-    Alert.alert('Delete category?', 'Transactions will become uncategorized.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await removeCategory(category.id);
-          router.back();
-        },
-      },
-    ]);
+  const confirmDelete = async () => {
+    if (await confirmAction({ title: 'Delete category?', message: 'Transactions will become uncategorized.', confirmLabel: 'Delete', destructive: true })) {
+      await removeCategory(category.id);
+      router.back();
+    }
   };
 
   return (

@@ -13,6 +13,7 @@ import { PressableScale } from '../../components/PressableScale';
 import { NumberEditorSheet } from '../../components/NumberEditorSheet';
 import { CategoryIcon, CATEGORY_ICON_CHOICES } from '../../components/CategoryIcon';
 import { formatMonthLabel, formatCurrency } from '../../lib/format';
+import { confirmAction, notify } from '../../lib/confirm';
 import { tapLight, success } from '../../lib/haptics';
 import { parseMoneyInput } from '../../lib/parse-number';
 
@@ -285,7 +286,7 @@ function AddCategoryModal({
 
   const save = async () => {
     if (!name.trim()) {
-      Alert.alert('Name required');
+      notify('Name required');
       return;
     }
     await onSave({

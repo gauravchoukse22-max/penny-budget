@@ -64,7 +64,7 @@ export default function SettingsScreen() {
     try {
       const result = await importTransactionsCsv();
       if (result) {
-        Alert.alert('Import complete', `Imported ${result.imported} transactions, skipped ${result.skipped}.`);
+        notify('Import complete', `Imported ${result.imported} transactions, skipped ${result.skipped}.`);
         await refresh();
       }
     } finally {
@@ -76,34 +76,28 @@ export default function SettingsScreen() {
     setBusy(true);
     try {
       const ok = await exportDatabaseToJson();
-      if (!ok) Alert.alert('Backup unavailable', 'Sharing is not available on this device.');
+      if (!ok) notify('Backup unavailable', 'Sharing is not available on this device.');
     } finally {
       setBusy(false);
     }
   };
 
-  const doRestore = () => {
-    Alert.alert(
-      'Restore from backup?',
-      'This replaces ALL current data in the app with the contents of the backup file. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Choose file & restore',
-          style: 'destructive',
-          onPress: async () => {
-            setBusy(true);
-            try {
-              const result = await importDatabaseFromJson();
-              Alert.alert(result.success ? 'Restore complete' : 'Restore failed', result.message);
-              if (result.success) await refresh();
-            } finally {
-              setBusy(false);
-            }
-          },
-        },
-      ]
-    );
+  const doRestore = async () => {
+    const ok = await confirmAction({
+      title: 'Restore from backup?',
+      message: 'This replaces ALL current data in the app with the contents of the backup file. This cannot be undone.',
+      confirmLabel: 'Choose file & restore',
+      destructive: true,
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const result = await importDatabaseFromJson();
+      notify(result.success ? 'Restore complete' : 'Restore failed', result.message);
+      if (result.success) await refresh();
+    } finally {
+      setBusy(false);
+    }
   };
 
   const doImportStatement = async (cardId: string) => {
@@ -113,11 +107,11 @@ export default function SettingsScreen() {
       const result = await pickAndParseStatement();
       if (result === null) return; // user cancelled the file picker
       if ('pdfUnsupported' in result) {
-        Alert.alert('PDF import unavailable', result.reason);
+        notify('PDF import unavailable', result.reason);
         return;
       }
       if ('unrecognizedFormat' in result) {
-        Alert.alert(
+        notify(
           'Unrecognized format',
           "Couldn't find date, description, and amount columns in that file. Export it as a CSV with those columns and try again."
         );
@@ -127,7 +121,7 @@ export default function SettingsScreen() {
         const reason = result.skipped.length > 0
           ? `All ${result.skipped.length} row(s) were skipped — nothing matched a date + amount.`
           : 'No transactions were found in that file.';
-        Alert.alert('Nothing to import', reason);
+        notify('Nothing to import', reason);
         return;
       }
       // Hand off to the preview screen for review before anything is written.
@@ -149,7 +143,7 @@ export default function SettingsScreen() {
           result.uncategorized > 0 ? `${result.uncategorized} item(s) need a category — review under Uncategorized.` : null,
           'All items went to the "Unassigned (imported)" card — reassign per-row if needed.',
         ].filter(Boolean);
-        Alert.alert('Import complete', notes.join('\n'));
+        notify('Import complete', notes.join('\n'));
         await refresh();
       }
     } finally {
@@ -337,7 +331,7 @@ export default function SettingsScreen() {
           <View style={[styles.divider, { backgroundColor: theme.separator, marginTop: 10 }]} />
           <Pressable
             style={styles.actionRow}
-            onPress={() => (cards.length > 0 ? setPickingCardFor(true) : Alert.alert('Add a card first'))}
+            onPress={() => (cards.length > 0 ? setPickingCardFor(true) : notify('Add a card first'))}
             disabled={busy}
           >
             <Ionicons name="albums-outline" size={20} color={theme.accent} />

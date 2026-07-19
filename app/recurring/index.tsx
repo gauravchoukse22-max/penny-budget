@@ -15,6 +15,7 @@ import {
   discoverRecurringPatterns,
 } from '../../features/recurring-transactions';
 import type { RecurringTransaction } from '../../features/models';
+import { confirmAction, notify } from '../../lib/confirm';
 import { parseMoneyInput } from '../../lib/parse-number';
 
 export default function RecurringScreen() {
@@ -65,18 +66,11 @@ export default function RecurringScreen() {
     await load();
   };
 
-  const remove = (item: RecurringTransaction) => {
-    Alert.alert('Delete recurring bill?', `"${item.note}" will no longer post automatically.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteRecurringTransaction(item.id);
-          await load();
-        },
-      },
-    ]);
+  const remove = async (item: RecurringTransaction) => {
+    if (await confirmAction({ title: 'Delete recurring bill?', message: `"${item.note}" will no longer post automatically.`, confirmLabel: 'Delete', destructive: true })) {
+      await deleteRecurringTransaction(item.id);
+      await load();
+    }
   };
 
   const toggle = async (item: RecurringTransaction) => {
@@ -88,7 +82,7 @@ export default function RecurringScreen() {
     const existing = new Set(items.map((i) => i.note.trim().toLowerCase()));
     const found = (await discoverRecurringPatterns()).filter((s) => !existing.has(s.note.trim().toLowerCase()));
     if (found.length === 0) {
-      Alert.alert('No new patterns', 'No repeating monthly charges were found in your transaction history.');
+      notify('No new patterns', 'No repeating monthly charges were found in your transaction history.');
       return;
     }
     setSuggestions(found);
