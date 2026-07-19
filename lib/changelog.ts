@@ -16,6 +16,17 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-07-18-device-sync-toggle',
+    version: '1.0.1',
+    date: 'July 2026',
+    title: 'One-tap sync between your phone and the web',
+    changes: [
+      'New "Sync across my devices" switch (Settings → Account): flip it on and every device signed into your account shares one budget — add a transaction on the web, see it on your phone.',
+      'Completely optional and off by default: leave it off and your budget never leaves this device, exactly as before.',
+      'Turning it off pauses syncing on that device only — nothing is deleted, and your other devices are unaffected.',
+    ],
+  },
+  {
     id: '2026-07-18-home-number-updates-live',
     version: '1.0.1',
     date: 'July 2026',

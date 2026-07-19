@@ -18,6 +18,7 @@ import {
   joinHousehold as joinHouseholdRpc,
   leaveHousehold as leaveHouseholdRpc,
   seedHouseholdFromLocal,
+  myHouseholds,
 } from '../features/household';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type {
@@ -78,6 +79,8 @@ type BudgetContextValue = {
   // Family sharing
   syncNow: () => Promise<void>;
   createHousehold: (name?: string) => Promise<{ success: boolean; message: string }>;
+  enableDeviceSync: () => Promise<{ success: boolean; message: string }>;
+  disableDeviceSync: () => Promise<{ success: boolean; message: string }>;
   joinHousehold: (code: string) => Promise<{ success: boolean; message: string }>;
   leaveHousehold: () => Promise<{ success: boolean; message: string }>;
 };
@@ -228,6 +231,32 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     await refresh();
     return { success: true, message: 'Left the shared household. Your budget stays on this device.' };
   }, [refresh, updateSettings, settings.householdId]);
+
+  // "Sync across my devices" — the same household machinery, framed for one
+  // person. Reuses an existing household when this account already has one
+  // (second device), otherwise creates a personal one seeded from this
+  // device's budget. Opt-in only: never runs unless the user flips the switch.
+  const enableDeviceSync = useCallback(async (): Promise<{ success: boolean; message: string }> => {
+    if (settings.householdId) return { success: true, message: 'Device sync is already on.' };
+    const mine = await myHouseholds();
+    if (mine.length > 0) {
+      activateHousehold(mine[0].id);
+      await updateSettings({ householdId: mine[0].id });
+      await runCloudKitSyncCycle();
+      await refresh();
+      return { success: true, message: 'Device sync is on — this device now shares your existing budget.' };
+    }
+    return createAndJoinHousehold('My Devices');
+  }, [settings.householdId, updateSettings, refresh, createAndJoinHousehold]);
+
+  // Pauses syncing on THIS device only (keeps the membership, so flipping it
+  // back on is instant and other devices are unaffected). Local data stays.
+  const disableDeviceSync = useCallback(async (): Promise<{ success: boolean; message: string }> => {
+    deactivateHousehold();
+    await updateSettings({ householdId: null });
+    await refresh();
+    return { success: true, message: 'Device sync is off. Your budget stays on this device.' };
+  }, [updateSettings, refresh]);
 
   // Pull shared changes when the app returns to the foreground.
   useEffect(() => {
@@ -413,6 +442,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     syncNow,
     createHousehold: createAndJoinHousehold,
     joinHousehold: joinExistingHousehold,
+    enableDeviceSync,
+    disableDeviceSync,
     leaveHousehold: leaveCurrentHousehold,
   };
 

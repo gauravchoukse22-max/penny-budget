@@ -14,6 +14,7 @@ import { checkBiometricsSupport, authenticateUser } from '../../features/biometr
 import { pickAndParseStatement } from '../../features/statement-import';
 import { setPendingImport } from '../../features/import-preview-store';
 import { BANK_LINKING_ENABLED } from '../../lib/feature-flags';
+import { confirmAction, notify } from '../../lib/confirm';
 import { formatMonthLabel } from '../../lib/format';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR'];
@@ -28,7 +29,7 @@ const GRACE_OPTIONS = [
 export default function SettingsScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { settings, categories, cards, selectedMonth, updateSettings, refresh } = useBudget();
+  const { settings, categories, cards, selectedMonth, updateSettings, refresh, enableDeviceSync, disableDeviceSync } = useBudget();
   const { isConfigured: cloudConfigured, user } = useAuth();
   const [busy, setBusy] = useState(false);
   const [biometricType, setBiometricType] = useState<string | null>(null);
@@ -187,6 +188,60 @@ export default function SettingsScreen() {
           />
           {cloudConfigured && (
             <>
+              <View style={[styles.divider, { backgroundColor: theme.separator }]} />
+              <View style={styles.toggleRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.label, fontSize: 15 }}>Sync across my devices</Text>
+                  <Text style={{ color: theme.tertiaryLabel, fontSize: 12, marginTop: 2 }}>
+                    Off: your budget stays only on this device. On: devices signed into your account share one budget
+                    through your private cloud space. Still works offline.
+                  </Text>
+                </View>
+                <Switch
+                  value={!!settings.householdId}
+                  disabled={busy}
+                  onValueChange={async (on) => {
+                    if (on && !user) {
+                      const go = await confirmAction({
+                        title: 'Sign in first',
+                        message: 'Device sync needs the optional account so your devices can find each other.',
+                        confirmLabel: 'Go to Sign In',
+                      });
+                      if (go) router.push('/account');
+                      return;
+                    }
+                    if (on) {
+                      const ok = await confirmAction({
+                        title: 'Turn on device sync?',
+                        message:
+                          'This device’s budget is shared privately with your other signed-in devices. If another device already has a budget, the two are combined — back up first if unsure (Settings → Backup).',
+                        confirmLabel: 'Turn On',
+                      });
+                      if (!ok) return;
+                      setBusy(true);
+                      try {
+                        const res = await enableDeviceSync();
+                        notify(res.success ? 'Device sync on' : 'Couldn’t turn on sync', res.message);
+                      } finally {
+                        setBusy(false);
+                      }
+                    } else {
+                      const ok = await confirmAction({
+                        title: 'Pause sync on this device?',
+                        message: 'Everything already on this device stays. Other devices are unaffected.',
+                        confirmLabel: 'Pause',
+                      });
+                      if (!ok) return;
+                      setBusy(true);
+                      try {
+                        await disableDeviceSync();
+                      } finally {
+                        setBusy(false);
+                      }
+                    }
+                  }}
+                />
+              </View>
               <View style={[styles.divider, { backgroundColor: theme.separator }]} />
               <SettingsLink
                 label={settings.householdId ? 'Family Sharing — on' : 'Family Sharing'}
