@@ -15,7 +15,6 @@ import { RemainingLabel } from '../../components/RemainingLabel';
 import { TransactionRow } from '../../components/TransactionRow';
 import { StreakBadge } from '../../components/FeatureCards';
 import { formatMonthLabel, daysLeftInMonth, formatCurrency } from '../../lib/format';
-import { totalSavingsGoals } from '../../lib/queries';
 import { getStreaks } from '../../features/streaks-and-gamification';
 import { selection, tapLight } from '../../lib/haptics';
 
@@ -71,7 +70,6 @@ export default function HomeScreen() {
   const cardById = new Map(cards.map((c) => [c.id, c]));
   const recent = transactions.slice(0, 5);
   const heroGradient = surplus.surplus > 0 ? theme.heroPositive : surplus.surplus < 0 ? theme.heroNegative : theme.heroNeutral;
-  const savingsTarget = totalSavingsGoals(savingsGoals);
 
   const monthSwipe = useRef(
     PanResponder.create({
@@ -142,7 +140,7 @@ export default function HomeScreen() {
             >
               <Text style={styles.formula}>
                 {showBreakdown
-                  ? `${formatCurrency(surplus.salary, settings.currency)} in  −  ${formatCurrency(surplus.spend, settings.currency)} spent  −  ${formatCurrency(surplus.savings, settings.currency)} saved`
+                  ? `${formatCurrency(surplus.salary, settings.currency)} in  −  ${formatCurrency(surplus.spend, settings.currency)} spent  −  ${formatCurrency(surplus.savings, settings.currency)} for savings`
                   : 'How is this calculated?'}
               </Text>
               <Ionicons name={showBreakdown ? 'chevron-up' : 'chevron-down'} size={12} color="rgba(255,255,255,0.75)" />
@@ -156,8 +154,8 @@ export default function HomeScreen() {
             </GradientCard>
             <GradientCard colors={theme.statSaved} style={styles.statCard}>
               <Text style={styles.statLabel}>Saved</Text>
-              <AmountText amount={surplus.savings} currency={settings.currency} size={17} weight="bold" color="#FFFFFF" />
-              {savingsTarget > 0 && <Text style={styles.statHint}>of {formatCurrency(savingsTarget, settings.currency)}</Text>}
+              <AmountText amount={surplus.transferred} currency={settings.currency} size={17} weight="bold" color="#FFFFFF" />
+              {surplus.savings > 0 && <Text style={styles.statHint}>of {formatCurrency(surplus.savings, settings.currency)}</Text>}
             </GradientCard>
             <GradientCard colors={theme.statDays} style={styles.statCard}>
               <Text style={styles.statLabel}>Days Left</Text>

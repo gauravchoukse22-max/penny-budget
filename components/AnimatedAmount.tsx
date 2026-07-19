@@ -24,12 +24,22 @@ export function AnimatedAmount({ amount, currency = 'USD', size = 17, weight = '
   const theme = useTheme();
   const { settings } = useBudget();
   const fontWeight = weight === 'bold' ? '700' : weight === 'semibold' ? '600' : '400';
+  // On web, react-native-web's Animated listener never ticks in this setup,
+  // which FROZE the hero at its first value — changes to the underlying
+  // number (new goal, new transaction) silently didn't display. The comment
+  // below always promised a plain web render; now it actually happens.
+  const isWeb = Platform.OS === 'web';
   const driver = useRef(new Animated.Value(amount)).current;
   const [display, setDisplay] = useState(amount);
   const prev = useRef(amount);
 
   useEffect(() => {
     if (prev.current === amount) return;
+    if (isWeb) {
+      prev.current = amount;
+      setDisplay(amount);
+      return;
+    }
     const id = driver.addListener(({ value }) => setDisplay(value));
     Animated.timing(driver, {
       toValue: amount,
@@ -40,7 +50,7 @@ export function AnimatedAmount({ amount, currency = 'USD', size = 17, weight = '
       setDisplay(amount);
     });
     return () => driver.removeListener(id);
-  }, [amount, driver, duration]);
+  }, [amount, driver, duration, isWeb]);
 
   return (
     <Text

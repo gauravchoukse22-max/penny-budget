@@ -421,8 +421,17 @@ export function sumAmount(transactions: Transaction[]): number {
   return cents / 100;
 }
 
-/** 5.1 Monthly Surplus = Salary − SUM(transactions) − SUM(savings goals) */
-export async function computeSurplus(yearMonth: string): Promise<{ salary: number; spend: number; savings: number; surplus: number }> {
+/** 5.1 Monthly Surplus = Salary − SUM(transactions) − SUM(savings goals).
+ *
+ * `savings` is the PLANNED total (every goal's month-resolved amount) and is
+ * what the surplus subtracts — money earmarked for a goal isn't available to
+ * spend, whether or not it's physically been moved yet. Subtracting only
+ * ticked transfers (the old behavior) meant adding a goal never changed
+ * "Left to spend" until a checkbox was found and ticked. `transferred` is the
+ * portion actually moved this month (the checklist), for display only. */
+export async function computeSurplus(
+  yearMonth: string
+): Promise<{ salary: number; spend: number; savings: number; transferred: number; surplus: number }> {
   const [salary, transactions, goals, transferStatus, goalAmounts] = await Promise.all([
     resolveSalaryForMonth(yearMonth),
     listTransactionsForMonth(yearMonth),
@@ -431,8 +440,10 @@ export async function computeSurplus(yearMonth: string): Promise<{ salary: numbe
     resolveSavingsGoalAmounts(yearMonth),
   ]);
   const spend = sumAmount(transactions);
-  const savings = totalTransferredSavings(goals, transferStatus, goalAmounts);
-  return { salary, spend, savings, surplus: salary - spend - savings };
+  const savings = totalSavingsGoals(goals, goalAmounts);
+  const transferred = totalTransferredSavings(goals, transferStatus, goalAmounts);
+  const surplus = Math.round((salary - spend - savings) * 100) / 100;
+  return { salary, spend, savings, transferred, surplus };
 }
 
 /** 5.2 + 5.3 Category spend + budget health, sorted worst-to-best. Each
