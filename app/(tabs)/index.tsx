@@ -33,6 +33,7 @@ export default function HomeScreen() {
     cards,
     settings,
     savingsGoals,
+    savingsGoalAmounts,
     uncategorizedCount,
   } = useBudget();
 
@@ -71,7 +72,10 @@ export default function HomeScreen() {
   const cardById = new Map(cards.map((c) => [c.id, c]));
   const recent = transactions.slice(0, 5);
   const heroGradient = surplus.surplus > 0 ? theme.heroPositive : surplus.surplus < 0 ? theme.heroNegative : theme.heroNeutral;
-  const savingsTarget = totalSavingsGoals(savingsGoals);
+  // Same month-resolved amounts as the "Saved" figure — using the base
+  // amounts here made the tile read nonsense like "$1,942 of $1,542" the
+  // moment a goal's amount was edited for the month.
+  const savingsTarget = totalSavingsGoals(savingsGoals, savingsGoalAmounts);
 
   const monthSwipe = useRef(
     PanResponder.create({

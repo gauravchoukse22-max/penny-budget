@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: 'Home number updates instantly on the web',
     changes: [
       'On the web app, the big "Left to spend" number could freeze at its first value and ignore changes until you refreshed the page. It now updates the moment your budget changes. (iPhone/Android already worked, and keep their count-up animation.)',
+      'The Saved tile could show impossible math like "$1,942 of $1,542" after you edited a goal\'s amount for the month — the total ignored your edit. Both numbers now use the same per-month amounts, so Saved can never exceed the goal total.',
     ],
   },
   {
