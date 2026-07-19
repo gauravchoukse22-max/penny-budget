@@ -43,7 +43,7 @@ type BudgetContextValue = {
   transactions: Transaction[];
   uncategorizedCount: number;
 
-  surplus: { salary: number; spend: number; savings: number; transferred: number; surplus: number };
+  surplus: { salary: number; spend: number; savings: number; surplus: number };
   categorySummaries: CategorySpendSummary[];
   cardTotals: Map<string, number>;
   transferStatus: Map<string, boolean>;
@@ -84,7 +84,7 @@ type BudgetContextValue = {
 
 const BudgetContext = createContext<BudgetContextValue | null>(null);
 
-const emptySurplus = { salary: 0, spend: 0, savings: 0, transferred: 0, surplus: 0 };
+const emptySurplus = { salary: 0, spend: 0, savings: 0, surplus: 0 };
 
 export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);

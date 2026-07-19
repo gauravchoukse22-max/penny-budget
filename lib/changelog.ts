@@ -16,14 +16,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    id: '2026-07-18-savings-in-surplus',
+    id: '2026-07-18-home-number-updates-live',
     version: '1.0.1',
     date: 'July 2026',
-    title: 'Savings goals now count against Left to Spend',
+    title: 'Home number updates instantly on the web',
     changes: [
-      'Adding a savings goal now immediately reduces "Left to spend" — money you\'ve earmarked for a goal is no longer shown as spendable. Before, a goal only counted after you ticked "Transferred this month," so new goals looked like they did nothing.',
-      'The Saved tile now reads "what you\'ve actually moved" of "your monthly goal total" — e.g. $200 of $500 — and the tap-to-reveal breakdown says "for savings" so the math is honest.',
-      'The Transferred checklist still works exactly as before: tick a goal when you actually move the money to savings.',
+      'On the web app, the big "Left to spend" number could freeze at its first value and ignore changes until you refreshed the page. It now updates the moment your budget changes. (iPhone/Android already worked, and keep their count-up animation.)',
     ],
   },
   {
