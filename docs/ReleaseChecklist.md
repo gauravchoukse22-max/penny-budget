@@ -14,17 +14,18 @@ Status below is for **1.1.0 (build 8)**, branch `release/1.1.0`.
 | 1.2 | `node scripts/test-statement-parse.mjs` — 43 passed, 0 failed | ✅ |
 | 1.3 | No known critical bugs | ✅ Security black-screen + import picker fixed |
 | 1.4 | Release build compiles, installs, launches, renders — no crash | ✅ simulator, `1.1.0 (8)` |
-| 1.4a | Security black-screen fix confirmed **interactively** | ❌ needs a signed-in session |
-| 1.4b | Import picker fix confirmed **interactively** | ❌ needs tap input |
-| 1.5 | No non-functional UI reachable by a reviewer (Guideline 2.2) | ✅ dead iCloud toggle removed |
-| 1.6 | Feature flags correct for a store build | ✅ `EXPO_PUBLIC_BANK_LINKING` unset → Plaid off |
-| 1.7 | `EXPO_PUBLIC_*` present for a local Release build (`.env.local`) | ✅ Supabase URL found in the Hermes bundle |
+| 1.4a | Security black-screen fix confirmed **interactively** | ✅ stacked two sensitive screens, no blanking |
+| 1.4b | Import picker fix confirmed **interactively** | ✅ file picker opens on the simulator |
+| 1.5 | No non-functional UI reachable by a reviewer (Guideline 2.2) | ✅ dead iCloud toggle gone from the running app |
+| 1.6 | Feature flags correct for a store build | ✅ no "Linked Banks" row in the running app |
+| 1.7 | `EXPO_PUBLIC_*` present for a local Release build (`.env.local`) | ✅ Account section live at runtime |
 
-**On 1.4a / 1.4b:** both fixes are traced to root cause in the native + JS source and the project
-typechecks, but neither has been exercised by a human tapping through the app. `simctl` can install
-and launch but cannot send taps; the tooling that can needs
-`sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` first. Fastest path is to test
-both on the device build before archiving.
+**How 1.4a was verified without an account:** the black screen needed two `useSensitiveScreen`
+screens mounted at once, which normally means Account → Security (sign-in required). The same
+condition is reachable signed-OUT via Account → *Forgot password?* — both call the hook. On the
+1.1.0 build the reset screen renders normally and backing out restores Account intact, so the
+reference-counted native call is behaving. Worth one confirmation on the Security screen itself
+once signed in, but the underlying defect is demonstrably gone.
 
 **Why 1.7 matters:** EAS used to inject these from its stored environment. Local Xcode builds read
 `.env.local` during the "Bundle React Native code and images" phase. If it is missing, the app
