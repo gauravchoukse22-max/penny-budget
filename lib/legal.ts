@@ -1,13 +1,18 @@
 import * as WebBrowser from 'expo-web-browser';
 
-// Public legal docs, served from the same GitHub Pages site as the web app.
-// (docs/privacy.html and docs/terms.html in this repo.)
-export const PRIVACY_URL = 'https://gauravchoukse22-max.github.io/penny-budget/privacy.html';
-export const TERMS_URL = 'https://gauravchoukse22-max.github.io/penny-budget/terms.html';
-export const SECURITY_URL = 'https://gauravchoukse22-max.github.io/penny-budget/security.html';
+// Public legal docs, served from gary-labs.com.
+//
+// These MUST be the same URLs entered in App Store Connect and Play Console.
+// They previously pointed at docs/*.html on GitHub Pages, which meant the policy
+// a user opened from inside the app was a different document from the one the
+// store listing linked to — two policies for one app, free to drift apart.
+// The GitHub Pages copies are superseded; take them down or redirect them here.
+export const PRIVACY_URL = 'https://gary-labs.com/penny-budget/privacy/';
+export const TERMS_URL = 'https://gary-labs.com/penny-budget/terms/';
+export const SECURITY_URL = 'https://gary-labs.com/penny-budget/privacy/';
 
 /** Where a user (or an app reviewer) can reach a human about the app. */
-export const SUPPORT_EMAIL = 'gauravchoukse22@gmail.com';
+export const SUPPORT_EMAIL = 'support@gary-labs.com';
 
 export function openPrivacy(): Promise<WebBrowser.WebBrowserResult> {
   return WebBrowser.openBrowserAsync(PRIVACY_URL);

@@ -1,6 +1,16 @@
+> # ⚠️ SUPERSEDED — DO NOT PUBLISH
+>
+> This is the **pre-accounts** policy and its central claim ("does not collect, transmit, or store
+> any of your data outside your own device") became **false** when optional accounts, cloud backup,
+> and family sharing shipped. Publishing it would be a false privacy declaration.
+>
+> **The live, authoritative policy is [`privacy.html`](privacy.html)**, published at
+> <https://gauravchoukse22-max.github.io/penny-budget/privacy.html> — that is the URL to give
+> App Store Connect and Play Console. This file is kept only for history.
+
 # Privacy Policy for Penny Budget
 
-**Last updated: July 8, 2026**
+**Last updated: July 8, 2026 — SUPERSEDED, see the notice above**
 
 Penny Budget ("the app") is a personal budgeting app built by an individual developer. This
 policy explains how the app handles your information.

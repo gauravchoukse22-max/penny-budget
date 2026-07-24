@@ -7,6 +7,10 @@
 -- so one household can never read or write another's data. Membership changes go
 -- through SECURITY DEFINER RPCs (below), never raw table writes.
 
+-- gen_random_bytes() (create_household_invite, below) comes from pgcrypto.
+-- Supabase installs it in the `extensions` schema, not `public`.
+create extension if not exists pgcrypto with schema extensions;
+
 -- ── Tables ────────────────────────────────────────────────────────────────
 
 create table if not exists public.households (
@@ -134,11 +138,14 @@ end;
 $$;
 
 -- Generates a short, human-shareable invite code.
+-- search_path includes `extensions` so the unqualified gen_random_bytes() below
+-- resolves — pgcrypto lives there on Supabase, and pinning to `public` alone
+-- made this raise "function gen_random_bytes(integer) does not exist" at call time.
 create or replace function public.create_household_invite(hid uuid)
 returns text
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   new_code text;

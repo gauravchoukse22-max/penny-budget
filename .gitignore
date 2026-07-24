@@ -36,6 +36,9 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# transpiled output from the fixture test harness (scripts/test-*.mjs)
+scripts/lib/_transpiled/
+
 # generated native folders
 /ios
 /android

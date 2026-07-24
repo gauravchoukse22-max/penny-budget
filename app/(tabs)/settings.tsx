@@ -34,6 +34,10 @@ export default function SettingsScreen() {
   const [busy, setBusy] = useState(false);
   const [biometricType, setBiometricType] = useState<string | null>(null);
   const [pickingCardFor, setPickingCardFor] = useState(false);
+  // iOS drops a presentation that begins while another sheet is still
+  // dismissing, so the file picker never appeared. Hold the chosen card until
+  // the sheet has fully gone away (Modal.onDismiss), then present the picker.
+  const [pendingImportCardId, setPendingImportCardId] = useState<string | null>(null);
 
   useEffect(() => {
     checkBiometricsSupport().then((s) => setBiometricType(s.supported ? s.type : null));
@@ -100,8 +104,16 @@ export default function SettingsScreen() {
     }
   };
 
-  const doImportStatement = async (cardId: string) => {
+  // Chosen a card in the picker sheet. On iOS the actual import waits for the
+  // sheet's dismiss animation to finish (see pendingImportCardId); other
+  // platforms can present immediately.
+  const onPickCardForImport = (cardId: string) => {
     setPickingCardFor(false);
+    if (Platform.OS === 'ios') setPendingImportCardId(cardId);
+    else doImportStatement(cardId);
+  };
+
+  const doImportStatement = async (cardId: string) => {
     setBusy(true);
     try {
       const result = await pickAndParseStatement();
@@ -343,21 +355,10 @@ export default function SettingsScreen() {
           </Text>
         </Surface>
 
-        {Platform.OS === 'ios' && (
-          <Surface>
-            <Text style={[styles.sectionTitle, { color: theme.label }]}>iCloud Sync</Text>
-            <View style={styles.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: theme.tertiaryLabel, fontSize: 15 }}>Sync across devices</Text>
-                <Text style={{ color: theme.tertiaryLabel, fontSize: 12, marginTop: 2 }}>
-                  Coming in a future update. For now, use the optional account above to back up and restore
-                  between devices.
-                </Text>
-              </View>
-              <Switch value={false} disabled />
-            </View>
-          </Surface>
-        )}
+        {/* The old iCloud Sync section lived here: a permanently-disabled switch
+            labelled "Coming in a future update". Shipping non-functional UI is an
+            App Review 2.2 risk, and it was redundant — the working "Sync across my
+            devices" toggle above does this via the optional account. */}
 
         <Surface>
           <Text style={[styles.sectionTitle, { color: theme.label }]}>Backup</Text>
@@ -385,12 +386,25 @@ export default function SettingsScreen() {
         </Text>
       </ScrollView>
 
-      <Modal visible={pickingCardFor} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPickingCardFor(false)}>
+      <Modal
+        visible={pickingCardFor}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setPickingCardFor(false)}
+        onDismiss={() => {
+          // iOS only — fires after the sheet is fully gone, so presenting the
+          // document picker here actually works.
+          if (!pendingImportCardId) return;
+          const cardId = pendingImportCardId;
+          setPendingImportCardId(null);
+          doImportStatement(cardId);
+        }}
+      >
         <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
           <Text style={[type.title2, { color: theme.label, marginBottom: spacing.lg }]}>Which card is this statement for?</Text>
           <ScrollView>
             {cards.map((c) => (
-              <Pressable key={c.id} style={styles.pickerRow} onPress={() => doImportStatement(c.id)}>
+              <Pressable key={c.id} style={styles.pickerRow} onPress={() => onPickCardForImport(c.id)}>
                 <View style={[styles.cardDot, { backgroundColor: c.color }]} />
                 <Text style={{ color: theme.label, fontSize: 16 }}>{c.name}</Text>
               </Pressable>
