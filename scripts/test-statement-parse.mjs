@@ -346,7 +346,12 @@ const wrapRuns = [
 
   const { createRequire } = await import('node:module');
   const req = createRequire(join(root, 'package.json'));
-  const pdfjs = await import('file://' + req.resolve('pdfjs-dist/legacy/build/pdf.js').replace(/\\/g, '/'));
+  // pdfjs 3.x legacy is CJS: under ESM `import()` the API lands on `.default`,
+  // NOT on the namespace. Reaching for `ns.getDocument` threw
+  // "pdfjs.getDocument is not a function" and aborted the whole suite before a
+  // single result was printed — which is why the PDF path shipped unverified.
+  const pdfjsNs = await import('file://' + req.resolve('pdfjs-dist/legacy/build/pdf.js').replace(/\\/g, '/'));
+  const pdfjs = pdfjsNs.default ?? pdfjsNs;
   const doc = await pdfjs.getDocument({ data: new Uint8Array(Buffer.from(pdf, 'latin1')), isEvalSupported: false, useSystemFonts: true, disableFontFace: true }).promise;
   const pages = [];
   const textParts = [];
