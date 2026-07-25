@@ -4,83 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Privacy Policy — Penny Budget</title>
+<!--
+  Moved. The single, maintained Penny Budget privacy policy now lives at
+  gary-labs.com. This page is kept only as a redirect because older App Store
+  builds link here from inside the app; do not delete it while those builds are
+  still installed. Canonical + refresh + JS so every kind of client follows.
+-->
+<link rel="canonical" href="https://gary-labs.com/penny-budget/privacy/">
+<meta http-equiv="refresh" content="0; url=https://gary-labs.com/penny-budget/privacy/">
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 680px; margin: 0 auto; padding: 40px 20px 80px; color: #1c1c1e; line-height: 1.6; }
-  h1 { font-size: 28px; margin-bottom: 4px; }
-  h2 { font-size: 18px; margin-top: 32px; }
-  .updated { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
-  code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }
-  a { color: #6a5cf5; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 640px; margin: 0 auto; padding: 48px 20px; color: #1c1c1e; line-height: 1.6; }
+  a { color: #5856d6; }
 </style>
+<script>location.replace("https://gary-labs.com/penny-budget/privacy/");</script>
 </head>
 <body>
-<h1>Privacy Policy for Penny Budget</h1>
-<p class="updated">Last updated: July 15, 2026</p>
-
-<p>Penny Budget ("the app") is a personal budgeting app built by an individual developer. This policy explains how the app handles your information.</p>
-
-<h2>Summary</h2>
-<p>Penny Budget is a local-first app: by default, everything you enter stays on your device, and the app is fully usable without an account or an internet connection. The app has no analytics, no advertising, and no tracking.</p>
-<p>Optionally, you can create an account and use cloud backup. If you choose to do this, your email address and a copy of your budget data are stored on our backup provider's servers so you can restore your data. This is entirely opt-in — you can use the app forever without ever creating an account.</p>
-
-<h2>Data Stored on Your Device</h2>
-<p>All information you enter into Penny Budget — including transactions, categories, cards, salary, and savings goals — is stored locally on your device using on-device storage (SQLite). Unless you opt in to cloud backup, this data:</p>
-<ul>
-  <li>Is never transmitted to the developer or any third party</li>
-  <li>Is never uploaded to any server</li>
-  <li>Remains fully under your control</li>
-  <li>Is deleted if you uninstall the app</li>
-</ul>
-
-<h2>Optional Accounts and Cloud Backup</h2>
-<p>The app offers an optional account, used only to enable cloud backup and restore. This feature is off unless you choose to sign up.</p>
-<ul>
-  <li><strong>What we collect if you create an account:</strong> your email address (and a password, which is stored securely by our authentication provider — the developer never sees it). If you choose <strong>Sign in with Apple</strong> instead, Apple provides a verified email address (or a private "Hide My Email" relay address if you prefer); the developer never receives your password.</li>
-  <li><strong>What is uploaded when you tap "Back up now":</strong> a snapshot of your budget data (transactions, categories, cards, salary, and savings goals). This snapshot is stored privately and is accessible only to your own account.</li>
-  <li><strong>When it happens:</strong> only when you manually create an account and manually trigger a backup. Nothing is uploaded automatically or in the background.</li>
-</ul>
-
-<h2>Optional Bank Linking (limited availability)</h2>
-<p>Some builds of the app include an optional <strong>Linked Banks</strong> feature that can connect a bank or card account so transactions import automatically. This feature is not enabled in standard App Store / Play Store builds, and it never activates on its own — it only does anything if you explicitly link an account after an in-app confirmation.</p>
-<ul>
-  <li><strong>How linking works:</strong> you sign in on your bank's own page through <a href="https://plaid.com/legal/#end-user-privacy-policy">Plaid</a>, a bank-connection provider. Penny Budget never sees, stores, or transmits your bank username or password.</li>
-  <li><strong>What is processed if you link:</strong> the linked account's transaction history (date, merchant description, and amount) and basic account details (account name and last digits) pass through Plaid and the app's cloud infrastructure to reach your device. The connection credential is stored server-side, protected so that only the linking service can use it — it is never available to other users or to the app on your device.</li>
-  <li><strong>Unlinking:</strong> you can unlink at any time in the app; this revokes the connection at Plaid. Transactions already imported remain in your on-device budget, where you can edit or delete them like anything else.</li>
-</ul>
-
-<h2>Data Retention, Location, and Security</h2>
-<ul>
-  <li><strong>What's in a cloud backup:</strong> the budget figures you entered — transactions, categories, cards (name and last four digits only, never a full card number), salary, and savings goals — plus the email address on your account. Penny Budget never asks for, stores, or has access to your bank login or full card numbers.</li>
-  <li><strong>Where it's stored:</strong> on Supabase's cloud infrastructure. You can see Supabase's data-region and sub-processor details in their documentation.</li>
-  <li><strong>How long:</strong> your cloud backup and account are kept until you delete them. There is only ever one backup per account, and each new backup overwrites the last. Deleting your account removes both immediately.</li>
-  <li><strong>In transit:</strong> all communication uses encrypted HTTPS/TLS connections.</li>
-  <li><strong>On your device:</strong> the token that keeps you signed in is stored encrypted, with the key held in your device's secure hardware store (iOS Keychain / Android Keystore).</li>
-</ul>
-
-<h2>Third-Party Service Providers</h2>
-<p>Cloud accounts and backup are provided using <a href="https://supabase.com/privacy">Supabase</a>, which handles authentication and stores your backup on our behalf. Your email and backup data are held on Supabase's infrastructure and transmitted over encrypted (HTTPS/TLS) connections. Supabase acts as a data processor for the app; see the Supabase Privacy Policy for details on their practices.</p>
-<p>The app includes no third-party analytics, advertising, or tracking software development kits (SDKs).</p>
-
-<h2>Data Sharing</h2>
-<p>Penny Budget does not sell your data and does not share it with advertisers or data brokers. The only third party that processes your data is the backup provider named above, and only to provide the optional cloud backup feature you requested.</p>
-
-<h2>Deleting Your Account and Data</h2>
-<p>You are in control of your data:</p>
-<ul>
-  <li><strong>Delete your account:</strong> In the app, go to <strong>Settings → Account → Delete Account</strong>. This permanently deletes your account and your cloud backup from our provider's servers.</li>
-  <li><strong>Delete local data:</strong> Uninstalling the app removes all data stored on your device.</li>
-</ul>
-
-<h2>CSV Import/Export</h2>
-<p>Penny Budget lets you export your data to a CSV file and import data from a CSV file. These files are created and read directly on your device using your device's standard file system and sharing tools (for example, the iOS share sheet). The developer does not have access to these files.</p>
-
-<h2>Children's Privacy</h2>
-<p>Penny Budget is not directed to children under the age of 13, and the developer does not knowingly collect personal information from children. If you believe a child has provided personal information (such as an email address used to create an account), contact the developer using the details below and it will be deleted.</p>
-
-<h2>Changes to This Policy</h2>
-<p>If this policy changes, the "Last updated" date above will be revised. Material changes affecting how your data is handled will be reflected here.</p>
-
-<h2>Contact</h2>
-<p>If you have questions about this privacy policy or your data, contact: <code>gauravchoukse22@gmail.com</code></p>
+<p>The Penny Budget privacy policy has moved to
+<a href="https://gary-labs.com/penny-budget/privacy/">gary-labs.com/penny-budget/privacy</a>.</p>
+<p>You’ll be redirected automatically. If not, use the link above.</p>
 </body>
 </html>
