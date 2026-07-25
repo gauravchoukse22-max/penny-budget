@@ -86,6 +86,32 @@ Family sharing, accounts, and statement import.
 - Fixes: statement import now opens correctly, and the Security screen no longer goes blank
 ```
 
+## App Review Information (App Store Connect → version → App Review Information)
+
+**Sign-in required?** Yes — paste the demo login below. The account is real, confirmed, and lives
+in the production Supabase project.
+
+Demo account:
+```
+Email:    appreview@gary-labs.com
+Password: <the password Gary set — enter it in App Store Connect, not here>
+```
+
+Review notes (paste into the "Notes" field):
+```
+Signing in is OPTIONAL. Penny Budget is fully usable offline with no account — a
+reviewer can skip sign-in entirely and still exercise every budgeting feature.
+
+The optional account (Settings → Account) enables cloud backup and Family Sharing.
+Demo credentials are provided above if you wish to review those features.
+
+- Account deletion: Settings → Account → Security → Delete Account (removes the
+  account and its cloud backup; on-device data is untouched).
+- "Linked Banks" / Plaid is NOT enabled in this build.
+- Statement import (Settings → Import Credit Card Statement) accepts a CSV export;
+  add a card first (Cards tab) so there is a destination to import into.
+```
+
 **Previously (1.0.1, never released publicly):**
 ```
 - New app icon
