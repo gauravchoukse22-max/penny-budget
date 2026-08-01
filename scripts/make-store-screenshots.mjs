@@ -16,16 +16,16 @@ const SIZES = [
 ];
 
 const SHOTS = [
-  { file: 'WhatsApp Image 2026-07-08 at 11.31.35 AM.jpeg', name: '01-home', caption: 'See your whole budget\nat a glance', accent: '#6C63FF' },
-  { file: 'WhatsApp Image 2026-07-08 at 11.31.35 AM (3).jpeg', name: '02-transactions', caption: 'Every transaction,\norganized instantly', accent: '#FF5A5F' },
-  { file: 'WhatsApp Image 2026-07-08 at 11.31.35 AM (2).jpeg', name: '03-budget', caption: 'Set goals and track\nsavings automatically', accent: '#2ECC71' },
-  { file: 'WhatsApp Image 2026-07-08 at 11.31.35 AM (1).jpeg', name: '04-cards', caption: 'Manage every card\nin one place', accent: '#FFB020' },
-  { file: 'WhatsApp Image 2026-07-08 at 11.31.35 AM (4).jpeg', name: '05-insights', caption: 'Understand your\nspending trends', accent: '#4A90D9' },
+  { file: '01-home.png', name: '01-home', caption: 'Know exactly what\'s\nleft to spend', accent: '#22C55E' },
+  { file: '02-transactions.png', name: '02-transactions', caption: 'Every transaction,\nsorted and searchable', accent: '#6C4CF5' },
+  { file: '03-budget.png', name: '03-budget', caption: 'Stay on budget in\nevery category', accent: '#1FAA59' },
+  { file: '04-cards.png', name: '04-cards', caption: 'All your cards,\nnever miss a due date', accent: '#FF9500' },
+  { file: '05-insights.png', name: '05-insights', caption: 'Stay ahead with\nsmart forecasts', accent: '#5856D6' },
 ];
 
 function toDataUri(filePath) {
   const buf = fs.readFileSync(filePath);
-  return `data:image/jpeg;base64,${buf.toString('base64')}`;
+  return `data:image/png;base64,${buf.toString('base64')}`;
 }
 
 function template({ dataUri, caption, W, H }) {
