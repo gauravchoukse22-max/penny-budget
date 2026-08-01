@@ -27,11 +27,11 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
       Cards do not reference it at all**, so those two need month scoping as well
       as a control, not just a header. Use one shared component so the control
       cannot drift between tabs, and keep it out of Settings.
-- [ ] **Finish the in-flight agent work**: transaction filters into a dropdown,
-      and the seeded "Cash" card so deleting a card reassigns its transactions
-      instead of deleting them. If the working tree has uncommitted changes to
-      `app/(tabs)/transactions.tsx`, `app/(tabs)/cards.tsx`, `lib/queries.ts` or
-      `features/db-migrations.ts`, that is this work — typecheck it, then commit.
+- [ ] **`features/bulk-actions.ts` journals nothing.** All three of
+      `bulkUpdateCategory`, `bulkUpdateCard` and `bulkDeleteTransactions` write
+      straight to SQLite with no `queueSyncMutation`, so every bulk edit made
+      from the Transactions tab's select mode stays on one phone. Pre-existing,
+      and exactly the class of silent divergence AGENTS.md §2 warns about.
 - [ ] Build iOS + Android, and hand Gary the upload steps.
 - [ ] **Disha rejoins with Replace** — the flow exists now; walk them through it.
       That is what clears her duplicate categories and cards in one action. She
@@ -53,6 +53,17 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 
 ### Verified only by typecheck, never run on a device
 These are real risks, not paperwork. Each changed behaviour no agent could observe.
+- [ ] **The seeded Cash card.** `features/db-migrations.ts` seeds it once per
+      install at the well-known id `penny-cash-card`, stamped in
+      `app_settings.cashCardSeededAt`. Check on Gary's phone AND Disha's that
+      exactly ONE Cash card appears after a sync — a second one would mean the
+      fixed id is not doing its job, which is the duplicate-cards bug again.
+- [ ] **`deleteCard` now moves transactions to Cash instead of deleting them.**
+      Delete a throwaway card holding a few transactions and confirm they show up
+      on Cash, on both phones, with the right amounts and months.
+- [ ] **The Transactions filter sheet.** Card + category chip rows are collapsed
+      into one bar. Check the list starts near the top, that Clear works, and
+      that the new Uncategorized option finds the rows a deleted category left.
 - [ ] Keyboard handling on Android (`KeyboardAwareScreen`) — reasoned from RN
       source, not seen. Recurring Bills and Funds Manage are the likely trouble
       spots, being forms inside a scroll view.

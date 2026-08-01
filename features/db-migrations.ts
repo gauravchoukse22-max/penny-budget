@@ -15,6 +15,14 @@
 // ---------------------------------------------------------------------------
 
 import type * as SQLite from 'expo-sqlite';
+// lib/models.ts is types + plain constants with zero imports of its own, so
+// this stays as dependency-free as the header above promises.
+import {
+  CASH_CARD_COLOR,
+  CASH_CARD_ID,
+  CASH_CARD_NAME,
+  CASH_CARD_SORT_ORDER,
+} from '../lib/models';
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -207,4 +215,57 @@ export async function applyFeatureMigrations(db: SQLite.SQLiteDatabase): Promise
   );
   await addColumnIfMissing(db, 'transactions', 'receiptUri', 'TEXT');
   await addColumnIfMissing(db, 'transactions', 'memo', 'TEXT');
+
+  // -- 3. Seed the well-known rows -------------------------------------------
+
+  await seedCashCard(db);
+}
+
+/**
+ * Creates the "Cash" card — once per install, for new AND existing installs.
+ *
+ * `transactions.cardId` is NOT NULL, so every transaction must name a card.
+ * Without a card that means "no card", deleting a card had nowhere to put its
+ * transactions and destroyed them instead; this row is the destination that
+ * makes deleteCard a move rather than a loss.
+ *
+ * Two separate guards, because they defend against two different failures:
+ *
+ *  • INSERT OR IGNORE on the well-known id — the row can never exist twice, and
+ *    every household member seeds the SAME id, so the two devices converge on
+ *    one Cash card instead of one each. Seeding with uuid() is what gave this
+ *    household duplicate categories.
+ *
+ *  • The `cashCardSeededAt` stamp — seeding runs on every launch, so without it
+ *    a Cash row deleted through sync (a co-member on an old build tombstoning
+ *    it) would silently reappear on the next app start and fight the tombstone
+ *    forever. The stamp lives on `app_settings`, which deliberately never syncs,
+ *    so it is a per-device record of "this device has already offered to seed
+ *    it" rather than shared state. It is intentionally absent from the
+ *    AppSettings type: nothing outside this migration ever reads it.
+ *
+ * Not journaled to the outbox. It cannot be — this runs inside
+ * lib/db.ts's openAndMigrate, and queueSyncMutation calls getDb(), which would
+ * await the promise that has not resolved yet and deadlock the app on launch.
+ * It does not need to be either: the fixed id means the co-member's own seed
+ * produces the identical row. lib/queries.ts ensureCashCard covers the one case
+ * that does need a journal (a member whose build predates this migration).
+ */
+async function seedCashCard(db: SQLite.SQLiteDatabase): Promise<void> {
+  await addColumnIfMissing(db, 'app_settings', 'cashCardSeededAt', 'TEXT');
+
+  const stamp = await db.getFirstAsync<{ cashCardSeededAt: string | null }>(
+    'SELECT cashCardSeededAt FROM app_settings WHERE id = 1',
+  );
+  if (stamp?.cashCardSeededAt) return;
+
+  await db.runAsync(
+    'INSERT OR IGNORE INTO cards (id, name, lastFour, color, sortOrder, billDay, dueDay) VALUES (?, ?, ?, ?, ?, NULL, NULL)',
+    // Empty lastFour, not '0000': Cash has no card number, and WalletCard hides
+    // the "•••• " line rather than printing digits that were never real.
+    [CASH_CARD_ID, CASH_CARD_NAME, '', CASH_CARD_COLOR, CASH_CARD_SORT_ORDER],
+  );
+  await db.runAsync('UPDATE app_settings SET cashCardSeededAt = ? WHERE id = 1', [
+    new Date().toISOString(),
+  ]);
 }

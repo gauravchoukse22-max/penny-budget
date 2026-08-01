@@ -39,7 +39,10 @@ export function WalletCard({
         <View style={styles.hairline} />
 
         <View style={styles.bottomRow}>
-          <Text style={styles.lastFour}>•••• {card.lastFour}</Text>
+          {/* The seeded Cash card has no card number, so it gets no masked
+              digits — "•••• " with nothing after it just reads as a bug. The
+              empty Text keeps space-between pinning the amount to the right. */}
+          <Text style={styles.lastFour}>{card.lastFour ? `•••• ${card.lastFour}` : ''}</Text>
           <View style={styles.amountBlock}>
             <Text style={styles.amountLabel}>THIS MONTH</Text>
             <AmountText amount={total} currency={currency} size={24} weight="bold" color="#FFFFFF" />

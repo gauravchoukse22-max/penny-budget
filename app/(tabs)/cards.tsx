@@ -11,6 +11,7 @@ import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { notify } from '../../lib/confirm';
 import { daysUntilDue, countTransactionsForCard } from '../../lib/queries';
+import { isCashCard } from '../../lib/models';
 
 export default function CardsScreen() {
   const theme = useTheme();
@@ -19,16 +20,19 @@ export default function CardsScreen() {
   const [showAdd, setShowAdd] = useState(false);
 
   const monthTotal = cards.reduce((sum, c) => sum + (cardTotals.get(c.id) ?? 0), 0);
+  // Cash is seeded, not added, so it shouldn't count toward "3 cards" or claim a
+  // slot in the palette rotation a new card picks its color from.
+  const realCards = cards.filter((c) => !isCashCard(c.id));
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.groupedBackground }]} edges={['top']}>
       <View style={styles.headerRow}>
         <View style={{ flex: 1 }}>
           <Text style={[type.title1, { color: theme.label }]}>Cards</Text>
-          {cards.length > 0 && (
+          {realCards.length > 0 && (
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryText, { color: theme.secondaryLabel }]}>
-                {cards.length} {cards.length === 1 ? 'card' : 'cards'}
+                {realCards.length} {realCards.length === 1 ? 'card' : 'cards'}
                 {'   ·   '}
               </Text>
               <AmountText amount={monthTotal} currency={settings.currency} size={13} color={theme.secondaryLabel} />
@@ -45,59 +49,69 @@ export default function CardsScreen() {
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {cards.length === 0 ? (
+        {realCards.length === 0 && (
           <View style={styles.empty}>
             <Ionicons name="card-outline" size={30} color={theme.tertiaryLabel} />
             <Text style={[styles.emptyText, { color: theme.secondaryLabel }]}>
-              No cards yet. Add one to track its balance and due date.
+              No cards yet. Add one to track its balance and due date — until then, spending goes on Cash.
             </Text>
           </View>
-        ) : (
-          cards.map((c) => {
-            const dueIn = daysUntilDue(c.dueDay);
-            const dueSoon = dueIn !== null && dueIn <= 5;
-            return (
-              // The heaviest delete in the app: deleteCard takes every
-              // transaction on the card with it, across every month. The count
-              // is read at swipe time so the warning states the real loss
-              // instead of a vague "and its transactions".
-              <SwipeToDelete
-                key={c.id}
-                onDelete={() => removeCard(c.id)}
-                accessibilityLabel={`Delete card ${c.name}`}
-                actionStyle={styles.deleteAction}
-                confirm={async () => {
-                  const count = await countTransactionsForCard(c.id);
-                  return {
-                    title: `Delete ${c.name}?`,
-                    message:
-                      count === 0
-                        ? 'This card has no transactions. This cannot be undone.'
-                        : `This also deletes ${count} transaction${count === 1 ? '' : 's'} on this card, across all months. This cannot be undone.`,
-                  };
-                }}
-              >
-                <View style={styles.cardBlock}>
-                  <WalletCard
-                    card={c}
-                    total={cardTotals.get(c.id) ?? 0}
-                    currency={settings.currency}
-                    onPress={() => router.push(`/card/${c.id}`)}
-                  />
-                  {dueIn !== null && (
+        )}
+        {cards.map((c) => {
+          const dueIn = daysUntilDue(c.dueDay);
+          const dueSoon = dueIn !== null && dueIn <= 5;
+          const isCash = isCashCard(c.id);
+          return (
+            // Deleting a card no longer destroys its history — the transactions
+            // move to Cash. The count is still read at swipe time so the dialog
+            // says how much is moving, not a vague "and its transactions".
+            //
+            // Cash itself has no swipe: deleteCard refuses it anyway, and a
+            // delete gesture that quietly does nothing is worse than no gesture.
+            <SwipeToDelete
+              key={c.id}
+              enabled={!isCash}
+              onDelete={() => removeCard(c.id)}
+              accessibilityLabel={`Delete card ${c.name}`}
+              actionStyle={styles.deleteAction}
+              confirm={async () => {
+                const count = await countTransactionsForCard(c.id);
+                return {
+                  title: `Delete ${c.name}?`,
+                  message:
+                    count === 0
+                      ? 'This card has no transactions, so nothing else changes.'
+                      : `Its ${count} transaction${count === 1 ? '' : 's'}, across all months, move to Cash — nothing is deleted. Only the card is removed.`,
+                  confirmLabel: 'Delete card',
+                };
+              }}
+            >
+              <View style={styles.cardBlock}>
+                <WalletCard
+                  card={c}
+                  total={cardTotals.get(c.id) ?? 0}
+                  currency={settings.currency}
+                  onPress={() => router.push(`/card/${c.id}`)}
+                />
+                {isCash ? (
+                  <Text style={[styles.dueHint, { color: theme.tertiaryLabel }]}>
+                    Cash & anything without a card
+                  </Text>
+                ) : (
+                  dueIn !== null && (
                     <Text
                       style={[styles.dueHint, { color: dueSoon ? theme.negativeMuted : theme.tertiaryLabel }]}
                     >
                       {dueIn === 0 ? 'Due today' : `Due in ${dueIn} day${dueIn === 1 ? '' : 's'}`}
                     </Text>
-                  )}
-                </View>
-              </SwipeToDelete>
-            );
-          })
-        )}
+                  )
+                )}
+              </View>
+            </SwipeToDelete>
+          );
+        })}
       </ScrollView>
-      <AddCardModal visible={showAdd} onClose={() => setShowAdd(false)} onSave={addCard} usedCount={cards.length} />
+      <AddCardModal visible={showAdd} onClose={() => setShowAdd(false)} onSave={addCard} usedCount={realCards.length} />
     </SafeAreaView>
   );
 }

@@ -10,6 +10,45 @@ export type Card = {
   dueDay: number | null;
 };
 
+/**
+ * The seeded "Cash" card — the home for spending that belongs to no real card:
+ * cash, a card you never added, and the transactions rescued when a card is
+ * deleted (see deleteCard, which moves them here rather than destroying them).
+ *
+ * The id is a FIXED, well-known string rather than a uuid() on purpose. Every
+ * device seeds this row independently, and a random id would make it a different
+ * row per phone — which is exactly how this household ended up with duplicate
+ * cards and categories after a sync. Same precedent as `rec-<ruleId>-<postDate>`
+ * in features/recurring-transactions.ts: an id two devices derive rather than
+ * invent collapses into one record under the last-writer-wins upsert.
+ *
+ * That fixed id is ALSO the deletion guard (lib/queries.ts deleteCard). A
+ * `protected` flag column would not survive: the sync pull applies remote rows
+ * with `INSERT OR REPLACE INTO cards (<columns in the payload>)`, so a co-member
+ * on a build without the column pushes a payload without it and the whole row is
+ * replaced with the flag back at its default — the protection would silently
+ * evaporate on the next sync. A primary key can never be rewritten that way.
+ */
+export const CASH_CARD_ID = 'penny-cash-card';
+export const CASH_CARD_NAME = 'Cash';
+/** CATEGORY_PALETTE's green. Duplicated as a literal rather than imported so
+ * this module stays dependency-free — features/db-migrations.ts seeds the row
+ * and deliberately imports nothing that could pull it into a cycle. */
+export const CASH_CARD_COLOR = '#34C759';
+/**
+ * Deliberately far above any real card's sortOrder so Cash always sorts LAST.
+ * Cards are listed by sortOrder, and several screens default to `cards[0]` —
+ * sorting Cash first would silently make it the default card for new
+ * transactions and recurring bills. createCard's MAX(sortOrder) + 1 skips this
+ * row so a new real card doesn't inherit the gap.
+ */
+export const CASH_CARD_SORT_ORDER = 1_000_000;
+
+/** True for the seeded Cash row, which cannot be deleted or swiped away. */
+export function isCashCard(cardId: string): boolean {
+  return cardId === CASH_CARD_ID;
+}
+
 export type Category = {
   id: string;
   name: string;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
@@ -7,8 +7,9 @@ import { WalletCard } from '../../components/WalletCard';
 import { TransactionRow } from '../../components/TransactionRow';
 import { Surface } from '../../components/Surface';
 import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
-import { confirmAction, notify } from '../../lib/confirm';
-import { daysUntilDue } from '../../lib/queries';
+import { confirmAction } from '../../lib/confirm';
+import { countTransactionsForCard, daysUntilDue } from '../../lib/queries';
+import { isCashCard } from '../../lib/models';
 
 export default function CardDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -32,6 +33,7 @@ export default function CardDetailScreen() {
   const cardTransactions = transactions.filter((t) => t.cardId === card.id);
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const dueIn = daysUntilDue(card.dueDay);
+  const isCash = isCashCard(card.id);
 
   const parseDay = (text: string): number | null => {
     const n = parseInt(text, 10);
@@ -41,8 +43,15 @@ export default function CardDetailScreen() {
   const saveBillDay = () => editCard(card.id, { billDay: parseDay(billDayDraft) });
   const saveDueDay = () => editCard(card.id, { dueDay: parseDay(dueDayDraft) });
 
+  // Counted from the database, not from `cardTransactions` — that list is only
+  // the selected month, and the move covers every month the card ever had.
   const confirmDelete = async () => {
-    if (await confirmAction({ title: 'Delete card?', message: 'This permanently deletes the card and every transaction on it, across all months. This cannot be undone.', confirmLabel: 'Delete', destructive: true })) {
+    const count = await countTransactionsForCard(card.id);
+    const message =
+      count === 0
+        ? 'This card has no transactions, so nothing else changes.'
+        : `Its ${count} transaction${count === 1 ? '' : 's'}, across all months, move to Cash — nothing is deleted. Only the card is removed.`;
+    if (await confirmAction({ title: `Delete ${card.name}?`, message, confirmLabel: 'Delete card', destructive: true })) {
       await removeCard(card.id);
       router.back();
     }
@@ -120,9 +129,18 @@ export default function CardDetailScreen() {
         )}
       </Surface>
 
-      <Pressable style={[styles.deleteButton, { borderColor: theme.systemRed }]} onPress={confirmDelete}>
-        <Text style={{ color: theme.systemRed, fontWeight: '600' }}>Remove Card</Text>
-      </Pressable>
+      {/* Cash has no Remove button. deleteCard refuses the row regardless, so
+          showing a button that silently does nothing would only look broken. */}
+      {isCash ? (
+        <Text style={[styles.cashNote, { color: theme.tertiaryLabel }]}>
+          Cash holds spending that isn&apos;t on a card, and anything left behind when a card is
+          removed. It can&apos;t be deleted.
+        </Text>
+      ) : (
+        <Pressable style={[styles.deleteButton, { borderColor: theme.systemRed }]} onPress={confirmDelete}>
+          <Text style={{ color: theme.systemRed, fontWeight: '600' }}>Remove Card</Text>
+        </Pressable>
+      )}
     </KeyboardAwareScreen>
   );
 }
@@ -136,4 +154,5 @@ const styles = StyleSheet.create({
   billingLabel: { fontSize: 12, fontWeight: '600' },
   dueHint: { fontSize: 12, marginTop: 10, fontWeight: '600' },
   deleteButton: { borderWidth: 1.5, paddingVertical: 14, borderRadius: radius.md, alignItems: 'center' },
+  cashNote: { fontSize: 13, lineHeight: 18, textAlign: 'center', paddingHorizontal: spacing.md },
 });

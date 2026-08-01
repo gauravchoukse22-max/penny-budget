@@ -4,6 +4,12 @@ import { queueSyncMutation } from '../features/cloudkit-sync';
 // One-way edge: features/funds.ts owns every fund_entries write (and its
 // journaling) and imports nothing from here, so this cannot become a cycle.
 import { reconcileSavingsGoalEntries } from '../features/funds';
+import {
+  CASH_CARD_COLOR,
+  CASH_CARD_ID,
+  CASH_CARD_NAME,
+  CASH_CARD_SORT_ORDER,
+} from './models';
 import type {
   AppSettings,
   BudgetStatus,
@@ -82,7 +88,13 @@ export async function listCards(): Promise<Card[]> {
 
 export async function createCard(input: Omit<Card, 'id' | 'sortOrder' | 'billDay' | 'dueDay'> & Partial<Pick<Card, 'billDay' | 'dueDay'>>): Promise<Card> {
   const db = await getDb();
-  const maxRow = await db.getFirstAsync<{ maxOrder: number | null }>('SELECT MAX(sortOrder) as maxOrder FROM cards');
+  // Excludes Cash, whose sortOrder is a huge sentinel that pins it to the end of
+  // the list. Counting it here would hand the next real card sortOrder 1000001
+  // and push every new card past Cash instead of before it.
+  const maxRow = await db.getFirstAsync<{ maxOrder: number | null }>(
+    'SELECT MAX(sortOrder) as maxOrder FROM cards WHERE id != ?',
+    [CASH_CARD_ID]
+  );
   const sortOrder = (maxRow?.maxOrder ?? -1) + 1;
   const card: Card = { id: uuid(), sortOrder, billDay: null, dueDay: null, ...input };
   await db.runAsync('INSERT INTO cards (id, name, lastFour, color, sortOrder, billDay, dueDay) VALUES (?, ?, ?, ?, ?, ?, ?)', [
@@ -133,25 +145,102 @@ export function daysUntilDue(dueDay: number | null, today = new Date()): number 
   return Math.round((candidate.getTime() - startOfToday.getTime()) / 86400000);
 }
 
-export async function deleteCard(id: string): Promise<void> {
+/**
+ * Guarantees the Cash card exists, and tells the household about it.
+ *
+ * features/db-migrations.ts seeds this row on every install, so normally this is
+ * a single SELECT that finds it. It is called anyway at the moment something is
+ * about to be moved onto Cash: moving transactions onto a card that isn't there
+ * would recreate the dangling-cardId problem this whole mechanism exists to
+ * prevent, and it would do it while the user was being told nothing was lost.
+ *
+ * Unlike the migration's seed this DOES journal, because it can — sync is live
+ * by the time a user deletes a card. That also hands the Cash row to a household
+ * member whose build predates the migration, so the reassigned transactions
+ * arriving right behind it have somewhere to land.
+ *
+ * Not a launch-time repair: it only ever runs on the path that needs it, so a
+ * Cash row deliberately removed through sync is not resurrected on every start.
+ */
+export async function ensureCashCard(): Promise<Card> {
   const db = await getDb();
-  // Every transaction requires a card (cardId is NOT NULL) and FK enforcement
-  // is off, so a bare card delete would orphan its transactions with a dangling
-  // cardId. Delete them together instead — deterministic and matches the
-  // confirmation the user sees.
-  const orphaned = await db.getAllAsync<{ id: string }>('SELECT id FROM transactions WHERE cardId = ?', [id]);
-  await db.runAsync('DELETE FROM transactions WHERE cardId = ?', [id]);
+  const existing = await db.getFirstAsync<Card>('SELECT * FROM cards WHERE id = ?', [CASH_CARD_ID]);
+  if (existing) return existing;
+
+  const card: Card = {
+    id: CASH_CARD_ID,
+    name: CASH_CARD_NAME,
+    lastFour: '',
+    color: CASH_CARD_COLOR,
+    sortOrder: CASH_CARD_SORT_ORDER,
+    billDay: null,
+    dueDay: null,
+  };
+  await db.runAsync(
+    'INSERT OR IGNORE INTO cards (id, name, lastFour, color, sortOrder, billDay, dueDay) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [card.id, card.name, card.lastFour, card.color, card.sortOrder, card.billDay, card.dueDay]
+  );
+  await queueSyncMutation('CREATE', 'cards', card.id, card);
+  return card;
+}
+
+/**
+ * Journals every named row of `table` as an UPDATE, reading the rows back so the
+ * payload is what actually landed rather than what the caller intended.
+ *
+ * Chunked because SQLite caps bound parameters (999 on older builds) and a card
+ * that has been in use for a couple of years can easily hold more transactions
+ * than that — the one case where losing the journal would matter most.
+ */
+async function journalRowsAsUpdates(table: string, ids: string[]): Promise<void> {
+  const db = await getDb();
+  for (let i = 0; i < ids.length; i += 400) {
+    const chunk = ids.slice(i, i + 400);
+    const rows = await db.getAllAsync<Record<string, unknown>>(
+      `SELECT * FROM ${table} WHERE id IN (${chunk.map(() => '?').join(', ')})`,
+      chunk
+    );
+    for (const row of rows) await queueSyncMutation('UPDATE', table, row.id as string, row);
+  }
+}
+
+export async function deleteCard(id: string): Promise<void> {
+  // Cash is not deletable. The guard lives in the write layer, not in the
+  // screens, so no present or future caller can destroy the row every
+  // transaction falls back to — see CASH_CARD_ID in lib/models.ts for why the id
+  // itself is the guard rather than a `protected` column.
+  if (id === CASH_CARD_ID) return;
+
+  const db = await getDb();
+  // Deleting a card used to delete its transactions too, because cardId is NOT
+  // NULL and there was nowhere else to put them. That silently destroyed months
+  // of history on a mis-swipe. They move to Cash instead: the spend was real
+  // whatever plastic it was on, and the card is the only thing being removed.
+  await ensureCashCard();
+  const movedTransactions = await db.getAllAsync<{ id: string }>('SELECT id FROM transactions WHERE cardId = ?', [id]);
+  // Recurring rules carry a cardId too, and FK cascades never fire here (foreign
+  // keys are off), so leaving them behind would post a new transaction onto a
+  // card that no longer exists every month, forever.
+  const movedRecurring = await db.getAllAsync<{ id: string }>('SELECT id FROM recurring_transactions WHERE cardId = ?', [id]);
+
+  await db.runAsync('UPDATE transactions SET cardId = ? WHERE cardId = ?', [CASH_CARD_ID, id]);
+  await db.runAsync('UPDATE recurring_transactions SET cardId = ? WHERE cardId = ?', [CASH_CARD_ID, id]);
   await db.runAsync('DELETE FROM cards WHERE id = ?', [id]);
-  for (const t of orphaned) await queueSyncMutation('DELETE', 'transactions', t.id, { id: t.id });
+
+  // Every moved row needs its own UPDATE in the outbox. The card's DELETE alone
+  // would reach the other member and leave THEIR copy of these transactions
+  // pointing at a card neither device still has.
+  await journalRowsAsUpdates('transactions', movedTransactions.map((t) => t.id));
+  await journalRowsAsUpdates('recurring_transactions', movedRecurring.map((r) => r.id));
   await queueSyncMutation('DELETE', 'cards', id, { id });
 }
 
 /**
- * How many transactions deleteCard would take with it.
+ * How many transactions deleteCard would move onto Cash.
  *
  * Counted straight from the database rather than from the loaded month, because
- * deleteCard reaches across every month — a warning built from the visible
- * month would understate the loss on exactly the cards that matter most.
+ * deleteCard reaches across every month — a figure built from the visible month
+ * would understate the change on exactly the cards that matter most.
  */
 export async function countTransactionsForCard(cardId: string): Promise<number> {
   const db = await getDb();
@@ -208,13 +297,7 @@ export async function deleteCategory(id: string): Promise<void> {
   const orphaned = await db.getAllAsync<{ id: string }>('SELECT id FROM transactions WHERE categoryId = ?', [id]);
   await db.runAsync('UPDATE transactions SET categoryId = NULL WHERE categoryId = ?', [id]);
   await db.runAsync('DELETE FROM categories WHERE id = ?', [id]);
-  if (orphaned.length > 0) {
-    const affected = await db.getAllAsync<Transaction>(
-      `SELECT * FROM transactions WHERE id IN (${orphaned.map(() => '?').join(', ')})`,
-      orphaned.map((o) => o.id)
-    );
-    for (const t of affected) await queueSyncMutation('UPDATE', 'transactions', t.id, t);
-  }
+  await journalRowsAsUpdates('transactions', orphaned.map((o) => o.id));
   await queueSyncMutation('DELETE', 'categories', id, { id });
 }
 

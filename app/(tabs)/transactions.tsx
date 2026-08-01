@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, SectionList, ScrollView, Pressable, TextInput, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, SectionList, ScrollView, Pressable, TextInput, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,8 +10,19 @@ import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { formatDayLabel } from '../../lib/format';
 import { bulkUpdateCategory, bulkUpdateCard, bulkDeleteTransactions } from '../../features/bulk-actions';
-import { confirmAction, notify } from '../../lib/confirm';
-import type { Transaction } from '../../lib/models';
+import { confirmAction } from '../../lib/confirm';
+import type { Category, Transaction } from '../../lib/models';
+
+/**
+ * The category filter has three states, not two: every category, one category,
+ * or the transactions that have NO category at all. That third state is real
+ * data — deleteCategory nulls categoryId rather than deleting the rows — and
+ * this screen previously had no way to reach it, so those transactions could
+ * only be found from the separate Search screen.
+ */
+type CategoryFilter = { kind: 'all' } | { kind: 'uncategorized' } | { kind: 'one'; id: string };
+
+const ALL_CATEGORIES: CategoryFilter = { kind: 'all' };
 
 export default function TransactionsScreen() {
   const theme = useTheme();
@@ -20,7 +31,8 @@ export default function TransactionsScreen() {
 
   const [search, setSearch] = useState('');
   const [cardFilter, setCardFilter] = useState<string | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>(ALL_CATEGORIES);
+  const [showFilters, setShowFilters] = useState(false);
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -71,10 +83,29 @@ export default function TransactionsScreen() {
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const cardById = new Map(cards.map((c) => [c.id, c]));
 
+  const filtersActive = cardFilter !== null || categoryFilter.kind !== 'all';
+  const clearFilters = () => {
+    setCardFilter(null);
+    setCategoryFilter(ALL_CATEGORIES);
+  };
+
+  // What the collapsed bar says the list is currently showing. Always names both
+  // halves, so "All cards · Dining" makes it obvious which one is narrowing the
+  // list — the old chip rows showed that by highlighting, and the whole point of
+  // collapsing them is that they are no longer on screen.
+  const cardFilterLabel = cardFilter ? cardById.get(cardFilter)?.name ?? 'Card' : 'All cards';
+  const categoryFilterLabel =
+    categoryFilter.kind === 'all'
+      ? 'All categories'
+      : categoryFilter.kind === 'uncategorized'
+        ? 'Uncategorized'
+        : categoryById.get(categoryFilter.id)?.name ?? 'Category';
+
   const filtered = useMemo(() => {
     return transactions.filter((t) => {
       if (cardFilter && t.cardId !== cardFilter) return false;
-      if (categoryFilter && t.categoryId !== categoryFilter) return false;
+      if (categoryFilter.kind === 'uncategorized' && t.categoryId !== null) return false;
+      if (categoryFilter.kind === 'one' && t.categoryId !== categoryFilter.id) return false;
       if (search.trim()) {
         const q = search.trim().toLowerCase();
         const noteMatch = (t.note ?? '').toLowerCase().includes(q);
@@ -142,23 +173,47 @@ export default function TransactionsScreen() {
         />
       </View>
 
-      <View style={styles.filterRow}>
-        <FilterChip label="All Cards" active={!cardFilter} onPress={() => setCardFilter(null)} />
-        {cards.map((c) => (
-          <FilterChip key={c.id} label={c.name} active={cardFilter === c.id} onPress={() => setCardFilter(c.id)} color={c.color} />
-        ))}
-      </View>
-      <View style={styles.filterRow}>
-        <FilterChip label="All Categories" active={!categoryFilter} onPress={() => setCategoryFilter(null)} />
-        {categories.map((c) => (
-          <FilterChip
-            key={c.id}
-            label={c.name}
-            active={categoryFilter === c.id}
-            onPress={() => setCategoryFilter(c.id)}
-            color={c.color}
+      {/* One collapsed row instead of two wrapping chip rows. With 9 cards and
+          12 categories those rows ran ~7 lines deep and pushed the list most of
+          the way down the screen — the user saw filters, not transactions. */}
+      <View style={styles.filterBarRow}>
+        <Pressable
+          onPress={() => setShowFilters(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Filters: ${cardFilterLabel}, ${categoryFilterLabel}. Tap to change.`}
+          style={[
+            styles.filterBar,
+            {
+              backgroundColor: filtersActive ? theme.accentTint : theme.fieldBackground,
+              borderColor: filtersActive ? theme.accent : 'transparent',
+            },
+          ]}
+        >
+          <Ionicons
+            name="funnel"
+            size={13}
+            color={filtersActive ? theme.accent : theme.secondaryLabel}
           />
-        ))}
+          <Text
+            style={[styles.filterBarText, { color: filtersActive ? theme.accent : theme.secondaryLabel }]}
+            numberOfLines={1}
+          >
+            {cardFilterLabel} · {categoryFilterLabel}
+          </Text>
+          <Ionicons
+            name="chevron-down"
+            size={14}
+            color={filtersActive ? theme.accent : theme.tertiaryLabel}
+          />
+        </Pressable>
+        {/* Only rendered while something is actually filtered, so "Clear" is
+            never a dead control — and when it IS there it sits outside the
+            sheet, one tap from the list. */}
+        {filtersActive && (
+          <Pressable onPress={clearFilters} hitSlop={8} accessibilityRole="button" style={styles.clearButton}>
+            <Text style={[styles.clearText, { color: theme.accent }]}>Clear</Text>
+          </Pressable>
+        )}
       </View>
 
       <SectionList
@@ -203,7 +258,19 @@ export default function TransactionsScreen() {
           );
         }}
         ListEmptyComponent={
-          <Text style={{ color: theme.tertiaryLabel, textAlign: 'center', marginTop: 40 }}>No transactions found</Text>
+          // With the filters collapsed into a bar, an empty list is much easier
+          // to misread as "I have no transactions". Say which it is, and put the
+          // way out right here.
+          <View style={styles.emptyState}>
+            <Text style={{ color: theme.tertiaryLabel, textAlign: 'center' }}>
+              {filtersActive || search.trim() ? 'No transactions match these filters' : 'No transactions yet'}
+            </Text>
+            {filtersActive && (
+              <Pressable onPress={clearFilters} hitSlop={8} accessibilityRole="button">
+                <Text style={[styles.clearText, { color: theme.accent }]}>Clear filters</Text>
+              </Pressable>
+            )}
+          </View>
         }
       />
 
@@ -240,31 +307,112 @@ export default function TransactionsScreen() {
           </Pressable>
         </View>
       </Modal>
+
+      {/* The filters themselves. Every option the old chip rows had is here,
+          plus Uncategorized — nothing was dropped, it just stopped being
+          permanently on screen. Selections apply live rather than on a Done
+          button, so the bar behind the sheet updates as you tap and the choice
+          is confirmed by what you see, not by a second action. */}
+      <Modal
+        visible={showFilters}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowFilters(false)}
+      >
+        <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
+          <View style={styles.sheetHeader}>
+            <Text style={[type.title2, { color: theme.label }]}>Filter</Text>
+            {filtersActive && (
+              <Pressable onPress={clearFilters} hitSlop={8} accessibilityRole="button">
+                <Text style={[styles.clearText, { color: theme.accent }]}>Clear all</Text>
+              </Pressable>
+            )}
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <Text style={[styles.sheetSection, { color: theme.secondaryLabel }]}>CARD</Text>
+            <OptionRow
+              label="All cards"
+              selected={cardFilter === null}
+              onPress={() => setCardFilter(null)}
+              leading={<Ionicons name="albums-outline" size={18} color={theme.secondaryLabel} />}
+            />
+            {cards.map((c) => (
+              <OptionRow
+                key={c.id}
+                label={c.name}
+                selected={cardFilter === c.id}
+                onPress={() => setCardFilter(c.id)}
+                leading={<View style={[styles.cardDot, { backgroundColor: c.color }]} />}
+              />
+            ))}
+
+            <Text style={[styles.sheetSection, { color: theme.secondaryLabel, marginTop: spacing.lg }]}>CATEGORY</Text>
+            <OptionRow
+              label="All categories"
+              selected={categoryFilter.kind === 'all'}
+              onPress={() => setCategoryFilter(ALL_CATEGORIES)}
+              leading={<Ionicons name="apps-outline" size={18} color={theme.secondaryLabel} />}
+            />
+            <OptionRow
+              label="Uncategorized"
+              selected={categoryFilter.kind === 'uncategorized'}
+              onPress={() => setCategoryFilter({ kind: 'uncategorized' })}
+              leading={<Ionicons name="help-circle-outline" size={18} color={theme.secondaryLabel} />}
+            />
+            {categories.map((c: Category) => (
+              <OptionRow
+                key={c.id}
+                label={c.name}
+                selected={categoryFilter.kind === 'one' && categoryFilter.id === c.id}
+                onPress={() => setCategoryFilter({ kind: 'one', id: c.id })}
+                leading={<CategoryIcon icon={c.icon} color={c.color} size={18} />}
+              />
+            ))}
+          </ScrollView>
+          <Pressable
+            style={[styles.modalCancel, { backgroundColor: theme.accent, borderColor: 'transparent' }]}
+            onPress={() => setShowFilters(false)}
+          >
+            <Text style={{ color: theme.onAccent, fontWeight: '600' }}>
+              Show {filtered.length} transaction{filtered.length === 1 ? '' : 's'}
+            </Text>
+          </Pressable>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-function FilterChip({
+/** One selectable line in the filter sheet — a full-width tap target with the
+ * selection shown as a checkmark, so it reads the same for cards, categories
+ * and the "all" rows without needing a different chip color per option. */
+function OptionRow({
   label,
-  active,
+  selected,
   onPress,
-  color,
+  leading,
 }: {
   label: string;
-  active: boolean;
+  selected: boolean;
   onPress: () => void;
-  color?: string;
+  leading: React.ReactNode;
 }) {
   const theme = useTheme();
-  const activeColor = color ?? theme.accent;
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.chip, { backgroundColor: active ? activeColor : theme.fieldBackground }]}
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      style={({ pressed }) => [styles.optionRow, { opacity: pressed ? 0.6 : 1 }]}
     >
-      <Text style={[styles.chipText, { color: active ? '#FFFFFF' : theme.secondaryLabel }]} numberOfLines={1}>
+      <View style={styles.optionLeading}>{leading}</View>
+      <Text
+        style={[styles.optionLabel, { color: theme.label, fontWeight: selected ? '700' : '400' }]}
+        numberOfLines={1}
+      >
         {label}
       </Text>
+      {selected && <Ionicons name="checkmark" size={19} color={theme.accent} />}
     </Pressable>
   );
 }
@@ -289,24 +437,46 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   searchInput: { flex: 1, fontSize: 15 },
-  filterRow: {
+  filterBarRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
+    alignItems: 'center',
+    gap: spacing.md,
     paddingHorizontal: spacing.lg,
     marginTop: spacing.sm,
   },
-  chip: {
+  // Sized so the whole filter control is one ~32pt line. The two wrapping chip
+  // rows it replaces ran roughly 200pt on this user's data.
+  filterBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: spacing.md,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: radius.md,
+    borderWidth: 1,
   },
-  chipText: { fontSize: 12, fontWeight: '600' },
+  filterBarText: { flex: 1, fontSize: 13, fontWeight: '600' },
+  clearButton: { paddingVertical: 4 },
+  clearText: { fontSize: 13, fontWeight: '600' },
   listContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 40 },
   sectionHeader: { fontSize: 13, fontWeight: '600', paddingVertical: 6 },
   deleteAction: { marginVertical: 4 },
+  emptyState: { alignItems: 'center', gap: spacing.md, marginTop: 40 },
   selectActions: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center' },
   modalContent: { flex: 1, padding: spacing.xl, paddingTop: 40 },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+  },
+  sheetSection: { fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: spacing.xs },
+  // 44pt tall including padding — Apple's minimum tap target, and the reason
+  // these are rows rather than the denser chips they replace.
+  optionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  optionLeading: { width: 20, alignItems: 'center' },
+  optionLabel: { flex: 1, fontSize: 16 },
   pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
   cardDot: { width: 18, height: 18, borderRadius: 9 },
   modalCancel: { paddingVertical: 14, borderRadius: radius.md, alignItems: 'center', borderWidth: 1, marginTop: spacing.md },
