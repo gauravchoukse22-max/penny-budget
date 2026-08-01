@@ -343,6 +343,34 @@ export default function BudgetScreen() {
             </Pressable>
           </View>
         </Surface>
+
+        {/* Funds — savings buckets by account. Sits under Budget, next to the
+            savings goals it receives contributions from, rather than in
+            Insights: putting money aside is budgeting, not review. */}
+        <Pressable onPress={() => router.push('/funds')} accessibilityRole="button" accessibilityLabel="Funds">
+          <Surface>
+            <View style={styles.fundsRow}>
+              <View style={[styles.fundsIcon, { backgroundColor: theme.accentTint }]}>
+                <Ionicons name="grid-outline" size={18} color={theme.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sectionTitle, { color: theme.label, marginBottom: 0 }]}>Funds</Text>
+                <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }}>
+                  {funds.length === 0 ? 'Track savings by fund and account' : 'Saved across all funds'}
+                </Text>
+              </View>
+              {funds.length > 0 && (
+                <AmountText
+                  amount={fundEntries.reduce((sum, e) => sum + e.amount, 0)}
+                  currency={settings.currency}
+                  size={17}
+                  weight="semibold"
+                />
+              )}
+              <Ionicons name="chevron-forward" size={16} color={theme.tertiaryLabel} />
+            </View>
+          </Surface>
+        </Pressable>
       </ScrollView>
 
       <NumberEditorSheet
@@ -639,6 +667,8 @@ function AddCategoryModal({
 }
 
 const styles = StyleSheet.create({
+  fundsRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  fundsIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   container: { flex: 1 },
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 60 },
   sectionTitle: { fontSize: 17, fontWeight: '700', marginBottom: 10 },

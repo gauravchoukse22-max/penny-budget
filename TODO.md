@@ -13,18 +13,10 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 
 - [ ] **Upload the current build to TestFlight.** Xcode Organizer → Distribute App
       → App Store Connect → Upload. Needs his Apple ID, so it can never be automated.
-- [ ] **Re-save salary** (Budget → Salary → retype → save) so it propagates to
-      Disha. The shared salary only pushes when someone edits it, so until one of
-      them re-saves, each phone still divides by its own figure and the two
-      "left to spend" numbers disagree.
-- [ ] **Restore the two deleted cards** — SQL was provided; updates the tombstoned
-      `household_records` rows back to `deleted = false` with their payloads.
 - [ ] **Android: run the 14-day closed test** with ~12 testers, then apply for
       production access. Google gates production on this for personal accounts.
 - [ ] **Play listing**: Data safety, content rating, store listing copy and
       graphics. Drafts are in `~/Developer/penny-budget-builds/`.
-- [ ] **Send the full spreadsheet and Disha's month-end routine** — the remaining
-      unknowns for making Funds genuinely replace her sheet rather than duplicate it.
 
 ## Claude
 

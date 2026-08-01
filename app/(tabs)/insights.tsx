@@ -112,29 +112,6 @@ export default function InsightsScreen() {
           />
         ))}
 
-        {/* Funds — savings buckets by account. Lives here rather than in a
-            seventh tab: it answers "how much have we put aside", which is the
-            question this screen is already for. */}
-        <Pressable onPress={() => router.push('/funds')}>
-          <Surface>
-            <View style={styles.fundsRow}>
-              <View style={[styles.fundsIcon, { backgroundColor: theme.accentTint }]}>
-                <Ionicons name="grid-outline" size={18} color={theme.accent} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.fundsTitle, { color: theme.label }]}>Funds</Text>
-                <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }}>
-                  {fundsTotal === null ? 'Track savings by fund and account' : 'Saved across all funds'}
-                </Text>
-              </View>
-              {fundsTotal !== null && (
-                <AmountText amount={fundsTotal} currency={settings.currency} size={17} weight="semibold" />
-              )}
-              <Ionicons name="chevron-forward" size={16} color={theme.tertiaryLabel} />
-            </View>
-          </Surface>
-        </Pressable>
-
         {!hasAnyData && (
           <Surface>
             <View style={styles.emptyState}>
@@ -178,21 +155,6 @@ export default function InsightsScreen() {
                 {savingsRate === null ? '—' : `${savingsRate}%`}
               </Text>
             </StatCell>
-          </View>
-        </Surface>
-
-        {/* Spend trend */}
-        <Surface>
-          <SectionLabel title="Spend Trend" right="6 Months" />
-          <View style={{ marginTop: spacing.sm }}>
-            <LineChart points={trend.map((t) => ({ yearMonth: t.yearMonth, value: t.totalSpend }))} color={theme.label} />
-          </View>
-          <View style={[styles.trendFooter, { borderTopColor: theme.separator }]}>
-            <View>
-              <Text style={[styles.microLabel, { color: theme.tertiaryLabel }]}>6-MO AVG</Text>
-              <AmountText amount={trendAvg} currency={settings.currency} size={15} weight="semibold" color={theme.secondaryLabel} />
-            </View>
-            {trendDeltaPct !== null && <DeltaTag pct={trendDeltaPct} theme={theme} label="vs avg" />}
           </View>
         </Surface>
 
