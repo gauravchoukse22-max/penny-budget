@@ -21,6 +21,8 @@ import {
   myHouseholds,
 } from '../features/household';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { subscribeToHousehold } from '../features/household-live';
+import { useAuth } from './AuthContext';
 import type {
   AppSettings,
   Card,
@@ -90,6 +92,7 @@ const BudgetContext = createContext<BudgetContextValue | null>(null);
 const emptySurplus = { salary: 0, spend: 0, savings: 0, surplus: 0 };
 
 export function BudgetProvider({ children }: { children: React.ReactNode }) {
+  const { session } = useAuth();
   const [ready, setReady] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(currentYearMonth());
 
@@ -144,27 +147,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       await seedDefaultCategoriesIfEmpty();
       await addPostLaunchCategoriesIfMissing();
       await seedDefaultSavingsGoalsIfEmpty();
-      const initialSettings = await q.getAppSettings();
-      // Family sharing: if this device co-edits a household AND the user is
-      // signed in, register the Supabase adapter and enable outbox journaling.
-      // Otherwise stay local-only (mock adapter, no journaling).
-      let householdActive = false;
-      if (initialSettings.householdId && isSupabaseConfigured) {
-        const { data } = await supabase.auth.getSession();
-        if (data.session) {
-          activateHousehold(initialSettings.householdId);
-          householdActive = true;
-        }
-      }
-      if (!householdActive) setSyncEnabled(false);
+      // Sharing is NOT wired up here. Activation depends on the auth session,
+      // which restores asynchronously — sampling it once at boot meant a device
+      // that signed in a moment later stayed local-only for the whole session,
+      // silently not even journaling its writes. The effect below owns it and
+      // re-runs whenever the session or the household changes.
+      setSyncEnabled(false);
       // Auto-post any recurring bills that have come due since the last launch.
       await processRecurringTransactions();
       await refresh();
       setReady(true);
-      // Pull the shared budget on launch when sharing is active.
-      if (householdActive && getCloudKitAdapter().isAvailable) {
-        runCloudKitSyncCycle().then(() => refresh());
-      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -258,6 +250,33 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     return { success: true, message: 'Device sync is off. Your budget stays on this device.' };
   }, [updateSettings, refresh]);
 
+  // Sharing is a function of (signed-in session × chosen household), so it is
+  // derived from that state rather than switched on once at launch. Whenever
+  // either changes — session restores, user signs in or out, household joined
+  // or left — this re-runs and puts the sync engine in the matching state.
+  useEffect(() => {
+    if (!ready) return;
+    const householdId = settings.householdId;
+    if (householdId && session && isSupabaseConfigured) {
+      activateHousehold(householdId);
+      runCloudKitSyncCycle().then(() => refresh());
+    } else {
+      // No session (or local-only): stop journaling so writes aren't queued
+      // against a household this device can no longer prove membership of.
+      deactivateHousehold();
+    }
+  }, [ready, settings.householdId, session?.user?.id, refresh]);
+
+  // Live updates: a co-editor's write should land here in about a round-trip,
+  // not whenever the next poll happens to fire.
+  useEffect(() => {
+    if (!ready || !settings.householdId || !session) return;
+    const sub = subscribeToHousehold(settings.householdId, () => {
+      syncNow();
+    });
+    return () => sub.unsubscribe();
+  }, [ready, settings.householdId, session?.user?.id, syncNow]);
+
   // Pull shared changes when the app returns to the foreground.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
@@ -266,8 +285,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     return () => sub.remove();
   }, [syncNow]);
 
-  // Near-live sync: while the app is open and sharing is on, poll every 30s so a
-  // co-editor's changes appear on their own, without reopening the app.
+  // Safety net behind Realtime: a dropped socket, a backgrounded app or a
+  // paused project would otherwise strand this device silently. Redundant with
+  // a live event, which is fine — the change token makes an extra pull a no-op.
   useEffect(() => {
     if (!settings.householdId) return;
     const id = setInterval(() => {
