@@ -16,6 +16,20 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-08-01-sharing-one-screen',
+    version: '1.2.0',
+    date: 'August 2026',
+    title: 'One place that decides who sees your budget',
+    changes: [
+      'Sync and sharing used to be two separate controls that did not know about each other: the Settings switch quietly started a private budget, while Family Sharing joined someone else\'s. Two phones could both report that sharing was on and still show different numbers. They are now one screen — Settings → Sharing.',
+      'The Sharing screen always names the budget this device is using and lists everyone who can see it, so you never have to guess whether the other person is connected.',
+      'With sharing off you pick between "Just my devices" and "Share with someone", each stating what it will do before you tap.',
+      'Turning sync on can no longer create a second budget behind your back. If this account already belongs to one it uses that one, and if it belongs to several it asks which.',
+      'Joining with an invite code now says that it leaves your current shared budget first, and actually leaves it instead of leaving you in both.',
+      'Already syncing on your own and want to share with someone? Send them an invite code from the same screen — no need to turn sharing off and start over.',
+    ],
+  },
+  {
     id: '2026-07-18-device-sync-toggle',
     version: '1.0.1',
     date: 'July 2026',

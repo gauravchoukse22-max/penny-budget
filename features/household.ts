@@ -166,11 +166,26 @@ export async function createInvite(householdId: string): Promise<Result<string>>
   return { success: true, message: 'Invite created.', data: data as string };
 }
 
-export async function myHouseholds(): Promise<Household[]> {
-  if (!isSupabaseConfigured) return [];
+/** Households this account belongs to, reporting failure instead of hiding it.
+ *
+ * This deliberately does NOT return a bare array: an empty list and an
+ * unreachable server look identical that way, and treating the second as the
+ * first — "you have no households, so I'll make one" — is precisely how one
+ * account ended up owning several parallel budgets. */
+export async function myHouseholdsResult(): Promise<Result<Household[]>> {
+  if (!isSupabaseConfigured) return NOT_CONFIGURED;
   const { data, error } = await supabase.rpc('my_households');
-  if (error || !data) return [];
-  return (data as any[]).map((h) => ({ id: h.id, name: h.name, role: h.role, memberCount: Number(h.member_count) }));
+  if (error) return { success: false, message: error.message };
+  return {
+    success: true,
+    message: 'OK',
+    data: ((data as any[]) ?? []).map((h) => ({
+      id: h.id,
+      name: h.name,
+      role: h.role,
+      memberCount: Number(h.member_count),
+    })),
+  };
 }
 
 export async function listMembers(householdId: string): Promise<HouseholdMember[]> {

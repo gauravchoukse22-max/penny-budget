@@ -18,7 +18,7 @@ import {
   joinHousehold as joinHouseholdRpc,
   leaveHousehold as leaveHouseholdRpc,
   seedHouseholdFromLocal,
-  myHouseholds,
+  myHouseholdsResult,
 } from '../features/household';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { subscribeToHousehold } from '../features/household-live';
@@ -78,16 +78,27 @@ type BudgetContextValue = {
 
   setSalaryForSelectedMonth: (amount: number) => Promise<void>;
 
-  // Family sharing
+  // Sharing. "Just my devices" and "share with someone" are the same mechanism —
+  // one household — so every entry point funnels through these, and each one
+  // refuses transitions that would silently put this device on a second budget.
   syncNow: () => Promise<void>;
-  createHousehold: (name?: string) => Promise<{ success: boolean; message: string }>;
-  enableDeviceSync: () => Promise<{ success: boolean; message: string }>;
-  disableDeviceSync: () => Promise<{ success: boolean; message: string }>;
-  joinHousehold: (code: string) => Promise<{ success: boolean; message: string }>;
-  leaveHousehold: () => Promise<{ success: boolean; message: string }>;
+  createHousehold: (name?: string, opts?: { evenIfAlreadyAMember?: boolean }) => Promise<SharingResult>;
+  joinHousehold: (code: string) => Promise<SharingResult>;
+  connectToHousehold: (householdId: string) => Promise<SharingResult>;
+  startDeviceSync: () => Promise<SharingResult>;
+  pauseSharing: () => Promise<SharingResult>;
+  leaveHousehold: () => Promise<SharingResult>;
 };
 
+export type SharingResult = { success: boolean; message: string };
+
 const BudgetContext = createContext<BudgetContextValue | null>(null);
+
+// Refusing to act beats acting on a guess: an unreachable server and "you are in
+// no households" look identical, and acting on the guess is what created the
+// duplicate households in the first place.
+const COULD_NOT_CHECK =
+  "Couldn't check which shared budgets this account belongs to, so nothing changed. Check your connection and try again.";
 
 const emptySurplus = { salary: 0, spend: 0, savings: 0, surplus: 0 };
 
@@ -178,7 +189,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     [refresh]
   );
 
-  // ── Family sharing ────────────────────────────────────────────────────────
+  // ── Sharing ───────────────────────────────────────────────────────────────
+  // A household IS the shared budget. "Just my devices" and "share with my
+  // wife" differ only in who else is a member, so both must go through the same
+  // guarded transitions below. The bug these guards close: two screens each
+  // created a household without checking, leaving one account in five of them
+  // with no screen ever saying which one this device was actually on.
   const syncNow = useCallback(async () => {
     if (getActiveHouseholdId() && getCloudKitAdapter().isAvailable) {
       await runCloudKitSyncCycle();
@@ -188,7 +204,28 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   // Create a household seeded from this device's current budget, then co-edit it.
   const createAndJoinHousehold = useCallback(
-    async (name?: string): Promise<{ success: boolean; message: string }> => {
+    async (name?: string, opts?: { evenIfAlreadyAMember?: boolean }): Promise<SharingResult> => {
+      // Creating while this device is already on a shared budget forks it: the
+      // other person keeps editing the old household and neither side is told.
+      if (settings.householdId) {
+        return {
+          success: false,
+          message: 'This device is already on a shared budget. Invite the other person into it, or turn sharing off first.',
+        };
+      }
+      // Even with sharing off locally, this account may still be a member of a
+      // household holding the real budget. Creating another one is only allowed
+      // once the caller has shown the user that list and they chose anyway.
+      if (!opts?.evenIfAlreadyAMember) {
+        const mine = await myHouseholdsResult();
+        if (!mine.success) return { success: false, message: COULD_NOT_CHECK };
+        if ((mine.data?.length ?? 0) > 0) {
+          return {
+            success: false,
+            message: 'This account already belongs to a shared budget. Use that one, or confirm that you want a separate second budget.',
+          };
+        }
+      }
       const res = await createHouseholdRpc(name);
       if (!res.success || !res.data) return res;
       await seedHouseholdFromLocal(res.data);
@@ -196,58 +233,100 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       await updateSettings({ householdId: res.data });
       await runCloudKitSyncCycle();
       await refresh();
-      return { success: true, message: res.message };
+      return { success: true, message: 'Shared budget created. Send an invite code to bring someone into it.' };
     },
-    [refresh, updateSettings]
+    [settings.householdId, refresh, updateSettings]
   );
 
   // Join an existing household by invite code and pull its shared budget.
   const joinExistingHousehold = useCallback(
-    async (code: string): Promise<{ success: boolean; message: string }> => {
+    async (code: string): Promise<SharingResult> => {
+      const previous = settings.householdId;
       const res = await joinHouseholdRpc(code);
       if (!res.success || !res.data) return res;
+      if (previous === res.data) {
+        return { success: true, message: 'This device was already on that shared budget.' };
+      }
+      // Drop the previous membership. Leaving it in place is what let one
+      // account accumulate households, any of which a later "turn sync on"
+      // could pick up instead of the one holding the real budget. Ordered after
+      // the join so a bad code never costs the household you were in.
+      if (previous) await leaveHouseholdRpc(previous);
       activateHousehold(res.data);
       await updateSettings({ householdId: res.data });
       await runCloudKitSyncCycle();
       await refresh();
-      return { success: true, message: res.message };
+      return {
+        success: true,
+        message: previous
+          ? 'Joined. This device left the shared budget it was on before.'
+          : 'Joined. You now edit one budget together.',
+      };
     },
-    [refresh, updateSettings]
+    [settings.householdId, refresh, updateSettings]
   );
 
-  const leaveCurrentHousehold = useCallback(async (): Promise<{ success: boolean; message: string }> => {
+  // Point this device at a household the account is ALREADY a member of — the
+  // second-device and resume-after-pause path. Never creates, never joins.
+  const connectToHousehold = useCallback(
+    async (householdId: string): Promise<SharingResult> => {
+      if (settings.householdId === householdId) return { success: true, message: 'This device already uses that shared budget.' };
+      if (settings.householdId) {
+        return { success: false, message: 'Turn sharing off on this device first, then choose the other shared budget.' };
+      }
+      const mine = await myHouseholdsResult();
+      if (!mine.success) return { success: false, message: COULD_NOT_CHECK };
+      const target = mine.data?.find((h) => h.id === householdId);
+      // Membership can end elsewhere (the owner removed you). Activating anyway
+      // would journal writes RLS then rejects — sync that looks on but isn't.
+      if (!target) {
+        return { success: false, message: 'This account is no longer a member of that shared budget. Ask for a new invite code.' };
+      }
+      activateHousehold(householdId);
+      await updateSettings({ householdId });
+      await runCloudKitSyncCycle();
+      await refresh();
+      return { success: true, message: `This device now syncs with ${target.name}.` };
+    },
+    [settings.householdId, refresh, updateSettings]
+  );
+
+  const leaveCurrentHousehold = useCallback(async (): Promise<SharingResult> => {
     const hid = getActiveHouseholdId() ?? settings.householdId;
     if (hid) await leaveHouseholdRpc(hid);
     deactivateHousehold();
     await updateSettings({ householdId: null });
     await refresh();
-    return { success: true, message: 'Left the shared household. Your budget stays on this device.' };
+    return { success: true, message: 'Left the shared budget. Everything already on this device stays.' };
   }, [refresh, updateSettings, settings.householdId]);
 
-  // "Sync across my devices" — the same household machinery, framed for one
-  // person. Reuses an existing household when this account already has one
-  // (second device), otherwise creates a personal one seeded from this
-  // device's budget. Opt-in only: never runs unless the user flips the switch.
-  const enableDeviceSync = useCallback(async (): Promise<{ success: boolean; message: string }> => {
-    if (settings.householdId) return { success: true, message: 'Device sync is already on.' };
-    const mine = await myHouseholds();
-    if (mine.length > 0) {
-      activateHousehold(mine[0].id);
-      await updateSettings({ householdId: mine[0].id });
-      await runCloudKitSyncCycle();
-      await refresh();
-      return { success: true, message: 'Device sync is on — this device now shares your existing budget.' };
+  // "Just my devices" — the same household machinery with one member. Reuses
+  // the household this account already has whenever there is exactly one, and
+  // refuses to guess when there are several. Opt-in only.
+  const startDeviceSync = useCallback(async (): Promise<SharingResult> => {
+    if (settings.householdId) return { success: true, message: 'Sync is already on for this device.' };
+    const mine = await myHouseholdsResult();
+    // Treating an unreachable server as "no households" is what made a second
+    // device create its own budget instead of joining the one that existed.
+    if (!mine.success) return { success: false, message: COULD_NOT_CHECK };
+    const households = mine.data ?? [];
+    if (households.length === 1) return connectToHousehold(households[0].id);
+    if (households.length > 1) {
+      return {
+        success: false,
+        message: 'This account belongs to more than one shared budget. Choose which one this device should use.',
+      };
     }
-    return createAndJoinHousehold('My Devices');
-  }, [settings.householdId, updateSettings, refresh, createAndJoinHousehold]);
+    return createAndJoinHousehold('My devices', { evenIfAlreadyAMember: true });
+  }, [settings.householdId, connectToHousehold, createAndJoinHousehold]);
 
-  // Pauses syncing on THIS device only (keeps the membership, so flipping it
-  // back on is instant and other devices are unaffected). Local data stays.
-  const disableDeviceSync = useCallback(async (): Promise<{ success: boolean; message: string }> => {
+  // Stops syncing on THIS device only and keeps the membership, so resuming is
+  // one tap and the other devices/people are untouched. Local data stays.
+  const pauseSharing = useCallback(async (): Promise<SharingResult> => {
     deactivateHousehold();
     await updateSettings({ householdId: null });
     await refresh();
-    return { success: true, message: 'Device sync is off. Your budget stays on this device.' };
+    return { success: true, message: 'Sync is off on this device. Your budget stays here.' };
   }, [updateSettings, refresh]);
 
   // Sharing is a function of (signed-in session × chosen household), so it is
@@ -472,8 +551,9 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     syncNow,
     createHousehold: createAndJoinHousehold,
     joinHousehold: joinExistingHousehold,
-    enableDeviceSync,
-    disableDeviceSync,
+    connectToHousehold,
+    startDeviceSync,
+    pauseSharing,
     leaveHousehold: leaveCurrentHousehold,
   };
 

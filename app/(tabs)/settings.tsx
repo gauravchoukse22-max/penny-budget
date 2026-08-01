@@ -16,6 +16,7 @@ import { setPendingImport } from '../../features/import-preview-store';
 import { BANK_LINKING_ENABLED } from '../../lib/feature-flags';
 import { confirmAction, notify } from '../../lib/confirm';
 import { formatMonthLabel } from '../../lib/format';
+import { useHouseholdStatus, sharingSummary } from '../../lib/useHouseholdStatus';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR'];
 
@@ -29,8 +30,9 @@ const GRACE_OPTIONS = [
 export default function SettingsScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { settings, categories, cards, selectedMonth, updateSettings, refresh, enableDeviceSync, disableDeviceSync } = useBudget();
+  const { settings, categories, cards, selectedMonth, updateSettings, refresh } = useBudget();
   const { isConfigured: cloudConfigured, user } = useAuth();
+  const sharing = useHouseholdStatus();
   const [busy, setBusy] = useState(false);
   const [biometricType, setBiometricType] = useState<string | null>(null);
   const [pickingCardFor, setPickingCardFor] = useState(false);
@@ -195,62 +197,14 @@ export default function SettingsScreen() {
           {cloudConfigured && (
             <>
               <View style={[styles.divider, { backgroundColor: theme.separator }]} />
-              <View style={styles.toggleRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.label, fontSize: 15 }}>Sync across my devices</Text>
-                  <Text style={{ color: theme.tertiaryLabel, fontSize: 12, marginTop: 2 }}>
-                    Off: your budget stays only on this device. On: devices signed into your account share one budget
-                    through your private cloud space. Still works offline.
-                  </Text>
-                </View>
-                <Switch
-                  value={!!settings.householdId}
-                  disabled={busy}
-                  onValueChange={async (on) => {
-                    if (on && !user) {
-                      const go = await confirmAction({
-                        title: 'Sign in first',
-                        message: 'Device sync needs the optional account so your devices can find each other.',
-                        confirmLabel: 'Go to Sign In',
-                      });
-                      if (go) router.push('/account');
-                      return;
-                    }
-                    if (on) {
-                      const ok = await confirmAction({
-                        title: 'Turn on device sync?',
-                        message:
-                          'This device’s budget is shared privately with your other signed-in devices. If another device already has a budget, the two are combined — back up first if unsure (Settings → Backup).',
-                        confirmLabel: 'Turn On',
-                      });
-                      if (!ok) return;
-                      setBusy(true);
-                      try {
-                        const res = await enableDeviceSync();
-                        notify(res.success ? 'Device sync on' : 'Couldn’t turn on sync', res.message);
-                      } finally {
-                        setBusy(false);
-                      }
-                    } else {
-                      const ok = await confirmAction({
-                        title: 'Pause sync on this device?',
-                        message: 'Everything already on this device stays. Other devices are unaffected.',
-                        confirmLabel: 'Pause',
-                      });
-                      if (!ok) return;
-                      setBusy(true);
-                      try {
-                        await disableDeviceSync();
-                      } finally {
-                        setBusy(false);
-                      }
-                    }
-                  }}
-                />
-              </View>
-              <View style={[styles.divider, { backgroundColor: theme.separator }]} />
+              {/* One row, not a switch. Syncing your own devices and sharing with
+                  another person are the same mechanism, and a switch here that
+                  quietly created a second household is what split one couple's
+                  budget across five of them. The linked screen owns every
+                  change and always names who is in it. */}
               <SettingsLink
-                label={settings.householdId ? 'Family Sharing — on' : 'Family Sharing'}
+                label="Sharing"
+                detail={sharingSummary(sharing, !!user)}
                 onPress={() => router.push('/household')}
               />
             </>
@@ -421,11 +375,14 @@ export default function SettingsScreen() {
   );
 }
 
-function SettingsLink({ label, onPress }: { label: string; onPress: () => void }) {
+function SettingsLink({ label, detail, onPress }: { label: string; detail?: string; onPress: () => void }) {
   const theme = useTheme();
   return (
-    <Pressable style={styles.actionRow} onPress={onPress}>
-      <Text style={{ color: theme.label, flex: 1, fontSize: 15 }}>{label}</Text>
+    <Pressable style={styles.actionRow} onPress={onPress} accessibilityRole="button">
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: theme.label, fontSize: 15 }}>{label}</Text>
+        {detail ? <Text style={{ color: theme.tertiaryLabel, fontSize: 12, marginTop: 2 }}>{detail}</Text> : null}
+      </View>
       <Ionicons name="chevron-forward" size={18} color={theme.tertiaryLabel} />
     </Pressable>
   );
