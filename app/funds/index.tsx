@@ -6,19 +6,18 @@ import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius, type as typeScale } from '../../theme/colors';
 import { AmountText } from '../../components/AmountText';
 import { PressableScale } from '../../components/PressableScale';
-import { FundCellSheet } from '../../components/FundCellSheet';
+import { FundCellSheet, type FundCellSubmission } from '../../components/FundCellSheet';
 import {
+  adjustFundCell,
   buildFundGrid,
   cellKey,
   createFund,
   createFundAccount,
-  listFundAccounts,
-  listFundBalances,
-  listFunds,
+  deleteFundEntry,
+  loadFundGrid,
   seedDefaultFundsIfEmpty,
-  setFundBalance,
 } from '../../features/funds';
-import type { Fund, FundAccount, FundBalance } from '../../features/models';
+import type { Fund, FundAccount, FundEntry } from '../../features/models';
 
 // Fixed cell geometry: the pinned pane and the scrolling pane are two separate
 // stacks of views, so their rows only line up if every row is exactly the same
@@ -38,17 +37,19 @@ export default function FundsScreen() {
 
   const [funds, setFunds] = useState<Fund[]>([]);
   const [accounts, setAccounts] = useState<FundAccount[]>([]);
-  const [balances, setBalances] = useState<FundBalance[]>([]);
+  const [entries, setEntries] = useState<FundEntry[]>([]);
   const [editing, setEditing] = useState<{ fund: Fund; account: FundAccount } | null>(null);
   const [prompt, setPrompt] = useState<Prompt>(null);
   const [promptDraft, setPromptDraft] = useState('');
 
   const load = useCallback(async () => {
     await seedDefaultFundsIfEmpty();
-    const [f, a, b] = await Promise.all([listFunds(), listFundAccounts(), listFundBalances()]);
-    setFunds(f);
-    setAccounts(a);
-    setBalances(b);
+    // loadFundGrid runs the legacy balance → ledger backfill first, so a phone
+    // upgrading with money already in the grid never sees it as zero.
+    const data = await loadFundGrid();
+    setFunds(data.funds);
+    setAccounts(data.accounts);
+    setEntries(data.entries);
   }, []);
 
   // Reload on focus so edits made in Manage — and anything a co-member synced
@@ -59,13 +60,32 @@ export default function FundsScreen() {
     }, [load])
   );
 
-  const grid = useMemo(() => buildFundGrid(funds, accounts, balances), [funds, accounts, balances]);
+  const grid = useMemo(() => buildFundGrid(funds, accounts, entries), [funds, accounts, entries]);
 
-  const saveCell = async (nextAmount: number) => {
+  // Only the open cell's own entries, newest first — the sheet lists them as
+  // that cell's history.
+  const editingEntries = useMemo(() => {
+    if (!editing) return [];
+    return entries.filter((e) => e.fundId === editing.fund.id && e.accountId === editing.account.id);
+  }, [entries, editing]);
+
+  const saveCell = async (submission: FundCellSubmission) => {
     if (!editing) return;
-    // Writes the absolute total the sheet just previewed, rather than re-reading
-    // and applying a delta: what he confirmed on screen is what lands.
-    await setFundBalance(editing.fund.id, editing.account.id, nextAmount);
+    // Files a signed entry rather than overwriting a total — including for
+    // "Set to", which lands as the difference so the earlier deposits survive.
+    await adjustFundCell({
+      fundId: editing.fund.id,
+      accountId: editing.account.id,
+      mode: submission.mode,
+      amount: submission.amount,
+      date: submission.date,
+      note: submission.note,
+    });
+    await load();
+  };
+
+  const removeEntry = async (entry: FundEntry) => {
+    await deleteFundEntry(entry.id);
     await load();
   };
 
@@ -125,9 +145,14 @@ export default function FundsScreen() {
               </View>
 
               {funds.map((f) => (
+                // The name is the way into the fund's month-by-month history —
+                // that's the question the ledger exists to answer, so it gets
+                // the biggest, most obvious target in the row.
                 <Pressable
                   key={f.id}
-                  onPress={() => router.push('/funds/manage')}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${f.name} history`}
+                  onPress={() => router.push(`/funds/${f.id}`)}
                   style={[styles.gridRow, { height: ROW_H, borderBottomColor: theme.separator }]}
                 >
                   <View style={[styles.bodyCell, { width: NAME_W }]}>
@@ -224,8 +249,8 @@ export default function FundsScreen() {
           </View>
 
           <Text style={[styles.hint, { color: theme.tertiaryLabel }]}>
-            Tap any cell to add to it, subtract from it, or set it. Swipe the columns sideways to reach the rest of your
-            accounts.
+            Tap a cell to add to it, subtract from it, or set it — and leave a note saying why. Tap a fund's name to see
+            what went in month by month. Swipe the columns sideways to reach the rest of your accounts.
           </Text>
 
           <PressableScale
@@ -244,9 +269,11 @@ export default function FundsScreen() {
           visible
           onClose={() => setEditing(null)}
           onSave={saveCell}
+          onDeleteEntry={removeEntry}
           fundName={editing.fund.name}
           accountName={editing.account.name}
           currentAmount={grid.cells.get(cellKey(editing.fund.id, editing.account.id)) ?? 0}
+          entries={editingEntries}
           currency={settings.currency}
         />
       )}

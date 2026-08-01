@@ -60,8 +60,8 @@ export default function ManageFundsScreen() {
     const ok = await confirmAction({
       title: isFund ? `Delete "${row.name}"?` : `Delete "${row.name}"?`,
       message: isFund
-        ? 'The balances held in this fund across every account are removed too.'
-        : 'The balances every fund holds at this account are removed too.',
+        ? 'Every contribution recorded against this fund, at every account, is removed with it. This cannot be undone.'
+        : 'Every contribution recorded at this account, for every fund, is removed with it. This cannot be undone.',
       confirmLabel: 'Delete',
       destructive: true,
     });
@@ -177,7 +177,7 @@ export default function ManageFundsScreen() {
       )}
 
       <Text style={[styles.footer, { color: theme.tertiaryLabel }]}>
-        Totals are worked out from the cells, so renaming or reordering never changes a number.
+        Totals are added up from each fund's contributions, so renaming or reordering never changes a number.
       </Text>
     </KeyboardAwareScreen>
   );

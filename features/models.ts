@@ -28,8 +28,10 @@ export type CategoryRule = {
 
 // ── Funds grid ──────────────────────────────────────────────────────────────
 // Models a savings spreadsheet: funds are the rows, fund accounts are the
-// columns, and a fund balance is one cell. Every total is derived, never
-// stored, so a rename or a reorder can't leave a stale number behind.
+// columns, and a cell is everything ever paid into that fund at that account.
+// A cell's balance and every total are derived by summing entries, never
+// stored, so a rename, a reorder or a half-applied sync can't leave a stale
+// number behind — and last April's contribution is still there to look up.
 
 /** A savings bucket the user keeps adding to — a row in the Funds grid. */
 export type Fund = {
@@ -47,17 +49,57 @@ export type FundAccount = {
   createdAt: string;
 };
 
-/** How much of one fund sits in one account — a single cell. */
+/**
+ * One contribution to one cell — the spreadsheet comment, made into a record.
+ *
+ * `amount` is signed: money in is positive, money out negative. A cell's
+ * balance is the SUM of its entries, so nothing is ever overwritten and
+ * "how much did we add in April?" stays answerable months later.
+ */
+export type FundEntry = {
+  id: string;
+  fundId: string;
+  accountId: string;
+  amount: number;
+  /** YYYY-MM-DD — the day the money moved, which the user can backdate. */
+  date: string;
+  note: string | null;
+  createdAt: string;
+};
+
+/**
+ * LEGACY: the single running balance a cell used to hold. Read only by the
+ * one-time backfill that turns each one into an opening entry, and kept so a
+ * co-member still on the old build doesn't break this device's sync.
+ */
 export type FundBalance = {
   id: string;
   fundId: string;
   accountId: string;
   amount: number;
   updatedAt: string;
+  /** Set once this row has become an opening entry. Never synced. */
+  migratedAt?: string | null;
 };
 
 /** How a cell edit combines with what's already there. */
 export type FundAdjustMode = 'add' | 'subtract' | 'set';
+
+/** One month of a fund's history, as the per-fund history screen shows it. */
+export type FundMonthSummary = {
+  /** YYYY-MM. */
+  yearMonth: string;
+  /** Money in this month (positive entries only). */
+  added: number;
+  /** Money out this month, as a positive number. */
+  removed: number;
+  /** added − removed. */
+  net: number;
+  /** What the fund held once this month's entries had all landed. */
+  balanceAfter: number;
+  /** Newest first, so the list reads the way the month header does. */
+  entries: FundEntry[];
+};
 
 /** Tracks user engagement streaks (e.g. logging every day). */
 export type Streak = {

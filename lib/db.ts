@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import { uuid } from './uuid';
 import { CATEGORY_PALETTE } from '../theme/colors';
+import { applyFeatureMigrations } from '../features/db-migrations';
 
 const DB_NAME = 'pennybudget.db';
 
@@ -200,6 +201,15 @@ async function migrateFeatureTables(db: SQLite.SQLiteDatabase): Promise<void> {
   if (!settingsColumnNames.has('householdId')) {
     await db.execAsync('ALTER TABLE app_settings ADD COLUMN householdId TEXT;');
   }
+
+  // The Funds grid's tables (funds, fund_accounts, fund_entries) live in
+  // features/db-migrations. That module used to export a run-it-yourself
+  // function that NOTHING ever called, so those tables were never created and
+  // the Funds screen could only fail with "no such table: funds". Calling it
+  // from here — the one migration path every getDb() goes through — is what
+  // makes the feature exist at all. Statements overlapping the ones above are
+  // all IF NOT EXISTS / column-guarded, so running both is a no-op.
+  await applyFeatureMigrations(db);
 }
 
 export const DEFAULT_CATEGORIES: Array<{ name: string; icon: string; limit: number }> = [

@@ -13,7 +13,7 @@ import { currentYearMonth } from '../../lib/db';
 import type { TrendPoint, CategoryMover } from '../../lib/models';
 import { formatMonthLabel } from '../../lib/format';
 import { getHistoricalCategoryProjections, detectAnomalies } from '../../features/predictive-engine';
-import { buildFundGrid, listFundAccounts, listFundBalances, listFunds } from '../../features/funds';
+import { loadFundGrid } from '../../features/funds';
 import { generateMonthlySummary } from '../../features/streaks-and-gamification';
 import type { CategoryProjection, AnomalyAlert, MonthlySummary } from '../../features/models';
 
@@ -33,9 +33,7 @@ export default function InsightsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      Promise.all([listFunds(), listFundAccounts(), listFundBalances()]).then(([f, a, b]) =>
-        setFundsTotal(f.length === 0 ? null : buildFundGrid(f, a, b).grandTotal)
-      );
+      loadFundGrid().then(({ funds, grid }) => setFundsTotal(funds.length === 0 ? null : grid.grandTotal));
     }, [])
   );
 

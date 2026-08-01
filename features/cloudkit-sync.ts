@@ -102,7 +102,11 @@ export const SYNCABLE_TABLES = new Set([
   'monthly_settings',
   'funds',
   'fund_accounts',
+  // Legacy — a household member still on the pre-ledger build keeps pushing
+  // these, and dropping the table from the list would make their rows
+  // unroutable rather than merely unused. See features/funds.ts.
   'fund_balances',
+  'fund_entries',
 ]);
 
 /**

@@ -39,6 +39,14 @@ export function formatDayLabel(dateStr: string): string {
   return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
+/** "5 Apr 2026" — the compact form for dense rows like a fund's history, where
+ * the long day label would wrap and push the amount off the row. */
+export function formatShortDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 export function daysLeftInMonth(yearMonth: string): number {
   const [y, m] = yearMonth.split('-').map(Number);
   const lastDay = new Date(y, m, 0).getDate();

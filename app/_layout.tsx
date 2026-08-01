@@ -108,6 +108,7 @@ function RootNavigator() {
         <Stack.Screen name="recurring/index" options={{ headerShown: true, title: 'Recurring Bills' }} />
         <Stack.Screen name="funds/index" options={{ headerShown: true, title: 'Funds' }} />
         <Stack.Screen name="funds/manage" options={{ headerShown: true, title: 'Funds & Accounts' }} />
+        <Stack.Screen name="funds/[id]" options={{ headerShown: true, title: 'Fund History' }} />
         <Stack.Screen name="search" options={{ headerShown: true, title: 'Search' }} />
         <Stack.Screen name="account/index" options={{ headerShown: true, title: 'Account', headerLargeTitle: true }} />
         <Stack.Screen name="account/forgot-password" options={{ presentation: 'modal', headerShown: true, title: 'Reset Password' }} />
