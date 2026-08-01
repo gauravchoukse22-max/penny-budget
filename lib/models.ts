@@ -86,3 +86,15 @@ export type TrendPoint = {
   totalSpend: number;
   surplus: number;
 };
+
+/** A category's spend this month vs. the previous month — the "biggest movers"
+ * insight ("Dining +23% vs last month"). */
+export type CategoryMover = {
+  category: Category;
+  current: number;
+  previous: number;
+  /** current − previous (positive = spending went up). */
+  delta: number;
+  /** Percent change vs. last month, or null when there was no prior spend. */
+  percentChange: number | null;
+};

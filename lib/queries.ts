@@ -6,6 +6,7 @@ import type {
   BudgetStatus,
   Card,
   Category,
+  CategoryMover,
   CategorySpendSummary,
   MonthlySettings,
   SavingsGoal,
@@ -495,6 +496,41 @@ export async function computeTrendSeries(endYearMonth: string, months = 6): Prom
     points.push({ yearMonth: ym, totalSpend: spend, surplus });
   }
   return points;
+}
+
+/** 5.6 Month-over-month category movers. Compares each category's spend in
+ * `yearMonth` against the prior month and returns them sorted by the size of
+ * the change (largest swing first). Categories with no spend in either month
+ * are dropped. Reuses the same per-month transaction queries as the rest of
+ * the app so it stays consistent with what "spend" means elsewhere. */
+export async function computeCategoryMovers(yearMonth: string): Promise<CategoryMover[]> {
+  const prevYearMonth = shiftYearMonth(yearMonth, -1);
+  const [categories, currentTx, prevTx] = await Promise.all([
+    listCategories(),
+    listTransactionsForMonth(yearMonth),
+    listTransactionsForMonth(prevYearMonth),
+  ]);
+  const sumByCategory = (txs: Transaction[]) => {
+    const map = new Map<string, number>();
+    for (const t of txs) {
+      if (!t.categoryId) continue;
+      map.set(t.categoryId, (map.get(t.categoryId) ?? 0) + t.amount);
+    }
+    return map;
+  };
+  const currentByCat = sumByCategory(currentTx);
+  const prevByCat = sumByCategory(prevTx);
+
+  const movers: CategoryMover[] = [];
+  for (const category of categories) {
+    const current = currentByCat.get(category.id) ?? 0;
+    const previous = prevByCat.get(category.id) ?? 0;
+    if (current === 0 && previous === 0) continue;
+    const delta = current - previous;
+    const percentChange = previous > 0 ? (delta / previous) * 100 : null;
+    movers.push({ category, current, previous, delta, percentChange });
+  }
+  return movers.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
 }
 
 export async function computeCategoryTrend(categoryId: string, endYearMonth: string, months = 6): Promise<TrendPoint[]> {

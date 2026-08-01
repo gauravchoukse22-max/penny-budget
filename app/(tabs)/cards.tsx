@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, CATEGORY_PALETTE, spacing, radius, type } from '../../theme/colors';
 import { WalletCard } from '../../components/WalletCard';
-import { confirmAction, notify } from '../../lib/confirm';
+import { AmountText } from '../../components/AmountText';
+import { notify } from '../../lib/confirm';
 import { daysUntilDue } from '../../lib/queries';
 
 export default function CardsScreen() {
@@ -15,22 +16,46 @@ export default function CardsScreen() {
   const { cards, cardTotals, settings, addCard } = useBudget();
   const [showAdd, setShowAdd] = useState(false);
 
+  const monthTotal = cards.reduce((sum, c) => sum + (cardTotals.get(c.id) ?? 0), 0);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.groupedBackground }]} edges={['top']}>
       <View style={styles.headerRow}>
-        <Text style={[type.title1, { color: theme.label }]}>Cards</Text>
-        <Pressable onPress={() => setShowAdd(true)} hitSlop={8}>
-          <Ionicons name="add-circle" size={30} color={theme.accent} />
+        <View style={{ flex: 1 }}>
+          <Text style={[type.title1, { color: theme.label }]}>Cards</Text>
+          {cards.length > 0 && (
+            <View style={styles.summaryRow}>
+              <Text style={[styles.summaryText, { color: theme.secondaryLabel }]}>
+                {cards.length} {cards.length === 1 ? 'card' : 'cards'}
+                {'   ·   '}
+              </Text>
+              <AmountText amount={monthTotal} currency={settings.currency} size={13} color={theme.secondaryLabel} />
+              <Text style={[styles.summaryText, { color: theme.secondaryLabel }]}> this month</Text>
+            </View>
+          )}
+        </View>
+        <Pressable
+          onPress={() => setShowAdd(true)}
+          hitSlop={8}
+          style={[styles.addButton, { borderColor: theme.separator }]}
+        >
+          <Ionicons name="add" size={22} color={theme.accent} />
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {cards.length === 0 ? (
-          <Text style={{ color: theme.tertiaryLabel, textAlign: 'center', marginTop: 40 }}>No cards yet — add your first card</Text>
+          <View style={styles.empty}>
+            <Ionicons name="card-outline" size={30} color={theme.tertiaryLabel} />
+            <Text style={[styles.emptyText, { color: theme.secondaryLabel }]}>
+              No cards yet. Add one to track its balance and due date.
+            </Text>
+          </View>
         ) : (
           cards.map((c) => {
             const dueIn = daysUntilDue(c.dueDay);
+            const dueSoon = dueIn !== null && dueIn <= 5;
             return (
-              <View key={c.id}>
+              <View key={c.id} style={styles.cardBlock}>
                 <WalletCard
                   card={c}
                   total={cardTotals.get(c.id) ?? 0}
@@ -38,7 +63,9 @@ export default function CardsScreen() {
                   onPress={() => router.push(`/card/${c.id}`)}
                 />
                 {dueIn !== null && (
-                  <Text style={[styles.dueHint, { color: dueIn <= 5 ? theme.systemRed : theme.tertiaryLabel }]}>
+                  <Text
+                    style={[styles.dueHint, { color: dueSoon ? theme.negativeMuted : theme.tertiaryLabel }]}
+                  >
                     {dueIn === 0 ? 'Due today' : `Due in ${dueIn} day${dueIn === 1 ? '' : 's'}`}
                   </Text>
                 )}
@@ -81,30 +108,32 @@ function AddCardModal({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
-        <Text style={[styles.sectionTitle, { color: theme.label }]}>New Card</Text>
+        <Text style={[type.title2, { color: theme.label, marginBottom: spacing.xl }]}>New Card</Text>
+        <Text style={[styles.fieldLabel, { color: theme.secondaryLabel }]}>CARD NAME</Text>
         <TextInput
           style={[styles.input, { backgroundColor: theme.fieldBackground, color: theme.label }]}
-          placeholder="Card name (e.g. Chase Sapphire)"
+          placeholder="e.g. Chase Sapphire"
           placeholderTextColor={theme.tertiaryLabel}
           value={name}
           onChangeText={setName}
           maxLength={40}
         />
+        <Text style={[styles.fieldLabel, { color: theme.secondaryLabel, marginTop: spacing.lg }]}>LAST 4 DIGITS</Text>
         <TextInput
           style={[styles.input, { backgroundColor: theme.fieldBackground, color: theme.label }]}
-          placeholder="Last 4 digits"
+          placeholder="1234"
           placeholderTextColor={theme.tertiaryLabel}
           keyboardType="number-pad"
           maxLength={4}
           value={lastFour}
           onChangeText={(text) => setLastFour(text.replace(/\D/g, ''))}
         />
-        <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
+        <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.xxl }}>
           <Pressable style={[styles.button, { borderColor: theme.separator, borderWidth: 1 }]} onPress={onClose}>
             <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
           </Pressable>
           <Pressable style={[styles.button, { backgroundColor: theme.accent }]} onPress={save}>
-            <Text style={{ color: '#FFF', fontWeight: '600' }}>Add</Text>
+            <Text style={{ color: theme.onAccent, fontWeight: '600' }}>Add Card</Text>
           </Pressable>
         </View>
       </View>
@@ -117,14 +146,27 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
   },
-  content: { padding: spacing.lg, gap: 14, paddingBottom: 60 },
-  dueHint: { fontSize: 12, fontWeight: '600', marginTop: 6, marginLeft: 4 },
-  modalContent: { flex: 1, padding: 20, paddingTop: 40 },
-  sectionTitle: { fontSize: 17, fontWeight: '700', marginBottom: 16 },
-  input: { padding: 12, borderRadius: radius.sm, fontSize: 15, marginBottom: 12 },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  summaryText: { fontSize: 13 },
+  addButton: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  content: { padding: spacing.lg, gap: spacing.xl, paddingBottom: 60 },
+  cardBlock: { gap: spacing.sm },
+  dueHint: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', marginLeft: spacing.xs },
+  empty: { alignItems: 'center', gap: spacing.md, marginTop: 60, paddingHorizontal: spacing.xxl },
+  emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  modalContent: { flex: 1, padding: spacing.xl, paddingTop: spacing.xxxl },
+  fieldLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: spacing.sm },
+  input: { padding: spacing.md, borderRadius: radius.sm, fontSize: 16 },
   button: { flex: 1, paddingVertical: 14, borderRadius: radius.md, alignItems: 'center' },
 });

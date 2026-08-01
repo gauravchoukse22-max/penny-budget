@@ -266,6 +266,16 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     return () => sub.remove();
   }, [syncNow]);
 
+  // Near-live sync: while the app is open and sharing is on, poll every 30s so a
+  // co-editor's changes appear on their own, without reopening the app.
+  useEffect(() => {
+    if (!settings.householdId) return;
+    const id = setInterval(() => {
+      if (AppState.currentState === 'active') syncNow();
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [settings.householdId, syncNow]);
+
   const addCard = useCallback(
     async (input: Omit<Card, 'id' | 'sortOrder' | 'billDay' | 'dueDay'> & Partial<Pick<Card, 'billDay' | 'dueDay'>>) => {
       await q.createCard(input);

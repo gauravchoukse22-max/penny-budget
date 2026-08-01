@@ -98,7 +98,7 @@ function RootNavigator() {
 
   return (
     <>
-      <Stack screenOptions={{ headerShown: false }}>
+      <Stack screenOptions={{ headerShown: false, headerBackButtonDisplayMode: 'minimal' }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="setup" />
         <Stack.Screen name="transaction/[id]" options={{ presentation: 'modal', headerShown: true, title: 'Transaction' }} />

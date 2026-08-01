@@ -19,6 +19,9 @@ export function AmountText({ amount, currency = 'USD', size = 17, weight = 'regu
   const fontWeight = weight === 'bold' ? '700' : weight === 'semibold' ? '600' : '400';
   return (
     <Text
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.6}
       style={[
         {
           fontSize: size,

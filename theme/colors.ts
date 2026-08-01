@@ -22,6 +22,15 @@ export interface Theme {
   cardRaised: string;
   fieldBackground: string;
   shadow: string;
+  // Restrained semantic colors — muted red/green that carry meaning (over
+  // budget, positive/negative movement) without shouting like the system hues.
+  positiveMuted: string;
+  negativeMuted: string;
+  // Neutral hairline track behind thin data bars (breakdown, pacing).
+  neutralTrack: string;
+  // Deep graphite the Wallet cards blend a card's stored hue toward, so every
+  // card reads as a quiet metal card instead of a saturated block.
+  walletBase: string;
   heroPositive: Gradient;
   heroNegative: Gradient;
   heroNeutral: Gradient;
@@ -53,6 +62,10 @@ const light: Theme = {
   cardRaised: '#FFFFFF',
   fieldBackground: 'rgba(118,118,128,0.08)',
   shadow: '#00000018',
+  positiveMuted: '#3A7D53',
+  negativeMuted: '#B23B3B',
+  neutralTrack: 'rgba(60,60,67,0.10)',
+  walletBase: '#26272E',
   // Gradients for the Surplus hero card, keyed by sign.
   heroPositive: ['#22C55E', '#0EA96B'] as const,
   heroNegative: ['#FF6B6B', '#E23E57'] as const,
@@ -84,6 +97,10 @@ const dark: Theme = {
   cardRaised: '#221F2E',
   fieldBackground: 'rgba(118,118,128,0.24)',
   shadow: '#00000066',
+  positiveMuted: '#4E9E6A',
+  negativeMuted: '#D2685F',
+  neutralTrack: 'rgba(235,235,245,0.12)',
+  walletBase: '#191A20',
   heroPositive: ['#1FAA59', '#0B7A41'] as const,
   heroNegative: ['#E9445A', '#B72F45'] as const,
   heroNeutral: ['#7C6CF7', '#5B3FE0'] as const,
@@ -141,6 +158,20 @@ export function hexToRgba(hex: string, alpha: number): string {
 
 export function tint(color: string, alpha = 0.14): string {
   return hexToRgba(color, alpha);
+}
+
+/** Linearly blend two hex colors. t=0 → hexA, t=1 → hexB. Used to derive a
+ * deep, low-saturation "metal card" tone from a category's bright stored hue. */
+export function mixHex(hexA: string, hexB: string, t: number): string {
+  const parse = (hex: string) => {
+    const c = hex.replace('#', '');
+    return [parseInt(c.substring(0, 2), 16), parseInt(c.substring(2, 4), 16), parseInt(c.substring(4, 6), 16)];
+  };
+  const [ar, ag, ab] = parse(hexA);
+  const [br, bg, bb] = parse(hexB);
+  const lerp = (a: number, b: number) => Math.round(a + (b - a) * t);
+  const h = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${h(lerp(ar, br))}${h(lerp(ag, bg))}${h(lerp(ab, bb))}`;
 }
 
 // Fixed, tasteful 14-hue category palette — assigned once per category, used

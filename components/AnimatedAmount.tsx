@@ -54,6 +54,9 @@ export function AnimatedAmount({ amount, currency = 'USD', size = 17, weight = '
 
   return (
     <Text
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.6}
       style={[
         {
           fontSize: size,
