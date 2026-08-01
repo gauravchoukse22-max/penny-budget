@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { notify } from '../../lib/confirm';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius, type as typeScale } from '../../theme/colors';
 import { AmountText } from '../../components/AmountText';
@@ -92,8 +93,19 @@ export default function FundsScreen() {
   const submitPrompt = async () => {
     const name = promptDraft.trim();
     if (!name || !prompt) return;
-    if (prompt.kind === 'fund') await createFund(name);
-    else await createFundAccount(name);
+    // Say so when the write fails. Letting it throw leaves the sheet open with
+    // the typed name still in it, which is indistinguishable from a dead
+    // button — the user taps Add repeatedly and nothing ever explains why.
+    try {
+      if (prompt.kind === 'fund') await createFund(name);
+      else await createFundAccount(name);
+    } catch (error) {
+      notify(
+        prompt.kind === 'fund' ? "Couldn't add the fund" : "Couldn't add the account",
+        error instanceof Error ? error.message : String(error)
+      );
+      return;
+    }
     setPrompt(null);
     setPromptDraft('');
     await load();
