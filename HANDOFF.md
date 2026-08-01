@@ -6,17 +6,18 @@
 >
 > **Keeping it live:** update §3, §4, and append to §6 whenever meaningful work pauses.
 
-**Last updated:** 2026-07-08 (initial git history created; keyboard-covers-field fix on
-transaction add/edit; swipe-to-change-month on Home)
+**Last updated:** 2026-08-01 (App Store approval recorded; release status + next steps rewritten)
 
-> **⚠️ IN-FLIGHT WHEN THIS FILE WAS LAST TOUCHED:** a background poll-and-submit loop
-> (`wait_and_submit.sh`, task id `b78rit34t` in that session — won't exist in a new session, this
-> is just context) was watching iOS build `2d78582c-da7f-4e7d-bb5b-b7cd3bf48a23` (bundle
-> `com.gary.pennybudget`, buildNumber 3, contains ALL the changes in today's session log) and would
-> auto-run `eas submit -p ios --profile production --id 2d78582c-... --non-interactive` the moment
-> it finished. **If picking this up fresh:** run `npx eas build:view 2d78582c-da7f-4e7d-bb5b-b7cd3bf48a23`
-> to see if it finished, and `npx eas submit -p ios --profile production` (interactive, since
-> `ascAppId` still isn't in `eas.json` — see the submit gotcha below) if it hasn't been submitted yet.
+> **🎉 APP STORE APPROVAL — 2026-08-01.** The owner reported "App is approved." The exact
+> version/build Apple approved was **not confirmed in that session** — see §3 "Release status"
+> for what the repo can and cannot prove, and resolve it before shipping anything else.
+>
+> **⚠️ THIS FILE IS BEHIND HEAD FOR FEATURE DETAIL.** §1–§3's feature descriptions were written
+> on 2026-07-08 and were never updated through the ~13 commits that followed (auth + security
+> hardening, family sharing, Plaid bank linking, PDF statement import, recurring transactions,
+> Supabase device sync, and more). Where §1/§2 say things like "no server, no accounts," that is
+> **no longer true**. Trust §3 "Release status", §4, and the newest §6 entry; for everything else
+> read `git log` and the code before relying on this file.
 
 ---
 
@@ -126,17 +127,38 @@ fabricated CSV data (modeled on, not copied from, the owner's real sheet) to pro
 importer's categorization logic actually works before wiring it into the UI — caught a real bug
 this way (an "ikea → Home" keyword rule pointed at a category that had since been renamed away).
 
-**iOS / TestFlight status:** EAS project linked (`@gauravchoukse22/Penny-Budget`, projectId
-`65822f93-8765-417b-81dc-bff4f58011c2`), `eas.json` build profiles configured, bundle id
-`com.gary.pennybudget`, distribution cert + provisioning profile created and cached on EAS (so
-builds after the first run fully non-interactively — no more Apple 2FA prompts needed).
-**Build #1** (`94a50614-...`, buildNumber 2) **FINISHED** — this was the Apple-minimal-era code,
-built + owner ran `eas submit` on it manually (outcome not confirmed in this session — ask the
-owner or check App Store Connect / TestFlight directly). **Build #2** (`2d78582c-...`, buildNumber
-3, contains everything through the bold redesign + per-month budgets + Particulars importer + the
-transaction-entry fix) was **in progress** when this session ended, with a background script
-polling it and set to auto-run `eas submit` the moment it finishes — see the warning banner at the
-top of this file for exact status/IDs if picking this up.
+**Release status (as of 2026-08-01 — APPROVED):** EAS project linked
+(`@gauravchoukse22/Penny-Budget`, projectId `65822f93-8765-417b-81dc-bff4f58011c2`), bundle id
+`com.gary.pennybudget`, `submit.production.ios.ascAppId` = `6788635272` is now in `eas.json` (so
+submits run non-interactively — the old gotcha is resolved). Distribution cert + provisioning
+profile are cached on EAS.
+
+Apple **approved** the app on 2026-08-01 (owner-reported). Two things the repo cannot prove and a
+future session must confirm in App Store Connect rather than assume:
+
+1. **Which binary was approved.** The newest build synced back into `app.json` is **1.0.1
+   (buildNumber 7)**, committed 2026-07-14 (`2ff8160`). Every production build so far has had its
+   auto-incremented number committed back in a "Sync buildNumber…" commit, and there is **no such
+   commit after 07-14** — so on the repo's evidence the approved binary is build 7 and does *not*
+   contain the ~11 commits merged since. If builds 8+ were made without committing the sync, that
+   assumption is wrong; check `npx eas build:list --platform ios` first.
+2. **Whether it is actually public.** Approved ≠ live. If the release was set to manual, the
+   version sits in *Pending Developer Release* until the owner taps **Release** in App Store
+   Connect.
+
+**⚠️ Changelog-vs-binary mismatch to resolve before the next release:** `lib/changelog.ts` labels
+four entries as shipping in version **1.0.1** — device-sync toggle, the web hero-number fix,
+search-by-amount, and input hardening — but all four were committed **2026-07-18/19, after** build
+7 was cut. If build 7 is what Apple approved, the in-app What's New sheet will advertise features
+that binary does not have. Either confirm a later 1.0.1 build was submitted, or relabel those
+entries to the next version.
+
+**Unreleased work sitting on `master`:** assuming build 7 is what shipped, everything from
+`e5f623e` (2026-07-15) forward is written, committed, and never released — native Sign in with
+Apple, the QA-audit bug fixes, the auth redesign + security hardening, family sharing, Plaid bank
+linking (flag-gated off, see `lib/feature-flags.ts`), PDF statement import, the device-sync
+toggle, cross-platform confirm dialogs, and the legal-doc redirect to gary-labs.com. That is the
+natural content of a 1.0.2.
 
 **Not yet done:** no automated test suite exists for this project (unlike the sibling Backstory
 app) — verification so far is `tsc` + manual preview smoke tests + the one throwaway parser test
@@ -144,26 +166,40 @@ script (not committed, lived in a session scratchpad). No Android build has been
 
 ## 4. Next steps (in order)
 
-1. **Confirm build #2 (`2d78582c-...`) finished and got submitted to TestFlight** — check
-   `npx eas build:view 2d78582c-da7f-4e7d-bb5b-b7cd3bf48a23` and the owner's email/App Store
-   Connect for a processing notification. If the auto-submit failed on `ascAppId` (same failure
-   mode as build #1's auto-submit), run `npx eas submit -p ios --profile production` interactively
-   — it'll ask a couple of App Store Connect questions the first time. Once a submit succeeds
-   non-interactively or you get the numeric App Store Connect app id, add it to `eas.json`
-   `submit.production.ios.ascAppId` so future submits don't need `--non-interactive` friction.
-2. **Owner still hasn't shared real historical transaction data** (2-3 years, from their real
+1. **Confirm the approved version is actually released** (owner's hands — needs App Store
+   Connect). Approved but set to manual release = sits in *Pending Developer Release* forever
+   until someone taps **Release**.
+2. **Pin down which build Apple approved** (`npx eas build:list --platform ios`, or read the
+   version/build in App Store Connect) and write it into §3. Everything below depends on knowing
+   this.
+3. **Resolve the changelog-vs-binary mismatch** described in §3 — four `lib/changelog.ts` entries
+   claim version 1.0.1 but were committed after build 7 was cut. Relabel them to the next version
+   if build 7 is what shipped, so the What's New sheet doesn't promise features that aren't there.
+4. **Point the in-app legal links at the live docs.** `lib/legal.ts` still uses the old
+   `gauravchoukse22-max.github.io/penny-budget/*.html` URLs. Those now 302 to
+   `gary-labs.com/penny-budget` (commit `cea6413`, kept deliberately as redirects for already-
+   shipped builds), so nothing is broken — but new builds should link direct, and the App Store
+   Connect support/privacy URLs should match whatever the app shows.
+5. **Cut 1.0.2** with the ~2 weeks of unreleased work listed in §3, once 1–4 are settled: bump
+   `version` in `app.json`, add a changelog entry, `npx eas build -p ios --profile production`,
+   then `npx eas submit -p ios --profile production` (non-interactive now that `ascAppId` is set),
+   and commit the auto-incremented `buildNumber` back — that sync commit is the only record of
+   what shipped, so don't skip it.
+6. **Owner still hasn't shared real historical transaction data** (2-3 years, from their real
    spreadsheet) — they've explicitly said they never will, only screenshots with numbers redacted.
    The Monthly Log importer (`importParticularsCsv`) was built and verified against *fabricated*
    data matching the sheet's structure instead. If the owner wants it tested against something
    closer to real, they'd need to provide a dummy file with the same column layout (fake numbers
    are fine) — screenshots alone can't validate a parser.
-3. **Visual QA on a real device** — the bold redesign (gradients, solid category-color fills) was
-   verified via web preview DOM inspection only, never screenshotted or eyeballed on an actual
-   phone. Once TestFlight build #2 is installable, do a real visual pass.
-4. Consider adding a jest test harness (none exists) if this app grows — at minimum around
+7. **Visual QA on a real device** — now trivially possible: install the approved build from the
+   App Store and do a real visual pass. Much of the UI has only ever been verified via web-preview
+   DOM inspection.
+8. Consider adding a jest test harness (none exists) if this app grows — at minimum around
    `lib/queries.ts` (surplus/carry-forward math) and `lib/particulars.ts` (categorization) since
    those are the crown-jewel calculations and now have real logic worth regression-testing.
-5. No Android build attempted yet — iOS was the priority.
+9. No Android/Play build attempted yet — iOS was the priority. `app.json` already carries
+   `android.versionCode` 4 and adaptive icons, and `docs/PlayStoreListing.md` exists, so the
+   groundwork is there whenever the owner wants it.
 
 ## 5. How to run
 
@@ -175,7 +211,29 @@ script (not committed, lived in a session scratchpad). No Android build has been
 
 ## 6. Session log (newest first)
 
-- **2026-07-08 (latest — git repo initialized, keyboard/UX fixes).** Repo had no commits yet;
+- **2026-08-01 — App Store approval recorded; handoff file un-staled (docs only, no code
+  changed).** Owner opened the session with "App is approved." No App Store Connect or EAS
+  credentials were available in this environment, so nothing could be verified against Apple
+  directly — everything below is inferred from the repo and flagged as such.
+  • **Recorded the approval** and rewrote §3's release status + §4's next steps, which still
+  described a July-8 TestFlight build that had long since been superseded.
+  • **Found the build-provenance gap:** the newest `buildNumber` synced into `app.json` is 1.0.1
+  build 7 (`2ff8160`, 2026-07-14). Every prior production build has a matching "Sync
+  buildNumber…" commit; there is none after 07-14, so on the repo's evidence ~11 commits of
+  finished work (Apple Sign In, auth redesign, family sharing, Plaid behind its flag, PDF
+  statement import, amount search, input hardening, device-sync toggle, cross-platform confirm,
+  legal redirect) has never been released.
+  • **Found a real user-facing risk:** four `lib/changelog.ts` entries are labelled version 1.0.1
+  but were committed 07-18/19, *after* build 7 was cut. If build 7 is the approved binary, the
+  What's New sheet advertises a sync toggle and amount search that binary doesn't contain. Left
+  unfixed deliberately — the fix depends on which build Apple actually approved, which only the
+  owner can confirm. Logged as §4.3.
+  • **Also noted:** `lib/legal.ts` still points at the old GitHub Pages URLs, which now redirect
+  to gary-labs.com. Works today, worth pointing direct in the next build (§4.4).
+  • This file's §1–§3 feature narrative is still ~13 commits behind reality; a banner now says so
+  at the top rather than pretending otherwise. Bringing it fully current is its own task.
+
+- **2026-07-08 (git repo initialized, keyboard/UX fixes).** Repo had no commits yet;
   created initial commit (`440a6c9`) with local git identity set to Gaurav Choukse /
   GauravChoukse22@gmail.com — deliberately **not** tied to any org email (owner: "this app is
   personal," don't ever connect it to gobuildhsv). Then two small UX fixes per owner report:
