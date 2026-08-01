@@ -1,8 +1,10 @@
 // Screen-privacy helpers.
 //
 // Two distinct protections:
-//  1. App-switcher cover — blurs the app snapshot iOS shows in the multitasking
-//     switcher. Enabled app-wide while the app lock is on. iOS-only native API.
+//  1. App-switcher cover — hides the app snapshot the OS shows in the
+//     multitasking switcher. Enabled app-wide while the app lock is on. iOS has
+//     a dedicated API; Android gets the same result from FLAG_SECURE, which
+//     blanks the Recents thumbnail.
 //  2. Sensitive-screen capture block — FLAG_SECURE on Android / recording block
 //     on iOS, SCOPED to screens with secrets on them (password entry). Not
 //     app-wide on purpose: users legitimately screenshot their charts.
@@ -10,19 +12,32 @@ import { Platform } from 'react-native';
 import { useEffect } from 'react';
 import * as ScreenCapture from 'expo-screen-capture';
 
+// Distinct from SENSITIVE_TAG below so the two protections can overlap without
+// either one releasing the other's: expo-screen-capture keeps a set of active
+// tags and only restores capture once the LAST tag is cleared.
+const APP_LOCK_TAG = 'app-lock';
+
 export async function enableAppSwitcherCover(): Promise<void> {
-  if (Platform.OS !== 'ios') return;
   try {
-    await ScreenCapture.enableAppSwitcherProtectionAsync();
+    if (Platform.OS === 'ios') {
+      await ScreenCapture.enableAppSwitcherProtectionAsync();
+    } else if (Platform.OS === 'android') {
+      // Android has no separate switcher API — FLAG_SECURE covers both the
+      // Recents snapshot and screenshots, which is what we want while locked.
+      await ScreenCapture.preventScreenCaptureAsync(APP_LOCK_TAG);
+    }
   } catch {
     // Older OS / unsupported — the app lock is still the primary defense.
   }
 }
 
 export async function disableAppSwitcherCover(): Promise<void> {
-  if (Platform.OS !== 'ios') return;
   try {
-    await ScreenCapture.disableAppSwitcherProtectionAsync();
+    if (Platform.OS === 'ios') {
+      await ScreenCapture.disableAppSwitcherProtectionAsync();
+    } else if (Platform.OS === 'android') {
+      await ScreenCapture.allowScreenCaptureAsync(APP_LOCK_TAG);
+    }
   } catch {
     /* no-op */
   }

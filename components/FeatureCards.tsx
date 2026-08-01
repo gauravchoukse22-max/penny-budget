@@ -278,7 +278,9 @@ export function AppLockScreen({ onUnlock }: { onUnlock: () => void }) {
   }, []);
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.lockScreen, { backgroundColor: hexToRgba(theme.background, 0.95) }]}>
+    // Fully opaque on purpose: at 95% the balances stayed legible through the
+    // overlay, which defeats the lock.
+    <View style={[StyleSheet.absoluteFill, styles.lockScreen, { backgroundColor: theme.background }]}>
       <Ionicons name="lock-closed" size={48} color={theme.accent} style={{ marginBottom: spacing.lg }} />
       <Text style={[typeScale.headline, { color: theme.label, marginBottom: spacing.md }]}>Penny Budget is Locked</Text>
       <Pressable
