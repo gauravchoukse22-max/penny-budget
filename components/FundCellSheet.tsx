@@ -293,6 +293,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+    // 48pt floor: Apple asks for 44, Android for 48, and these three sit in a
+    // row where a near-miss silently selects nothing.
+    minHeight: 48,
     paddingVertical: spacing.md,
     borderRadius: radius.md,
   },

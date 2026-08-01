@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Animated, Pressable, PressableProps, StyleProp, ViewStyle } from 'react-native';
+import { Animated, Pressable, PressableProps, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 import { tapLight } from '../lib/haptics';
 
 type Props = PressableProps & {
@@ -13,8 +13,17 @@ type Props = PressableProps & {
 
 /**
  * A Pressable that springs down slightly while held — the small physical cue
- * that makes taps feel responsive. Wraps children in an Animated.View so the
- * scale never fights layout.
+ * that makes taps feel responsive.
+ *
+ * `style` goes on the Pressable itself, NOT on the Animated.View inside it.
+ * Styling the inner view instead leaves the touch target the size of whatever
+ * the children happen to measure, while padding, minHeight and flex — the
+ * things that make a button big enough to hit — apply to a view that receives
+ * no touches. The button then looks correct and misses most taps, which is
+ * indistinguishable from a dead control.
+ *
+ * The Animated.View carries only the transform, so it scales the content
+ * inside an unchanged box.
  */
 export function PressableScale({ activeScale = 0.96, haptic = false, style, children, onPressIn, onPressOut, ...rest }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -24,6 +33,7 @@ export function PressableScale({ activeScale = 0.96, haptic = false, style, chil
 
   return (
     <Pressable
+      style={style}
       onPressIn={(e) => {
         springTo(activeScale);
         if (haptic) tapLight();
@@ -35,7 +45,13 @@ export function PressableScale({ activeScale = 0.96, haptic = false, style, chil
       }}
       {...rest}
     >
-      <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
+      <Animated.View style={[styles.inner, { transform: [{ scale }] }]}>{children}</Animated.View>
     </Pressable>
   );
 }
+
+// Inherits the parent's row/centre alignment so moving `style` outward doesn't
+// re-stack children that were laid out side by side.
+const styles = StyleSheet.create({
+  inner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+});
