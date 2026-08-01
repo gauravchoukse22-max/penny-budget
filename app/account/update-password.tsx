@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme, spacing } from '../../theme/colors';
 import { GroupedSection, AuthTextField, PrimaryButton, TextButton, InlineError, StrengthMeter } from '../../components/AuthUI';
 import { useSensitiveScreen } from '../../features/privacy-screen';
+import { useAndroidBackGuard } from '../../lib/useAndroidBackGuard';
 import { evaluatePassword, MIN_PASSWORD_LENGTH } from '../../lib/passwordStrength';
 
 export default function UpdatePasswordScreen() {
@@ -12,6 +13,9 @@ export default function UpdatePasswordScreen() {
   const router = useRouter();
   const { passwordRecovery, updatePassword, user } = useAuth();
   useSensitiveScreen('update-password');
+  // Matches the screen's `gestureEnabled: false`: leaving mid-reset strands the
+  // recovery session, and the link is single-use.
+  useAndroidBackGuard();
 
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);

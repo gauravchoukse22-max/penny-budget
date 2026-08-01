@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useBudget } from '../context/BudgetContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, CATEGORY_PALETTE, spacing, radius } from '../theme/colors';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { parseMoneyInput } from '../lib/parse-number';
@@ -51,6 +52,7 @@ function LimitField({
 
 export default function SetupWizard() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { categories, updateSettings, editCategory, addCategory, removeCategory, addSavingsGoal, addCard, settings, savingsGoals } = useBudget();
 
@@ -125,7 +127,7 @@ export default function SetupWizard() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.groupedBackground }]}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}>
         <Text style={[styles.stepIndicator, { color: theme.tertiaryLabel }]}>
           Step {step + 1} of {STEPS.length}
         </Text>
@@ -272,7 +274,7 @@ export default function SetupWizard() {
         )}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.xl }]}>
         {step > 0 && (
           <Pressable style={[styles.button, styles.secondaryButton, { borderColor: theme.accent }]} onPress={back}>
             <Text style={{ color: theme.accent, fontWeight: '600' }}>Back</Text>
@@ -288,7 +290,10 @@ export default function SetupWizard() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 20, paddingTop: 60, gap: 12 },
+  // paddingTop/paddingBottom come from safe-area insets at render time: this
+  // screen hides the header, and Android 15 draws edge-to-edge, so hardcoded
+  // padding puts the first step and the footer buttons under the system bars.
+  content: { padding: 20, gap: 12 },
   stepIndicator: { fontSize: 13, fontWeight: '600', textTransform: 'uppercase' },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 8 },
   section: { gap: 12 },

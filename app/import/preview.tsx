@@ -9,6 +9,7 @@ import { formatCurrency } from '../../lib/format';
 import { takePendingImport } from '../../features/import-preview-store';
 import { commitStatementRows, type StatementPreviewRow } from '../../features/statement-import';
 import { confirmAction, notify } from '../../lib/confirm';
+import { useAndroidBackGuard } from '../../lib/useAndroidBackGuard';
 
 // Review-before-write screen for statement import. The parser hands over its
 // best interpretation; this screen makes every decision visible and reversible
@@ -25,6 +26,9 @@ export default function ImportPreviewScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { categories, cards, settings, refresh } = useBudget();
+  // Matches the screen's `gestureEnabled: false`: the parsed rows are handed
+  // over once, so backing out here loses the whole import silently.
+  useAndroidBackGuard();
 
   // Read the hand-off exactly once. If it's missing (deep-linked here directly,
   // or committed already), there's nothing to show.

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, radius, type as typeScale, hexToRgba } from '../theme/colors';
+import { checkBiometricsSupport } from '../features/biometrics';
 import { Surface } from './Surface';
 import { GradientCard } from './GradientCard';
 import { AmountText } from './AmountText';
@@ -262,19 +263,35 @@ export function RolloverBadge({ amount, currency = 'USD' }: { amount: number; cu
 // 13. AppLockScreen
 export function AppLockScreen({ onUnlock }: { onUnlock: () => void }) {
   const theme = useTheme();
+  // The credential name is device-specific ("Face ID" on iOS, "Fingerprint" or
+  // "Face Unlock" on Android), so ask the device instead of naming one. Until
+  // it answers, the neutral "Unlock" label is always true.
+  const [biometricType, setBiometricType] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    checkBiometricsSupport().then((s) => {
+      if (!cancelled) setBiometricType(s.supported ? s.type : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <View style={[StyleSheet.absoluteFill, styles.lockScreen, { backgroundColor: hexToRgba(theme.background, 0.95) }]}>
       <Ionicons name="lock-closed" size={48} color={theme.accent} style={{ marginBottom: spacing.lg }} />
       <Text style={[typeScale.headline, { color: theme.label, marginBottom: spacing.md }]}>Penny Budget is Locked</Text>
-      <Pressable 
-        onPress={onUnlock} 
+      <Pressable
+        onPress={onUnlock}
         style={({ pressed }) => [
-          styles.unlockButton, 
+          styles.unlockButton,
           { backgroundColor: theme.accent, opacity: pressed ? 0.8 : 1 }
         ]}
       >
         <Ionicons name="scan" size={20} color="#FFF" style={{ marginRight: spacing.sm }} />
-        <Text style={[typeScale.subhead, { color: '#FFF', fontWeight: '600' }]}>Unlock with Face ID</Text>
+        <Text style={[typeScale.subhead, { color: '#FFF', fontWeight: '600' }]}>
+          {biometricType ? `Unlock with ${biometricType}` : 'Unlock'}
+        </Text>
       </Pressable>
     </View>
   );
