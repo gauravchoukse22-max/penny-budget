@@ -1,12 +1,117 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Platform, Alert, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Platform, Modal, useColorScheme } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useBudget } from '../../context/BudgetContext';
-import { useTheme, spacing, radius } from '../../theme/colors';
+import { useTheme, spacing, radius, type } from '../../theme/colors';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { DateField } from '../../components/DateField';
-import { confirmAction, notify } from '../../lib/confirm';
+import { confirmAction } from '../../lib/confirm';
+import { formatDayLabel } from '../../lib/format';
 import { parseMoneyInput } from '../../lib/parse-number';
+
+// Matches the add-transaction screen so both screens' buttons are the same
+// size; 52 clears Apple's 44pt minimum tap target.
+const ACTION_HEIGHT = 52;
+
+// iOS' inline calendar has no intrinsic height inside a sheet — this fits a
+// full six-row month plus its month header without scrolling.
+const INLINE_PICKER_HEIGHT = 380;
+
+function toIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Date row plus a picker that can actually be dismissed.
+ *
+ * iOS' inline picker draws no chrome of its own, so once mounted there was no
+ * way to put it away — it sat under the field for the rest of the session.
+ * Presenting it in the app's standard pageSheet (same shape as
+ * NumberEditorSheet) gives it a Cancel/Done header, and holding the selection
+ * in a draft means backing out leaves the committed date alone. Android's
+ * picker is a native dialog that dismisses itself, so it stays inline there.
+ */
+function DatePickerField({ value, onChange }: { value: string; onChange: (iso: string) => void }) {
+  const theme = useTheme();
+  const scheme = useColorScheme();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  // This screen fills its fields from an effect, so `value` is empty for the
+  // first frame — fall back to today rather than rendering "Invalid Date".
+  const iso = value || toIso(new Date());
+
+  // Web has no native picker at all — DateField renders a real <input
+  // type="date"> there, so hand off rather than duplicate that branch.
+  if (Platform.OS === 'web') return <DateField value={iso} onChange={onChange} />;
+
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Date: ${formatDayLabel(iso)}`}
+        style={[styles.dateBox, { backgroundColor: theme.fieldBackground }]}
+        onPress={() => {
+          // Always reopen on the committed date, never a stale draft.
+          setDraft(iso);
+          setOpen(true);
+        }}
+      >
+        <Text style={{ color: theme.label, fontSize: 15 }}>{formatDayLabel(iso)}</Text>
+        <Ionicons name="calendar-outline" size={18} color={theme.secondaryLabel} />
+      </Pressable>
+
+      {Platform.OS === 'android' && open && (
+        <DateTimePicker
+          value={new Date(`${iso}T00:00:00`)}
+          mode="date"
+          display="default"
+          onChange={(event, selected) => {
+            // The dialog has already closed itself by the time this fires;
+            // unmount it so the next tap opens a fresh one.
+            setOpen(false);
+            if (event.type === 'set' && selected) onChange(toIso(selected));
+          }}
+        />
+      )}
+
+      {Platform.OS === 'ios' && (
+        <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setOpen(false)}>
+          <View style={{ flex: 1, backgroundColor: theme.groupedBackground }}>
+            <View style={styles.sheetHeader}>
+              <Pressable onPress={() => setOpen(false)} hitSlop={10}>
+                <Text style={{ color: theme.secondaryLabel, fontSize: 16 }}>Cancel</Text>
+              </Pressable>
+              <Text style={[type.headline, { color: theme.label }]}>Date</Text>
+              <Pressable
+                hitSlop={10}
+                onPress={() => {
+                  onChange(draft);
+                  setOpen(false);
+                }}
+              >
+                <Text style={{ color: theme.accent, fontSize: 16, fontWeight: '700' }}>Done</Text>
+              </Pressable>
+            </View>
+            <DateTimePicker
+              value={new Date(`${draft}T00:00:00`)}
+              mode="date"
+              display="inline"
+              accentColor={theme.accent}
+              themeVariant={scheme === 'dark' ? 'dark' : 'light'}
+              style={styles.inlinePicker}
+              onChange={(_, selected) => {
+                if (selected) setDraft(toIso(selected));
+              }}
+            />
+          </View>
+        </Modal>
+      )}
+    </>
+  );
+}
 
 export default function EditTransactionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -60,15 +165,16 @@ export default function EditTransactionScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: theme.groupedBackground }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
     <ScrollView
-      style={{ backgroundColor: theme.groupedBackground }}
+      style={{ flex: 1, backgroundColor: theme.groupedBackground }}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
+      // The numeric pad has no Return key, so dragging is the only way out of it.
+      keyboardDismissMode="on-drag"
+      // Lets iOS inset by the real keyboard height. KeyboardAvoidingView was
+      // guessing a 90pt header offset, which is wrong inside a modal
+      // presentation and left the buttons under the keyboard.
+      automaticallyAdjustKeyboardInsets
     >
       <View style={styles.amountRow}>
         <Text style={[styles.currencySymbol, { color: isRefund ? theme.systemGreen : theme.secondaryLabel }]}>
@@ -125,7 +231,7 @@ export default function EditTransactionScreen() {
       </ScrollView>
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Date</Text>
-      <DateField value={date} onChange={setDate} />
+      <DatePickerField value={date} onChange={setDate} />
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Note</Text>
       <TextInput
@@ -134,14 +240,25 @@ export default function EditTransactionScreen() {
         onChangeText={setNote}
       />
 
-      <Pressable disabled={!canSave} style={[styles.button, { backgroundColor: theme.accent, opacity: canSave ? 1 : 0.4, marginTop: spacing.xl }]} onPress={save}>
-        <Text style={{ color: '#FFF', fontWeight: '600' }}>Save Changes</Text>
-      </Pressable>
-      <Pressable style={[styles.button, styles.deleteButton, { borderColor: theme.systemRed }]} onPress={confirmDelete}>
-        <Text style={{ color: theme.systemRed, fontWeight: '600' }}>Delete Transaction</Text>
-      </Pressable>
+      <View style={styles.actions}>
+        <Pressable
+          disabled={!canSave}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canSave }}
+          style={[styles.actionButton, styles.actionPrimary, { backgroundColor: theme.accent }, !canSave && styles.actionDisabled]}
+          onPress={save}
+        >
+          <Text style={[type.headline, { color: theme.onAccent }]}>Save Changes</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          style={[styles.actionButton, { borderColor: theme.systemRed }]}
+          onPress={confirmDelete}
+        >
+          <Text style={[type.headline, { color: theme.systemRed }]}>Delete Transaction</Text>
+        </Pressable>
+      </View>
     </ScrollView>
-    </KeyboardAvoidingView>
   );
 }
 
@@ -161,6 +278,20 @@ const styles = StyleSheet.create({
   cardChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.md, marginRight: 8 },
   cardChipText: { color: '#FFF', fontWeight: '600' },
   noteInput: { padding: 12, borderRadius: radius.sm, fontSize: 15 },
-  button: { paddingVertical: 15, borderRadius: radius.md, alignItems: 'center' },
-  deleteButton: { borderWidth: 1.5, marginTop: 12 },
+  dateBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: radius.sm },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.md,
+  },
+  inlinePicker: { height: INLINE_PICKER_HEIGHT, marginHorizontal: spacing.sm },
+  actions: { gap: spacing.md, marginTop: spacing.xl },
+  // Both buttons carry the same border box — without it the outlined Delete
+  // button sat 3pt taller than the filled Save button.
+  actionButton: { height: ACTION_HEIGHT, borderRadius: radius.md, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  actionPrimary: { borderColor: 'transparent' },
+  actionDisabled: { opacity: 0.4 },
 });

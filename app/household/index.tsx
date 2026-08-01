@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { GroupedSection, AuthTextField, PrimaryButton, TextButton, InlineError, InfoNote } from '../../components/AuthUI';
+import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { myHouseholds, listMembers, createInvite, type Household, type HouseholdMember } from '../../features/household';
 import { confirmAction, notify } from '../../lib/confirm';
 
@@ -193,7 +194,11 @@ export default function HouseholdScreen() {
 
   // ── Not in a household: create or join ────────────────────────────────────
   return (
-    <ScrollView style={{ backgroundColor: theme.groupedBackground }} contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScreen
+      backgroundColor={theme.groupedBackground}
+      contentContainerStyle={styles.content}
+      contentInsetAdjustmentBehavior="automatic"
+    >
       <Text style={[styles.intro, { color: theme.secondaryLabel }]}>
         Share one budget with your family — everyone can add transactions and see the same numbers. It stays optional; your data works offline either way.
       </Text>
@@ -209,7 +214,7 @@ export default function HouseholdScreen() {
       </GroupedSection>
 
       {error && <InlineError message={error} />}
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 

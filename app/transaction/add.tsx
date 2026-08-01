@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Platform, Modal, useColorScheme } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useBudget } from '../../context/BudgetContext';
-import { useTheme, spacing, radius } from '../../theme/colors';
-import { currencySymbol } from '../../lib/format';
+import { useTheme, spacing, radius, type } from '../../theme/colors';
+import { currencySymbol, formatDayLabel } from '../../lib/format';
 import { parseMoneyInput } from '../../lib/parse-number';
 import { DateField } from '../../components/DateField';
 import { CategoryIcon } from '../../components/CategoryIcon';
@@ -13,9 +14,108 @@ import { suggestCategory } from '../../features/smart-categorizer';
 import { tapLight, success } from '../../lib/haptics';
 import type { SmartSuggestion } from '../../features/models';
 
-function todayIso(): string {
-  const d = new Date();
+// Both action buttons and the empty-state button share one height so the pair
+// reads as a set; 52 matches the stepper buttons in NumberEditorSheet and
+// clears Apple's 44pt minimum tap target.
+const ACTION_HEIGHT = 52;
+
+// iOS' inline calendar has no intrinsic height inside a sheet — this fits a
+// full six-row month plus its month header without scrolling.
+const INLINE_PICKER_HEIGHT = 380;
+
+function toIso(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function todayIso(): string {
+  return toIso(new Date());
+}
+
+/**
+ * Date row plus a picker that can actually be dismissed.
+ *
+ * iOS' inline picker draws no chrome of its own, so once mounted there was no
+ * way to put it away — it sat under the field for the rest of the session.
+ * Presenting it in the app's standard pageSheet (same shape as
+ * NumberEditorSheet) gives it a Cancel/Done header, and holding the selection
+ * in a draft means backing out leaves the committed date alone. Android's
+ * picker is a native dialog that dismisses itself, so it stays inline there.
+ */
+function DatePickerField({ value, onChange }: { value: string; onChange: (iso: string) => void }) {
+  const theme = useTheme();
+  const scheme = useColorScheme();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  // Web has no native picker at all — DateField renders a real <input
+  // type="date"> there, so hand off rather than duplicate that branch.
+  if (Platform.OS === 'web') return <DateField value={value} onChange={onChange} />;
+
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Date: ${formatDayLabel(value)}`}
+        style={[styles.dateBox, { backgroundColor: theme.fieldBackground }]}
+        onPress={() => {
+          tapLight();
+          // Always reopen on the committed date, never a stale draft.
+          setDraft(value);
+          setOpen(true);
+        }}
+      >
+        <Text style={{ color: theme.label, fontSize: 15 }}>{formatDayLabel(value)}</Text>
+        <Ionicons name="calendar-outline" size={18} color={theme.secondaryLabel} />
+      </Pressable>
+
+      {Platform.OS === 'android' && open && (
+        <DateTimePicker
+          value={new Date(`${value}T00:00:00`)}
+          mode="date"
+          display="default"
+          onChange={(event, selected) => {
+            // The dialog has already closed itself by the time this fires;
+            // unmount it so the next tap opens a fresh one.
+            setOpen(false);
+            if (event.type === 'set' && selected) onChange(toIso(selected));
+          }}
+        />
+      )}
+
+      {Platform.OS === 'ios' && (
+        <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setOpen(false)}>
+          <View style={{ flex: 1, backgroundColor: theme.groupedBackground }}>
+            <View style={styles.sheetHeader}>
+              <Pressable onPress={() => setOpen(false)} hitSlop={10}>
+                <Text style={{ color: theme.secondaryLabel, fontSize: 16 }}>Cancel</Text>
+              </Pressable>
+              <Text style={[type.headline, { color: theme.label }]}>Date</Text>
+              <Pressable
+                hitSlop={10}
+                onPress={() => {
+                  onChange(draft);
+                  setOpen(false);
+                }}
+              >
+                <Text style={{ color: theme.accent, fontSize: 16, fontWeight: '700' }}>Done</Text>
+              </Pressable>
+            </View>
+            <DateTimePicker
+              value={new Date(`${draft}T00:00:00`)}
+              mode="date"
+              display="inline"
+              accentColor={theme.accent}
+              themeVariant={scheme === 'dark' ? 'dark' : 'light'}
+              style={styles.inlinePicker}
+              onChange={(_, selected) => {
+                if (selected) setDraft(toIso(selected));
+              }}
+            />
+          </View>
+        </Modal>
+      )}
+    </>
+  );
 }
 
 export default function AddTransactionScreen() {
@@ -63,7 +163,7 @@ export default function AddTransactionScreen() {
           Every transaction needs a card to belong to. Add one in the Cards tab, then come back here.
         </Text>
         <Pressable
-          style={[styles.button, { backgroundColor: theme.accent, marginTop: spacing.xl }]}
+          style={[styles.emptyButton, { backgroundColor: theme.accent }]}
           onPress={() => {
             router.back();
             router.push('/(tabs)/cards');
@@ -93,15 +193,17 @@ export default function AddTransactionScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: theme.groupedBackground }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
     <ScrollView
-      style={{ backgroundColor: theme.groupedBackground }}
+      style={{ flex: 1, backgroundColor: theme.groupedBackground }}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
+      // The numeric pad has no Return key, so dragging is the only way out of
+      // it once the amount field autofocuses.
+      keyboardDismissMode="on-drag"
+      // Lets iOS inset by the real keyboard height. KeyboardAvoidingView was
+      // guessing a 90pt header offset, which is wrong inside a modal
+      // presentation and left the Save buttons under the keyboard.
+      automaticallyAdjustKeyboardInsets
     >
       <View style={styles.amountRow}>
         <Text style={[styles.currencySymbol, { color: isRefund ? theme.systemGreen : theme.secondaryLabel }]}>
@@ -193,7 +295,7 @@ export default function AddTransactionScreen() {
       </ScrollView>
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Date</Text>
-      <DateField value={date} onChange={setDate} />
+      <DatePickerField value={date} onChange={setDate} />
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Note</Text>
       <TextInput
@@ -221,24 +323,31 @@ export default function AddTransactionScreen() {
         </Pressable>
       )}
 
-      <View style={styles.buttonRow}>
+      <View style={styles.actions}>
         <PressableScale
           disabled={!canSave}
-          style={[styles.button, styles.secondaryButton, { borderColor: theme.accent, opacity: canSave ? 1 : 0.4 }]}
-          onPress={() => save(true)}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canSave }}
+          style={[styles.actionButton, styles.actionPrimary, { backgroundColor: theme.accent }, !canSave && styles.actionDisabled]}
+          onPress={() => save(false)}
         >
-          <Text style={{ color: theme.accent, fontWeight: '600' }}>Save & Add Another</Text>
+          <Text style={[type.headline, { color: theme.onAccent }]}>Save</Text>
         </PressableScale>
         <PressableScale
           disabled={!canSave}
-          style={[styles.button, { backgroundColor: theme.accent, opacity: canSave ? 1 : 0.4 }]}
-          onPress={() => save(false)}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canSave }}
+          style={[
+            styles.actionButton,
+            { backgroundColor: theme.accentTint, borderColor: theme.accent },
+            !canSave && styles.actionDisabled,
+          ]}
+          onPress={() => save(true)}
         >
-          <Text style={{ color: '#FFF', fontWeight: '600' }}>Save</Text>
+          <Text style={[type.headline, { color: theme.accent }]}>Save & Add Another</Text>
         </PressableScale>
       </View>
     </ScrollView>
-    </KeyboardAvoidingView>
   );
 }
 
@@ -263,7 +372,30 @@ const styles = StyleSheet.create({
   cardChipText: { color: '#FFF', fontWeight: '600' },
   noteInput: { padding: 12, borderRadius: radius.sm, fontSize: 15 },
   suggestionChip: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.sm, borderWidth: 1, marginTop: 8 },
-  buttonRow: { flexDirection: 'row', gap: 12, marginTop: spacing.xl },
-  button: { flex: 1, paddingVertical: 15, borderRadius: radius.md, alignItems: 'center' },
-  secondaryButton: { borderWidth: 1.5 },
+  dateBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: radius.sm },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.md,
+  },
+  inlinePicker: { height: INLINE_PICKER_HEIGHT, marginHorizontal: spacing.sm },
+  // Stacked rather than side by side: "Save & Add Another" wrapped to two lines
+  // at half width, which is what made the pair look like mismatched shapes.
+  actions: { gap: spacing.md, marginTop: spacing.xl },
+  // Both buttons carry the same border box — without it the outlined one sat
+  // 3pt taller than the filled one.
+  actionButton: { height: ACTION_HEIGHT, borderRadius: radius.md, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  actionPrimary: { borderColor: 'transparent' },
+  actionDisabled: { opacity: 0.4 },
+  emptyButton: {
+    height: ACTION_HEIGHT,
+    paddingHorizontal: spacing.xxl,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.xl,
+  },
 });

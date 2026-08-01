@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
+import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { AmountText } from '../../components/AmountText';
 import {
@@ -115,7 +116,11 @@ export default function RecurringScreen() {
   }
 
   return (
-    <ScrollView style={{ backgroundColor: theme.groupedBackground }} contentContainerStyle={styles.content}>
+    <KeyboardAwareScreen
+      backgroundColor={theme.groupedBackground}
+      contentContainerStyle={styles.content}
+      contentInsetAdjustmentBehavior="automatic"
+    >
       <Surface>
         <Text style={[styles.sectionTitle, { color: theme.label }]}>Recurring Bills</Text>
         {items.length === 0 ? (
@@ -238,7 +243,7 @@ export default function RecurringScreen() {
       <Text style={[styles.footer, { color: theme.tertiaryLabel }]}>
         Bills post automatically each month when the app is opened on or after their day.
       </Text>
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 

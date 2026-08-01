@@ -7,6 +7,7 @@ import { useBudget } from '../../context/BudgetContext';
 import { useTheme, CATEGORY_PALETTE, spacing, radius, type } from '../../theme/colors';
 import { WalletCard } from '../../components/WalletCard';
 import { AmountText } from '../../components/AmountText';
+import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { notify } from '../../lib/confirm';
 import { daysUntilDue } from '../../lib/queries';
 

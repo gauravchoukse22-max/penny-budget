@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View, Text, Pressable, Alert, ActivityIndicator, Platform } from 'react-native';
+import { StyleSheet, View, Text, Pressable, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { GroupedSection, AuthTextField, PrimaryButton, TextButton, InlineError, InfoNote } from '../../components/AuthUI';
+import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { useSensitiveScreen } from '../../features/privacy-screen';
 import { stepUpReauth } from '../../features/biometrics';
 import { openSecurity } from '../../lib/legal';
@@ -134,7 +135,11 @@ export default function SecurityScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.content} style={{ backgroundColor: theme.groupedBackground }} contentInsetAdjustmentBehavior="automatic">
+    <KeyboardAwareScreen
+      backgroundColor={theme.groupedBackground}
+      contentContainerStyle={styles.content}
+      contentInsetAdjustmentBehavior="automatic"
+    >
       {/* Two-factor */}
       <GroupedSection
         header="Two-factor authentication"
@@ -219,7 +224,7 @@ export default function SecurityScreen() {
       <Text style={[styles.centerFootnote, { color: theme.tertiaryLabel }]}>
         Permanently deletes your account and cloud backup. Data on this device is untouched.
       </Text>
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 

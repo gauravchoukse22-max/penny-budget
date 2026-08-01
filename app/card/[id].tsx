@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { WalletCard } from '../../components/WalletCard';
 import { TransactionRow } from '../../components/TransactionRow';
 import { Surface } from '../../components/Surface';
+import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { confirmAction, notify } from '../../lib/confirm';
 import { daysUntilDue } from '../../lib/queries';
 
@@ -48,7 +49,11 @@ export default function CardDetailScreen() {
   };
 
   return (
-    <ScrollView style={{ backgroundColor: theme.groupedBackground }} contentContainerStyle={styles.content}>
+    <KeyboardAwareScreen
+      backgroundColor={theme.groupedBackground}
+      contentContainerStyle={styles.content}
+      contentInsetAdjustmentBehavior="automatic"
+    >
       <WalletCard card={card} total={cardTotals.get(card.id) ?? 0} currency={settings.currency} />
 
       <Surface>
@@ -119,7 +124,7 @@ export default function CardDetailScreen() {
       <Pressable style={[styles.deleteButton, { borderColor: theme.systemRed }]} onPress={confirmDelete}>
         <Text style={{ color: theme.systemRed, fontWeight: '600' }}>Remove Card</Text>
       </Pressable>
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 

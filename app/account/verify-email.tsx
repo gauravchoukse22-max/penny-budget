@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, spacing } from '../../theme/colors';
 import { GroupedSection, AuthTextField, PrimaryButton, TextButton, InlineError, InfoNote } from '../../components/AuthUI';
+import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { setPendingVerification, clearPendingVerification } from '../../features/pending-verification';
 
 const COOLDOWN_SECONDS = 60;
@@ -80,7 +81,11 @@ export default function VerifyEmailScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.content} style={{ backgroundColor: theme.groupedBackground }} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScreen
+      backgroundColor={theme.groupedBackground}
+      contentContainerStyle={styles.content}
+      contentInsetAdjustmentBehavior="automatic"
+    >
       <View style={styles.hero}>
         <Ionicons name="mail-unread-outline" size={44} color={theme.accent} />
       </View>
@@ -114,11 +119,13 @@ export default function VerifyEmailScreen() {
           color={theme.secondaryLabel}
         />
       </GroupedSection>
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.lg, gap: spacing.lg },
+  // Bottom room so the last control still clears the keyboard once the scroll
+  // view is inset for it.
+  content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
   hero: { alignItems: 'center', paddingTop: spacing.lg },
 });

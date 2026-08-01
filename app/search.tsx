@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useBudget } from '../context/BudgetContext';
 import { useTheme, spacing, radius, type } from '../theme/colors';
 import { Surface } from '../components/Surface';
+import { KeyboardAwareScreen } from '../components/KeyboardAwareScreen';
 import { TransactionRow } from '../components/TransactionRow';
 import { searchTransactions, type SearchFilters } from '../features/search-engine';
 import type { Transaction } from '../lib/models';
@@ -48,7 +49,11 @@ export default function SearchScreen() {
   };
 
   return (
-    <ScrollView style={{ backgroundColor: theme.groupedBackground }} contentContainerStyle={styles.content}>
+    <KeyboardAwareScreen
+      backgroundColor={theme.groupedBackground}
+      contentContainerStyle={styles.content}
+      contentInsetAdjustmentBehavior="automatic"
+    >
       <Surface>
         <TextInput
           style={[styles.input, { backgroundColor: theme.fieldBackground, color: theme.label }]}
@@ -156,7 +161,7 @@ export default function SearchScreen() {
           )}
         </Surface>
       )}
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 

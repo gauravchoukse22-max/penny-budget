@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Platform, KeyboardAvoidingView, View, Text, ActivityIndicator } from 'react-native';
+import { ScrollView, StyleSheet, View, Text, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, spacing } from '../../theme/colors';
 import { GroupedSection, AuthTextField, PrimaryButton, TextButton, InlineError, StrengthMeter } from '../../components/AuthUI';
+import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { useSensitiveScreen } from '../../features/privacy-screen';
 import { useAndroidBackGuard } from '../../lib/useAndroidBackGuard';
 import { evaluatePassword, MIN_PASSWORD_LENGTH } from '../../lib/passwordStrength';
@@ -83,32 +84,36 @@ export default function UpdatePasswordScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.groupedBackground }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" contentInsetAdjustmentBehavior="automatic">
-        <GroupedSection header="New password" footnote={`At least ${MIN_PASSWORD_LENGTH} characters.`}>
-          <AuthTextField
-            label="New password"
-            value={password}
-            onChangeText={setPassword}
-            secure
-            autoCapitalize="none"
-            autoCorrect={false}
-            textContentType="newPassword"
-            autoComplete="password-new"
-            returnKeyType="go"
-            onSubmitEditing={submit}
-            placeholder="New password"
-          />
-          <StrengthMeter password={password} />
-          {error && <InlineError message={error} />}
-          <PrimaryButton title="Update password" onPress={submit} loading={submitting} disabled={!evaluatePassword(password).meetsMinimum} />
-        </GroupedSection>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    <KeyboardAwareScreen
+      backgroundColor={theme.groupedBackground}
+      contentContainerStyle={styles.content}
+      contentInsetAdjustmentBehavior="automatic"
+    >
+      <GroupedSection header="New password" footnote={`At least ${MIN_PASSWORD_LENGTH} characters.`}>
+        <AuthTextField
+          label="New password"
+          value={password}
+          onChangeText={setPassword}
+          secure
+          autoCapitalize="none"
+          autoCorrect={false}
+          textContentType="newPassword"
+          autoComplete="password-new"
+          returnKeyType="go"
+          onSubmitEditing={submit}
+          placeholder="New password"
+        />
+        <StrengthMeter password={password} />
+        {error && <InlineError message={error} />}
+        <PrimaryButton title="Update password" onPress={submit} loading={submitting} disabled={!evaluatePassword(password).meetsMinimum} />
+      </GroupedSection>
+    </KeyboardAwareScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.lg, gap: spacing.lg },
+  // Bottom room so the last control still clears the keyboard once the scroll
+  // view is inset for it.
+  content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });

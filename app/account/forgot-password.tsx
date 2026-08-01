@@ -1,9 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Platform, KeyboardAvoidingView, type TextInput as RNTextInput } from 'react-native';
+import { StyleSheet, type TextInput as RNTextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, spacing } from '../../theme/colors';
 import { GroupedSection, AuthTextField, PrimaryButton, TextButton, InlineError, InfoNote, StrengthMeter } from '../../components/AuthUI';
+import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { useSensitiveScreen } from '../../features/privacy-screen';
 import { isValidEmail, evaluatePassword, MIN_PASSWORD_LENGTH } from '../../lib/passwordStrength';
 
@@ -72,67 +73,71 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.groupedBackground }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" contentInsetAdjustmentBehavior="automatic">
-        {step === 'request' ? (
-          <GroupedSection header="Reset password" footnote="We'll email you a 6-digit code to reset your password. You can also tap the link in that email instead.">
-            <AuthTextField
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-              clearable
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              textContentType="username"
-              autoComplete="email"
-              returnKeyType="go"
-              onSubmitEditing={sendCode}
-              placeholder="you@example.com"
-            />
-            {error && <InlineError message={error} />}
-            {info && <InfoNote message={info} tone="success" />}
-            <PrimaryButton title="Send reset code" onPress={sendCode} loading={submitting} disabled={!isValidEmail(email)} />
-          </GroupedSection>
-        ) : (
-          <GroupedSection header="Enter code & new password" footnote={`Code sent to ${email}. New password must be at least ${MIN_PASSWORD_LENGTH} characters.`}>
-            <AuthTextField
-              label="6-digit code"
-              value={code}
-              onChangeText={setCode}
-              keyboardType="number-pad"
-              autoComplete="one-time-code"
-              textContentType="oneTimeCode"
-              placeholder="123456"
-              maxLength={6}
-              returnKeyType="next"
-              onSubmitEditing={() => passwordRef.current?.focus()}
-            />
-            <AuthTextField
-              ref={passwordRef as any}
-              label="New password"
-              value={password}
-              onChangeText={setPassword}
-              secure
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="newPassword"
-              autoComplete="password-new"
-              returnKeyType="go"
-              onSubmitEditing={completeReset}
-              placeholder="New password"
-            />
-            <StrengthMeter password={password} />
-            {error && <InlineError message={error} />}
-            <PrimaryButton title="Reset password" onPress={completeReset} loading={submitting} disabled={code.trim().length < 6 || !evaluatePassword(password).meetsMinimum} />
-            <TextButton title="Use a different email" onPress={() => { setStep('request'); setError(null); setInfo(null); }} color={theme.secondaryLabel} />
-          </GroupedSection>
-        )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+    <KeyboardAwareScreen
+      backgroundColor={theme.groupedBackground}
+      contentContainerStyle={styles.content}
+      contentInsetAdjustmentBehavior="automatic"
+    >
+      {step === 'request' ? (
+        <GroupedSection header="Reset password" footnote="We'll email you a 6-digit code to reset your password. You can also tap the link in that email instead.">
+          <AuthTextField
+            label="Email"
+            value={email}
+            onChangeText={setEmail}
+            clearable
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            textContentType="username"
+            autoComplete="email"
+            returnKeyType="go"
+            onSubmitEditing={sendCode}
+            placeholder="you@example.com"
+          />
+          {error && <InlineError message={error} />}
+          {info && <InfoNote message={info} tone="success" />}
+          <PrimaryButton title="Send reset code" onPress={sendCode} loading={submitting} disabled={!isValidEmail(email)} />
+        </GroupedSection>
+      ) : (
+        <GroupedSection header="Enter code & new password" footnote={`Code sent to ${email}. New password must be at least ${MIN_PASSWORD_LENGTH} characters.`}>
+          <AuthTextField
+            label="6-digit code"
+            value={code}
+            onChangeText={setCode}
+            keyboardType="number-pad"
+            autoComplete="one-time-code"
+            textContentType="oneTimeCode"
+            placeholder="123456"
+            maxLength={6}
+            returnKeyType="next"
+            onSubmitEditing={() => passwordRef.current?.focus()}
+          />
+          <AuthTextField
+            ref={passwordRef as any}
+            label="New password"
+            value={password}
+            onChangeText={setPassword}
+            secure
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="newPassword"
+            autoComplete="password-new"
+            returnKeyType="go"
+            onSubmitEditing={completeReset}
+            placeholder="New password"
+          />
+          <StrengthMeter password={password} />
+          {error && <InlineError message={error} />}
+          <PrimaryButton title="Reset password" onPress={completeReset} loading={submitting} disabled={code.trim().length < 6 || !evaluatePassword(password).meetsMinimum} />
+          <TextButton title="Use a different email" onPress={() => { setStep('request'); setError(null); setInfo(null); }} color={theme.secondaryLabel} />
+        </GroupedSection>
+      )}
+    </KeyboardAwareScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.lg, gap: spacing.lg },
+  // Bottom room so the last control still clears the keyboard once the scroll
+  // view is inset for it.
+  content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
 });

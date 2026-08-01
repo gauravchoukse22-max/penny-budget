@@ -314,14 +314,14 @@ function AddCategoryModal({
         >
           <Text style={[styles.sectionTitle, { color: theme.label }]}>New Category</Text>
           <TextInput
-            style={[styles.goalInput, { backgroundColor: theme.fieldBackground, color: theme.label, marginBottom: 12 }]}
+            style={[styles.modalInput, { backgroundColor: theme.fieldBackground, color: theme.label }]}
             placeholder="Name"
             placeholderTextColor={theme.tertiaryLabel}
             value={name}
             onChangeText={setName}
           />
           <TextInput
-            style={[styles.goalInput, { backgroundColor: theme.fieldBackground, color: theme.label, marginBottom: 12 }]}
+            style={[styles.modalInput, { backgroundColor: theme.fieldBackground, color: theme.label }]}
             placeholder="Monthly ideal limit"
             placeholderTextColor={theme.tertiaryLabel}
             keyboardType="numeric"
@@ -330,18 +330,18 @@ function AddCategoryModal({
           />
           <View style={styles.iconGrid}>
             {CATEGORY_ICON_CHOICES.map((ic) => (
-              <Pressable key={ic} onPress={() => setIcon(ic)} style={[styles.iconChoice, icon === ic && { borderColor: theme.accent, borderWidth: 2 }]}>
+              <Pressable key={ic} onPress={() => setIcon(ic)} style={[styles.iconChoice, { borderColor: icon === ic ? theme.accent : 'transparent' }]}>
                 <CategoryIcon icon={ic} color={theme.secondaryLabel} />
               </Pressable>
             ))}
           </View>
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 20 }}>
-            <Pressable style={[styles.button, { borderColor: theme.separator, borderWidth: 1 }]} onPress={onClose}>
+          <View style={styles.modalButtonRow}>
+            <Pressable style={[styles.modalButton, { borderColor: theme.separator }]} onPress={onClose}>
               <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
             </Pressable>
-            <PressableScale style={[styles.button, { backgroundColor: theme.accent }]} onPress={save}>
-              <Text style={{ color: '#FFF', fontWeight: '600' }}>Add</Text>
-            </PressableScale>
+            <Pressable style={[styles.modalButton, { backgroundColor: theme.accent, borderColor: theme.accent }]} onPress={save}>
+              <Text style={{ color: theme.onAccent, fontWeight: '600' }}>Add</Text>
+            </Pressable>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -378,8 +378,25 @@ const styles = StyleSheet.create({
   goalAddRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
   goalInput: { flex: 1, padding: 10, borderRadius: radius.sm },
   goalAmountInput: { width: 80, padding: 10, borderRadius: radius.sm },
-  modalContent: { flexGrow: 1, padding: 20, paddingTop: 40, paddingBottom: 40 },
+  modalContent: { flexGrow: 1, padding: spacing.xl, paddingTop: spacing.xxxl, paddingBottom: spacing.xxxl },
+  // Deliberately no `flex` here: goalInput's flex:1 belongs to a row, but this
+  // sheet lays out in a column, where it made each field swallow the leftover
+  // height until the keyboard appeared and squeezed it back.
+  modalInput: { padding: spacing.md, borderRadius: radius.sm, fontSize: 16, marginBottom: spacing.md },
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  iconChoice: { borderRadius: 22, padding: 2 },
-  button: { flex: 1, paddingVertical: 14, borderRadius: radius.md, alignItems: 'center' },
+  // Border is always present (transparent when unselected) so picking an icon
+  // doesn't resize the chip and reflow the grid.
+  iconChoice: { borderRadius: 22, padding: 2, borderWidth: 2 },
+  modalButtonRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xl },
+  // Both buttons carry the same border width — the primary's just matches its
+  // fill — so the filled and outlined halves are the exact same box.
+  modalButton: {
+    flex: 1,
+    minHeight: 50,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

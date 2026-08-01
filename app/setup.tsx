@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useBudget } from '../context/BudgetContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, CATEGORY_PALETTE, spacing, radius } from '../theme/colors';
 import { CategoryIcon } from '../components/CategoryIcon';
+import { KeyboardAwareScreen } from '../components/KeyboardAwareScreen';
 import { parseMoneyInput } from '../lib/parse-number';
 import { formatCurrency } from '../lib/format';
 
@@ -127,7 +128,7 @@ export default function SetupWizard() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.groupedBackground }]}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}>
+      <KeyboardAwareScreen contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}>
         <Text style={[styles.stepIndicator, { color: theme.tertiaryLabel }]}>
           Step {step + 1} of {STEPS.length}
         </Text>
@@ -272,7 +273,7 @@ export default function SetupWizard() {
             {addedCardCount > 0 && <Text style={{ color: theme.secondaryLabel, marginTop: 8 }}>{addedCardCount} card(s) added</Text>}
           </View>
         )}
-      </ScrollView>
+      </KeyboardAwareScreen>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.xl }]}>
         {step > 0 && (
@@ -293,7 +294,9 @@ const styles = StyleSheet.create({
   // paddingTop/paddingBottom come from safe-area insets at render time: this
   // screen hides the header, and Android 15 draws edge-to-edge, so hardcoded
   // padding puts the first step and the footer buttons under the system bars.
-  content: { padding: 20, gap: 12 },
+  // The extra bottom room is so the last field of a step can scroll clear of
+  // the keyboard rather than stopping flush against it.
+  content: { padding: 20, paddingBottom: spacing.xxxl, gap: 12 },
   stepIndicator: { fontSize: 13, fontWeight: '600', textTransform: 'uppercase' },
   title: { fontSize: 28, fontWeight: '700', marginBottom: 8 },
   section: { gap: 12 },

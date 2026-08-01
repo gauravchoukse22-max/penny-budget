@@ -8,7 +8,6 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
-  KeyboardAvoidingView,
   useColorScheme,
   type TextInput as RNTextInput,
 } from 'react-native';
@@ -28,6 +27,7 @@ import {
   StrengthMeter,
   OrDivider,
 } from '../../components/AuthUI';
+import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { useSensitiveScreen } from '../../features/privacy-screen';
 import { isValidEmail, evaluatePassword, MIN_PASSWORD_LENGTH } from '../../lib/passwordStrength';
 import { openTerms, openPrivacy } from '../../lib/legal';
@@ -178,11 +178,10 @@ export default function AccountScreen() {
   // ── Pending two-factor challenge (blocks the signed-in view) ────────────
   if (mfaChallenge) {
     return (
-      <ScrollView
-        style={{ backgroundColor: theme.groupedBackground }}
+      <KeyboardAwareScreen
+        backgroundColor={theme.groupedBackground}
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="automatic"
-        keyboardShouldPersistTaps="handled"
       >
         <GroupedSection
           header="Two-factor verification"
@@ -204,7 +203,7 @@ export default function AccountScreen() {
           <PrimaryButton title="Verify" onPress={submitMfa} loading={mfaSubmitting} disabled={mfaCode.trim().length < 6} />
           <TextButton title="Cancel and sign out" onPress={cancelMfaChallenge} color={theme.secondaryLabel} />
         </GroupedSection>
-      </ScrollView>
+      </KeyboardAwareScreen>
     );
   }
 
@@ -281,128 +280,122 @@ export default function AccountScreen() {
   // ── Signed out: sign in / create account ────────────────────────────────
   const showApple = Platform.OS === 'ios' && appleAvailable;
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: theme.groupedBackground }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <KeyboardAwareScreen
+      backgroundColor={theme.groupedBackground}
+      contentContainerStyle={styles.content}
+      contentInsetAdjustmentBehavior="automatic"
     >
-      <ScrollView
-        contentContainerStyle={styles.content}
-        contentInsetAdjustmentBehavior="automatic"
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-      >
-        {sessionEndedMessage && (
-          <View style={[styles.banner, { backgroundColor: theme.accentTint }]}>
-            <Text style={{ color: theme.label, flex: 1 }}>{sessionEndedMessage}</Text>
-            <Pressable onPress={clearSessionEndedMessage} hitSlop={8} accessibilityLabel="Dismiss">
-              <Ionicons name="close" size={18} color={theme.secondaryLabel} />
-            </Pressable>
-          </View>
-        )}
+      {sessionEndedMessage && (
+        <View style={[styles.banner, { backgroundColor: theme.accentTint }]}>
+          <Text style={{ color: theme.label, flex: 1 }}>{sessionEndedMessage}</Text>
+          <Pressable onPress={clearSessionEndedMessage} hitSlop={8} accessibilityLabel="Dismiss">
+            <Ionicons name="close" size={18} color={theme.secondaryLabel} />
+          </Pressable>
+        </View>
+      )}
 
-        <Text style={[styles.intro, { color: theme.secondaryLabel }]}>
-          An optional account backs up and restores your budget. The app works fully offline without one.
-        </Text>
+      <Text style={[styles.intro, { color: theme.secondaryLabel }]}>
+        An optional account backs up and restores your budget. The app works fully offline without one.
+      </Text>
 
-        {showApple && (
-          <View style={{ gap: spacing.md }}>
-            <AppleAuthentication.AppleAuthenticationButton
-              buttonType={
-                mode === 'signIn'
-                  ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
-                  : AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP
-              }
-              buttonStyle={
-                isDark
-                  ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
-                  : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-              }
-              cornerRadius={radius.md}
-              style={styles.appleButton}
-              onPress={doAppleSignIn}
-            />
-            <OrDivider />
-          </View>
-        )}
+      {showApple && (
+        <View style={{ gap: spacing.md }}>
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={
+              mode === 'signIn'
+                ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
+                : AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP
+            }
+            buttonStyle={
+              isDark
+                ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+            }
+            cornerRadius={radius.md}
+            style={styles.appleButton}
+            onPress={doAppleSignIn}
+          />
+          <OrDivider />
+        </View>
+      )}
 
-        <GroupedSection
-          header={mode === 'signIn' ? 'Sign In' : 'Create Account'}
-          footnote={
-            mode === 'signUp' ? (
-              <Text style={[styles.consent, { color: theme.tertiaryLabel }]}>
-                By creating an account you agree to the{' '}
-                <Text style={{ color: theme.accent }} onPress={openTerms}>
-                  Terms of Use
-                </Text>{' '}
-                and{' '}
-                <Text style={{ color: theme.accent }} onPress={openPrivacy}>
-                  Privacy Policy
-                </Text>
-                .
+      <GroupedSection
+        header={mode === 'signIn' ? 'Sign In' : 'Create Account'}
+        footnote={
+          mode === 'signUp' ? (
+            <Text style={[styles.consent, { color: theme.tertiaryLabel }]}>
+              By creating an account you agree to the{' '}
+              <Text style={{ color: theme.accent }} onPress={openTerms}>
+                Terms of Use
+              </Text>{' '}
+              and{' '}
+              <Text style={{ color: theme.accent }} onPress={openPrivacy}>
+                Privacy Policy
               </Text>
-            ) : undefined
-          }
-        >
-          <AuthTextField
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            clearable
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            textContentType="username"
-            autoComplete="email"
-            returnKeyType="next"
-            onSubmitEditing={() => passwordRef.current?.focus()}
-            placeholder="you@example.com"
-          />
-          <AuthTextField
-            ref={passwordRef as any}
-            label="Password"
-            value={password}
-            onChangeText={setPassword}
-            secure
-            autoCapitalize="none"
-            autoCorrect={false}
-            textContentType={mode === 'signUp' ? 'newPassword' : 'password'}
-            autoComplete={mode === 'signUp' ? 'password-new' : 'password'}
-            returnKeyType="go"
-            onSubmitEditing={submit}
-            placeholder="Password"
-          />
-          {mode === 'signUp' && (
-            <>
-              <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }}>At least {MIN_PASSWORD_LENGTH} characters.</Text>
-              <StrengthMeter password={password} />
-            </>
-          )}
-
-          {error && <InlineError message={error} />}
-          {info && <InfoNote message={info} tone="success" />}
-
-          <PrimaryButton
-            title={mode === 'signIn' ? 'Sign In' : 'Create Account'}
-            onPress={submit}
-            loading={submitting}
-            disabled={!canSubmit}
-          />
-
-          {mode === 'signIn' && (
-            <TextButton title="Forgot password?" onPress={() => router.push('/account/forgot-password')} />
-          )}
-        </GroupedSection>
-
-        <TextButton
-          title={mode === 'signIn' ? "Don't have an account? Create one" : 'Already have an account? Sign in'}
-          onPress={() => {
-            setMode((m) => (m === 'signIn' ? 'signUp' : 'signIn'));
-            setError(null);
-            setInfo(null);
-          }}
+              .
+            </Text>
+          ) : undefined
+        }
+      >
+        <AuthTextField
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          clearable
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          textContentType="username"
+          autoComplete="email"
+          returnKeyType="next"
+          onSubmitEditing={() => passwordRef.current?.focus()}
+          placeholder="you@example.com"
         />
-      </ScrollView>
-    </KeyboardAvoidingView>
+        <AuthTextField
+          ref={passwordRef as any}
+          label="Password"
+          value={password}
+          onChangeText={setPassword}
+          secure
+          autoCapitalize="none"
+          autoCorrect={false}
+          textContentType={mode === 'signUp' ? 'newPassword' : 'password'}
+          autoComplete={mode === 'signUp' ? 'password-new' : 'password'}
+          returnKeyType="go"
+          onSubmitEditing={submit}
+          placeholder="Password"
+        />
+        {mode === 'signUp' && (
+          <>
+            <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }}>At least {MIN_PASSWORD_LENGTH} characters.</Text>
+            <StrengthMeter password={password} />
+          </>
+        )}
+
+        {error && <InlineError message={error} />}
+        {info && <InfoNote message={info} tone="success" />}
+
+        <PrimaryButton
+          title={mode === 'signIn' ? 'Sign In' : 'Create Account'}
+          onPress={submit}
+          loading={submitting}
+          disabled={!canSubmit}
+        />
+
+        {mode === 'signIn' && (
+          <TextButton title="Forgot password?" onPress={() => router.push('/account/forgot-password')} />
+        )}
+      </GroupedSection>
+
+      <TextButton
+        title={mode === 'signIn' ? "Don't have an account? Create one" : 'Already have an account? Sign in'}
+        onPress={() => {
+          setMode((m) => (m === 'signIn' ? 'signUp' : 'signIn'));
+          setError(null);
+          setInfo(null);
+        }}
+      />
+    </KeyboardAwareScreen>
   );
 }
 
