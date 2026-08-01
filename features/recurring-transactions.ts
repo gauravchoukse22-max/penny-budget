@@ -1,5 +1,6 @@
 import { getDb } from '../lib/db';
 import { uuid } from '../lib/uuid';
+import { queueSyncMutation } from './cloudkit-sync';
 import type { RecurringTransaction } from './models';
 
 export async function listRecurringTransactions(): Promise<RecurringTransaction[]> {
@@ -15,6 +16,7 @@ export async function createRecurringTransaction(input: Omit<RecurringTransactio
     'INSERT INTO recurring_transactions (id, note, amount, categoryId, cardId, dayOfMonth, nextPostDate, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [r.id, r.note, r.amount, r.categoryId, r.cardId, r.dayOfMonth, r.nextPostDate, r.active ? 1 : 0]
   );
+  await queueSyncMutation('CREATE', 'recurring_transactions', r.id, r);
   return r;
 }
 
@@ -32,16 +34,20 @@ export async function updateRecurringTransaction(id: string, patch: Partial<Omit
     'UPDATE recurring_transactions SET note = ?, amount = ?, categoryId = ?, cardId = ?, dayOfMonth = ?, nextPostDate = ?, active = ? WHERE id = ?',
     [next.note, next.amount, next.categoryId, next.cardId, next.dayOfMonth, next.nextPostDate, next.active ? 1 : 0, id]
   );
+  await queueSyncMutation('UPDATE', 'recurring_transactions', id, next);
 }
 
 export async function deleteRecurringTransaction(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM recurring_transactions WHERE id = ?', [id]);
+  await queueSyncMutation('DELETE', 'recurring_transactions', id, { id });
 }
 
 export async function toggleRecurringTransaction(id: string, active: boolean): Promise<void> {
   const db = await getDb();
   await db.runAsync('UPDATE recurring_transactions SET active = ? WHERE id = ?', [active ? 1 : 0, id]);
+  const row = await db.getFirstAsync<RecurringTransaction>('SELECT * FROM recurring_transactions WHERE id = ?', [id]);
+  if (row) await queueSyncMutation('UPDATE', 'recurring_transactions', id, row);
 }
 
 export function calculateNextPostDate(currentDateStr: string, targetDay: number): string {
@@ -75,18 +81,35 @@ export async function processRecurringTransactions(): Promise<number> {
     );
     
     for (const r of due) {
-      const txId = uuid();
+      // Deterministic id, NOT uuid(): in a shared household every member's
+      // device runs this independently, so a random id would post the same bill
+      // once per phone and sync them all in as separate charges. Keying on
+      // (recurring rule, post date) makes those posts the same record, so the
+      // last-writer-wins upsert collapses them into one.
+      const txId = `rec-${r.id}-${r.nextPostDate}`;
       const createdAt = new Date().toISOString();
+      const tx = {
+        id: txId,
+        amount: r.amount,
+        date: r.nextPostDate,
+        categoryId: r.categoryId,
+        cardId: r.cardId,
+        note: r.note,
+        source: 'recurring',
+        createdAt,
+      };
       await db.runAsync(
-        'INSERT INTO transactions (id, amount, date, categoryId, cardId, note, source, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT OR REPLACE INTO transactions (id, amount, date, categoryId, cardId, note, source, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         [txId, r.amount, r.nextPostDate, r.categoryId, r.cardId, r.note, 'recurring', createdAt]
       );
-      
+      await queueSyncMutation('CREATE', 'transactions', txId, tx);
+
       const newNextPostDate = calculateNextPostDate(r.nextPostDate, r.dayOfMonth);
       await db.runAsync(
         'UPDATE recurring_transactions SET nextPostDate = ? WHERE id = ?',
         [newNextPostDate, r.id]
       );
+      await queueSyncMutation('UPDATE', 'recurring_transactions', r.id, { ...r, nextPostDate: newNextPostDate });
       processedCount++;
     }
   });

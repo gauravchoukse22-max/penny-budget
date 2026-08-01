@@ -1,4 +1,4 @@
-import { getDb } from './db';
+import { getDb, currentYearMonth } from './db';
 import { uuid } from './uuid';
 import { queueSyncMutation } from '../features/cloudkit-sync';
 import type {
@@ -61,6 +61,13 @@ export async function updateAppSettings(patch: Partial<AppSettings>): Promise<vo
       next.householdId ?? null,
     ]
   );
+
+  // Mirror a fixed salary into the shared month record so co-members see the
+  // same "left to spend". Without this the number only ever changes on the
+  // phone that typed it — see resolveSalaryForMonth.
+  if (next.householdId && next.salaryMode === 'fixed' && patch.fixedSalary !== undefined) {
+    await setMonthlySalary(currentYearMonth(), next.fixedSalary);
+  }
 }
 
 // ---------- Cards ----------
@@ -276,6 +283,21 @@ export async function resolveCategoryLimits(yearMonth: string): Promise<Map<stri
 }
 
 /** Sets a category's budget for this month forward (until a newer snapshot exists). */
+/**
+ * Journals an upserted row for sync.
+ *
+ * The month-scoped tables upsert on a natural key (categoryId+yearMonth, …) with
+ * a freshly generated `id`, so the caller doesn't know the surviving row's id —
+ * and sync is keyed on it. Re-read the row and journal exactly what landed, so
+ * every member converges on the same record instead of the row silently staying
+ * on one device.
+ */
+async function journalUpsert(table: string, whereSql: string, params: (string | number)[]): Promise<void> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<Record<string, unknown>>(`SELECT * FROM ${table} WHERE ${whereSql}`, params);
+  if (row?.id) await queueSyncMutation('UPDATE', table, row.id as string, row);
+}
+
 export async function setCategoryLimitForMonth(categoryId: string, yearMonth: string, monthlyLimit: number): Promise<void> {
   const db = await getDb();
   await db.runAsync(
@@ -283,6 +305,7 @@ export async function setCategoryLimitForMonth(categoryId: string, yearMonth: st
      ON CONFLICT (categoryId, yearMonth) DO UPDATE SET monthlyLimit = excluded.monthlyLimit`,
     [uuid(), categoryId, yearMonth, monthlyLimit]
   );
+  await journalUpsert('category_budgets', 'categoryId = ? AND yearMonth = ?', [categoryId, yearMonth]);
 }
 
 /** Same carry-forward semantics as resolveCategoryLimits, for savings goal amounts. */
@@ -304,6 +327,7 @@ export async function setSavingsGoalAmountForMonth(goalId: string, yearMonth: st
      ON CONFLICT (goalId, yearMonth) DO UPDATE SET monthlyAmount = excluded.monthlyAmount`,
     [uuid(), goalId, yearMonth, monthlyAmount]
   );
+  await journalUpsert('savings_goal_budgets', 'goalId = ? AND yearMonth = ?', [goalId, yearMonth]);
 }
 
 // ---------- Savings goal monthly transfer checklist ----------
@@ -325,6 +349,7 @@ export async function setTransferStatus(goalId: string, yearMonth: string, trans
      ON CONFLICT (goalId, yearMonth) DO UPDATE SET transferred = excluded.transferred`,
     [uuid(), goalId, yearMonth, transferred ? 1 : 0]
   );
+  await journalUpsert('savings_goal_transfers', 'goalId = ? AND yearMonth = ?', [goalId, yearMonth]);
 }
 
 // ---------- Monthly Settings (variable salary) ----------
@@ -342,13 +367,24 @@ export async function setMonthlySalary(yearMonth: string, salary: number): Promi
   } else {
     await db.runAsync('INSERT INTO monthly_settings (id, yearMonth, salary) VALUES (?, ?, ?)', [uuid(), yearMonth, salary]);
   }
+  await journalUpsert('monthly_settings', 'yearMonth = ?', [yearMonth]);
 }
 
-/** Resolves the salary to use for a given month, per the fixed/variable setting. */
+/**
+ * Resolves the salary to use for a given month, per the fixed/variable setting.
+ *
+ * In a shared household the salary is a property of the BUDGET, not of the
+ * phone: "left to spend" and every over-budget figure divide by it, so if each
+ * member keeps their own the two devices disagree on the headline numbers even
+ * though the transactions match. `app_settings` deliberately never syncs (it
+ * also holds device-local things like the biometric lock), so the synced
+ * `monthly_settings` row is the shared source of truth whenever it exists.
+ */
 export async function resolveSalaryForMonth(yearMonth: string): Promise<number> {
   const settings = await getAppSettings();
-  if (settings.salaryMode === 'fixed') return settings.fixedSalary;
   const monthly = await getMonthlySettings(yearMonth);
+  if (settings.householdId && monthly?.salary != null) return monthly.salary;
+  if (settings.salaryMode === 'fixed') return settings.fixedSalary;
   return monthly?.salary ?? 0;
 }
 

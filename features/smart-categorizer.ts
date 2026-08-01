@@ -10,6 +10,7 @@
 
 import { getDb } from '../lib/db';
 import { uuid } from '../lib/uuid';
+import { queueSyncMutation } from './cloudkit-sync';
 import type { Category } from '../lib/models';
 import type { CategoryRule, SmartSuggestion } from './models';
 
@@ -49,6 +50,7 @@ export async function addCategoryRule(
     'INSERT INTO category_rules (id, keyword, categoryId) VALUES (?, ?, ?)',
     [rule.id, rule.keyword, rule.categoryId],
   );
+  await queueSyncMutation('CREATE', 'category_rules', rule.id, rule);
   return rule;
 }
 
@@ -56,6 +58,7 @@ export async function addCategoryRule(
 export async function removeCategoryRule(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM category_rules WHERE id = ?', [id]);
+  await queueSyncMutation('DELETE', 'category_rules', id, { id });
 }
 
 // ---- Strategy 1: keyword rules --------------------------------------------
