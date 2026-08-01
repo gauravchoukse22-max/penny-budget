@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Modal, Alert, Platform, KeyboardAvoidingView, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,11 +11,15 @@ import { RemainingLabel } from '../../components/RemainingLabel';
 import { Surface } from '../../components/Surface';
 import { PressableScale } from '../../components/PressableScale';
 import { NumberEditorSheet } from '../../components/NumberEditorSheet';
+import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { CategoryIcon, CATEGORY_ICON_CHOICES } from '../../components/CategoryIcon';
 import { formatMonthLabel, formatCurrency } from '../../lib/format';
 import { confirmAction, notify } from '../../lib/confirm';
 import { tapLight, success } from '../../lib/haptics';
 import { parseMoneyInput } from '../../lib/parse-number';
+import { listFunds, listFundAccounts, listFundEntries, isSavingsGoalEntry } from '../../features/funds';
+import type { Fund, FundAccount, FundEntry } from '../../features/models';
+import type { SavingsGoal } from '../../lib/models';
 
 // What the single money-editor sheet is currently editing.
 type EditorState =
@@ -37,11 +41,13 @@ export default function BudgetScreen() {
     updateSettings,
     setSalaryForSelectedMonth,
     addSavingsGoal,
+    editSavingsGoal,
     removeSavingsGoal,
     setGoalTransferred,
     setSavingsGoalAmountForSelectedMonth,
     transferStatus,
     addCategory,
+    removeCategory,
     setCategoryLimitForSelectedMonth,
   } = useBudget();
 
@@ -49,6 +55,46 @@ export default function BudgetScreen() {
   const [goalAmount, setGoalAmount] = useState('');
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [editor, setEditor] = useState<EditorState>(null);
+
+  // The Funds grid, loaded here rather than through BudgetContext: only this
+  // one section needs it, and a goal's link is read-mostly.
+  const [funds, setFunds] = useState<Fund[]>([]);
+  const [fundAccounts, setFundAccounts] = useState<FundAccount[]>([]);
+  const [fundEntries, setFundEntries] = useState<FundEntry[]>([]);
+  const [linkingGoal, setLinkingGoal] = useState<SavingsGoal | null>(null);
+
+  const loadFundData = useCallback(async () => {
+    const [f, a, e] = await Promise.all([listFunds(), listFundAccounts(), listFundEntries()]);
+    setFunds(f);
+    setFundAccounts(a);
+    setFundEntries(e);
+  }, []);
+
+  useEffect(() => {
+    loadFundData();
+  }, [loadFundData]);
+
+  const fundName = new Map(funds.map((f) => [f.id, f.name]));
+  const accountName = new Map(fundAccounts.map((a) => [a.id, a.name]));
+
+  /**
+   * Contributions the user typed themselves into a goal's cell for this month.
+   *
+   * Ticking the box files its own entry on top rather than replacing these —
+   * an entry the user typed is a real deposit and deleting it would throw away
+   * history, which is the one thing the ledger exists to keep. So the row says
+   * so instead of quietly making the fund look twice as full.
+   */
+  const manualEntriesThisMonth = (goal: SavingsGoal): number => {
+    if (!goal.targetFundId || !goal.targetAccountId) return 0;
+    return fundEntries.filter(
+      (e) =>
+        e.fundId === goal.targetFundId &&
+        e.accountId === goal.targetAccountId &&
+        e.date.slice(0, 7) === selectedMonth &&
+        !isSavingsGoalEntry(e)
+    ).length;
+  };
 
   const currentSalary = settings.salaryMode === 'fixed' ? settings.fixedSalary : surplus.salary;
 
@@ -87,27 +133,40 @@ export default function BudgetScreen() {
             </View>
           ) : (
             categorySummaries.map((s) => (
-              <View key={s.category.id} style={styles.categoryRow}>
-                <Pressable onPress={() => router.push(`/category/${s.category.id}`)} style={styles.categoryTapArea}>
-                  <CategoryIcon icon={s.category.icon} color={s.category.color} size={17} />
-                  <View style={styles.categoryMiddle}>
-                    <Text style={[styles.categoryName, { color: theme.label }]}>{s.category.name}</Text>
-                    <ProgressBar percent={s.percent} status={s.status} />
-                  </View>
-                </Pressable>
-                <PressableScale
-                  haptic
-                  onPress={() => setEditor({ kind: 'limit', id: s.category.id, name: s.category.name, value: s.category.monthlyLimit })}
-                  style={styles.categoryRight}
-                >
-                  <AmountText amount={s.spend} currency={settings.currency} size={14} weight="semibold" />
-                  {s.category.monthlyLimit > 0 ? (
-                    <RemainingLabel remaining={s.remaining} currency={settings.currency} size={11} />
-                  ) : (
-                    <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '600' }}>Set budget</Text>
-                  )}
-                </PressableScale>
-              </View>
+              // Light confirmation, not a heavy one: deleteCategory only nulls
+              // its transactions' categoryId, so the spending survives as
+              // uncategorized and nothing is actually lost.
+              <SwipeToDelete
+                key={s.category.id}
+                onDelete={() => removeCategory(s.category.id)}
+                accessibilityLabel={`Delete category ${s.category.name}`}
+                confirm={{
+                  title: `Delete ${s.category.name}?`,
+                  message: 'Its transactions stay, and become uncategorized.',
+                }}
+              >
+                <View style={styles.categoryRow}>
+                  <Pressable onPress={() => router.push(`/category/${s.category.id}`)} style={styles.categoryTapArea}>
+                    <CategoryIcon icon={s.category.icon} color={s.category.color} size={17} />
+                    <View style={styles.categoryMiddle}>
+                      <Text style={[styles.categoryName, { color: theme.label }]}>{s.category.name}</Text>
+                      <ProgressBar percent={s.percent} status={s.status} />
+                    </View>
+                  </Pressable>
+                  <PressableScale
+                    haptic
+                    onPress={() => setEditor({ kind: 'limit', id: s.category.id, name: s.category.name, value: s.category.monthlyLimit })}
+                    style={styles.categoryRight}
+                  >
+                    <AmountText amount={s.spend} currency={settings.currency} size={14} weight="semibold" />
+                    {s.category.monthlyLimit > 0 ? (
+                      <RemainingLabel remaining={s.remaining} currency={settings.currency} size={11} />
+                    ) : (
+                      <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '600' }}>Set budget</Text>
+                    )}
+                  </PressableScale>
+                </View>
+              </SwipeToDelete>
             ))
           )}
           <Pressable style={styles.addRow} onPress={() => setShowAddCategory(true)}>
@@ -161,31 +220,103 @@ export default function BudgetScreen() {
           {savingsGoals.map((g) => {
             const transferred = transferStatus.get(g.id) ?? false;
             const resolvedAmount = savingsGoalAmounts.get(g.id) ?? g.monthlyAmount;
+            const linked = !!g.targetFundId && !!g.targetAccountId;
+            const linkLabel = linked
+              ? `${fundName.get(g.targetFundId!) ?? 'Deleted fund'} · ${accountName.get(g.targetAccountId!) ?? 'Deleted account'}`
+              : 'Link to a fund';
+            const alsoTypedIn = transferred && linked ? manualEntriesThisMonth(g) : 0;
             return (
-              <View key={g.id} style={styles.goalRow}>
-                <GoalCheck
-                  transferred={transferred}
-                  onToggle={() => {
-                    const next = !transferred;
-                    if (next) success();
-                    else tapLight();
-                    setGoalTransferred(g.id, next);
-                  }}
-                />
-                <Text style={{ color: theme.label, flex: 1, textDecorationLine: transferred ? 'line-through' : 'none' }}>
-                  {g.name}
-                </Text>
-                <PressableScale
-                  haptic
-                  onPress={() => setEditor({ kind: 'goal', id: g.id, name: g.name, value: resolvedAmount })}
-                  style={[styles.goalAmountField, { backgroundColor: theme.fieldBackground }]}
-                >
-                  <AmountText amount={resolvedAmount} currency={settings.currency} size={14} weight="semibold" />
-                </PressableScale>
-                <Pressable onPress={() => removeSavingsGoal(g.id)} style={{ marginLeft: 12 }} hitSlop={8}>
-                  <Ionicons name="close-circle" size={20} color={theme.tertiaryLabel} />
-                </Pressable>
-              </View>
+              // Confirmation only when it would take money out of the Funds
+              // grid with it: an unlinked goal is just a row, but a linked one
+              // owns every contribution its ticked months filed.
+              <SwipeToDelete
+                key={g.id}
+                onDelete={async () => {
+                  await removeSavingsGoal(g.id);
+                  await loadFundData();
+                }}
+                accessibilityLabel={`Delete savings goal ${g.name}`}
+                confirm={
+                  linked
+                    ? {
+                        title: `Delete ${g.name}?`,
+                        message: `Its contributions to ${fundName.get(g.targetFundId!) ?? 'the linked fund'} are removed too.`,
+                      }
+                    : undefined
+                }
+              >
+                <View style={styles.goalRow}>
+                  <GoalCheck
+                    transferred={transferred}
+                    onToggle={async () => {
+                      const next = !transferred;
+                      if (next) success();
+                      else tapLight();
+                      await setGoalTransferred(g.id, next);
+                      // The tick may have filed (or pulled) a contribution —
+                      // reload so the link line reflects the grid, not a stale copy.
+                      await loadFundData();
+                    }}
+                  />
+                  <View style={styles.goalMiddle}>
+                    <Text
+                      style={{ color: theme.label, textDecorationLine: transferred ? 'line-through' : 'none' }}
+                      numberOfLines={1}
+                    >
+                      {g.name}
+                    </Text>
+                    <Pressable
+                      onPress={() => {
+                        tapLight();
+                        setLinkingGoal(g);
+                      }}
+                      hitSlop={6}
+                      style={styles.goalLinkRow}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        linked ? `Change fund linked to ${g.name}, currently ${linkLabel}` : `Link ${g.name} to a fund`
+                      }
+                    >
+                      <Ionicons
+                        name={linked ? 'link' : 'link-outline'}
+                        size={11}
+                        color={linked ? theme.secondaryLabel : theme.accent}
+                      />
+                      <Text
+                        style={{ color: linked ? theme.secondaryLabel : theme.accent, fontSize: 11, flexShrink: 1 }}
+                        numberOfLines={1}
+                      >
+                        {linkLabel}
+                      </Text>
+                    </Pressable>
+                    {alsoTypedIn > 0 ? (
+                      <Text style={{ color: theme.systemRed, fontSize: 11 }} numberOfLines={2}>
+                        Funds already has {alsoTypedIn === 1 ? 'a contribution' : `${alsoTypedIn} contributions`} you added
+                        for this month — this goal's is on top.
+                      </Text>
+                    ) : null}
+                  </View>
+                  <PressableScale
+                    haptic
+                    onPress={() => setEditor({ kind: 'goal', id: g.id, name: g.name, value: resolvedAmount })}
+                    style={[styles.goalAmountField, { backgroundColor: theme.fieldBackground }]}
+                  >
+                    <AmountText amount={resolvedAmount} currency={settings.currency} size={14} weight="semibold" />
+                  </PressableScale>
+                  <Pressable
+                    onPress={async () => {
+                      await removeSavingsGoal(g.id);
+                      await loadFundData();
+                    }}
+                    style={{ marginLeft: 12 }}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete savings goal ${g.name}`}
+                  >
+                    <Ionicons name="close-circle" size={20} color={theme.tertiaryLabel} />
+                  </Pressable>
+                </View>
+              </SwipeToDelete>
             );
           })}
           <Text style={[styles.hint, { color: theme.tertiaryLabel }]}>
@@ -237,7 +368,165 @@ export default function BudgetScreen() {
       />
 
       <AddCategoryModal visible={showAddCategory} onClose={() => setShowAddCategory(false)} onSave={addCategory} usedCount={categorySummaries.length} />
+
+      <GoalFundLinkModal
+        goal={linkingGoal}
+        funds={funds}
+        accounts={fundAccounts}
+        onClose={() => setLinkingGoal(null)}
+        onSave={async (goalId, targetFundId, targetAccountId) => {
+          await editSavingsGoal(goalId, { targetFundId, targetAccountId });
+          await loadFundData();
+        }}
+      />
     </SafeAreaView>
+  );
+}
+
+/** One selectable fund or account in the link sheet. Tapping the selected one
+ * again clears it, so a mis-tap doesn't need a separate "none" row. */
+function LinkOption({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={() => {
+        tapLight();
+        onPress();
+      }}
+      style={[styles.linkOption, { backgroundColor: selected ? theme.accentTint : theme.fieldBackground }]}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={label}
+    >
+      <Text style={{ color: selected ? theme.accent : theme.label, fontWeight: selected ? '700' : '400', flex: 1 }}>
+        {label}
+      </Text>
+      {selected ? <Ionicons name="checkmark" size={16} color={theme.accent} /> : null}
+    </Pressable>
+  );
+}
+
+/**
+ * Picks the Funds-grid cell a savings goal pays into.
+ *
+ * Both halves are required because a contribution has to land somewhere
+ * specific: the fund is which pot, the account is which institution actually
+ * holds it. Nothing is guessed from the goal's name — a wrong guess would file
+ * real money into the wrong pot, and the user would have no reason to look.
+ */
+function GoalFundLinkModal({
+  goal,
+  funds,
+  accounts,
+  onClose,
+  onSave,
+}: {
+  goal: SavingsGoal | null;
+  funds: Fund[];
+  accounts: FundAccount[];
+  onClose: () => void;
+  onSave: (goalId: string, fundId: string | null, accountId: string | null) => Promise<void>;
+}) {
+  const theme = useTheme();
+  const [fundId, setFundId] = useState<string | null>(null);
+  const [accountId, setAccountId] = useState<string | null>(null);
+
+  // Re-seed each time the sheet opens, so it always shows the goal's real link
+  // rather than whatever the last goal was set to.
+  useEffect(() => {
+    setFundId(goal?.targetFundId ?? null);
+    setAccountId(goal?.targetAccountId ?? null);
+  }, [goal]);
+
+  const gridIsEmpty = funds.length === 0 || accounts.length === 0;
+  // Half a link files nothing, so it isn't a state worth saving.
+  const canSave = (!!fundId && !!accountId) || (!fundId && !accountId);
+
+  const commit = async () => {
+    if (!goal || !canSave) return;
+    const linked = !!fundId && !!accountId;
+    await onSave(goal.id, linked ? fundId : null, linked ? accountId : null);
+    success();
+    onClose();
+  };
+
+  return (
+    <Modal visible={!!goal} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: theme.groupedBackground }}>
+        <View style={styles.linkHeader}>
+          <Pressable onPress={onClose} hitSlop={10}>
+            <Text style={{ color: theme.secondaryLabel, fontSize: 16 }}>Cancel</Text>
+          </Pressable>
+          <Text style={[type.headline, { color: theme.label }]} numberOfLines={1}>
+            {goal?.name ?? ''}
+          </Text>
+          <Pressable onPress={commit} hitSlop={10} disabled={!canSave}>
+            <Text style={{ color: canSave ? theme.accent : theme.tertiaryLabel, fontSize: 16, fontWeight: '700' }}>Save</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.linkContent}>
+          <Text style={[styles.linkIntro, { color: theme.secondaryLabel }]}>
+            Ticking this goal's monthly transfer files the amount into the Funds grid for you, noting which month it was
+            budgeted for. Every month already ticked is filed too, and unticking takes it back out.
+          </Text>
+
+          {gridIsEmpty ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="grid-outline" size={28} color={theme.tertiaryLabel} />
+              <Text style={[styles.emptyText, { color: theme.secondaryLabel }]}>
+                Open the Funds tab first — a goal can only be linked once you have at least one fund and one account.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <Text style={[styles.linkSectionTitle, { color: theme.label }]}>Fund</Text>
+              {funds.map((f) => (
+                <LinkOption
+                  key={f.id}
+                  label={f.name}
+                  selected={fundId === f.id}
+                  onPress={() => setFundId(fundId === f.id ? null : f.id)}
+                />
+              ))}
+
+              <Text style={[styles.linkSectionTitle, { color: theme.label }]}>Held at</Text>
+              {accounts.map((a) => (
+                <LinkOption
+                  key={a.id}
+                  label={a.name}
+                  selected={accountId === a.id}
+                  onPress={() => setAccountId(accountId === a.id ? null : a.id)}
+                />
+              ))}
+
+              {goal?.targetFundId ? (
+                <Pressable
+                  onPress={() => {
+                    tapLight();
+                    setFundId(null);
+                    setAccountId(null);
+                  }}
+                  style={styles.linkRemove}
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove this goal's fund link"
+                >
+                  <Ionicons name="unlink-outline" size={16} color={theme.systemRed} />
+                  <Text style={{ color: theme.systemRed, fontWeight: '600' }}>Remove link</Text>
+                </Pressable>
+              ) : null}
+
+              {!canSave ? (
+                <Text style={[styles.hint, { color: theme.systemRed }]}>Pick both a fund and an account.</Text>
+              ) : null}
+              <Text style={[styles.hint, { color: theme.tertiaryLabel }]}>
+                Unlinking removes the contributions this goal filed. Anything you typed into the grid yourself stays.
+              </Text>
+            </>
+          )}
+        </ScrollView>
+      </View>
+    </Modal>
   );
 }
 
@@ -373,6 +662,22 @@ const styles = StyleSheet.create({
   },
   salaryFieldRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   goalRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  // The name and its fund link stack, so a long "Fund · Account" pair wraps
+  // under the goal instead of squeezing the amount field off the row.
+  goalMiddle: { flex: 1, gap: 2, paddingRight: 8 },
+  goalLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  linkHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  linkContent: { padding: spacing.lg, paddingTop: 0, paddingBottom: spacing.xxxl, gap: 8 },
+  linkIntro: { fontSize: 13, lineHeight: 18, marginBottom: spacing.md },
+  linkSectionTitle: { fontSize: 13, fontWeight: '700', marginTop: spacing.md, marginBottom: 4 },
+  linkOption: { flexDirection: 'row', alignItems: 'center', padding: spacing.md, borderRadius: radius.sm },
+  linkRemove: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: spacing.md, marginTop: spacing.sm },
   goalAmountField: { minWidth: 74, paddingVertical: 6, paddingHorizontal: 10, borderRadius: radius.sm, alignItems: 'flex-end' },
   hint: { fontSize: 12, marginTop: 6 },
   goalAddRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },

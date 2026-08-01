@@ -6,6 +6,7 @@ import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
 import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
+import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { AmountText } from '../../components/AmountText';
 import {
@@ -67,11 +68,24 @@ export default function RecurringScreen() {
     await load();
   };
 
+  // Deleting a bill removes only the rule — every transaction it has already
+  // posted stays. It still asks, because the rule is a form the user filled in
+  // by hand and nothing on screen would show it had gone missing until a bill
+  // silently stopped posting. Both the swipe and the × share this one spec so
+  // the two paths can never drift apart.
+  const removeConfirm = (item: RecurringTransaction) => ({
+    title: `Delete ${item.note}?`,
+    message: 'It stops posting automatically. Transactions it already posted are kept.',
+  });
+
   const remove = async (item: RecurringTransaction) => {
-    if (await confirmAction({ title: 'Delete recurring bill?', message: `"${item.note}" will no longer post automatically.`, confirmLabel: 'Delete', destructive: true })) {
-      await deleteRecurringTransaction(item.id);
-      await load();
-    }
+    await deleteRecurringTransaction(item.id);
+    await load();
+  };
+
+  const confirmAndRemove = async (item: RecurringTransaction) => {
+    const ok = await confirmAction({ ...removeConfirm(item), confirmLabel: 'Delete', destructive: true });
+    if (ok) await remove(item);
   };
 
   const toggle = async (item: RecurringTransaction) => {
@@ -128,22 +142,34 @@ export default function RecurringScreen() {
           items.map((item) => {
             const cat = item.categoryId ? categoryById.get(item.categoryId) : undefined;
             return (
-              <View key={item.id} style={styles.row}>
-                {cat ? <CategoryIcon icon={cat.icon} color={cat.color} size={17} /> : <Ionicons name="repeat" size={17} color={theme.tertiaryLabel} />}
-                <View style={styles.rowMiddle}>
-                  <Text style={[styles.rowTitle, { color: theme.label }]} numberOfLines={1}>
-                    {item.note}
-                  </Text>
-                  <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }}>
-                    Day {item.dayOfMonth} · next {item.nextPostDate}
-                  </Text>
+              <SwipeToDelete
+                key={item.id}
+                onDelete={() => remove(item)}
+                confirm={() => removeConfirm(item)}
+                accessibilityLabel={`Delete recurring bill ${item.note}`}
+              >
+                <View style={styles.row}>
+                  {cat ? <CategoryIcon icon={cat.icon} color={cat.color} size={17} /> : <Ionicons name="repeat" size={17} color={theme.tertiaryLabel} />}
+                  <View style={styles.rowMiddle}>
+                    <Text style={[styles.rowTitle, { color: theme.label }]} numberOfLines={1}>
+                      {item.note}
+                    </Text>
+                    <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }}>
+                      Day {item.dayOfMonth} · next {item.nextPostDate}
+                    </Text>
+                  </View>
+                  <AmountText amount={item.amount} currency={settings.currency} size={14} weight="semibold" />
+                  <Switch value={item.active} onValueChange={() => toggle(item)} style={styles.switch} />
+                  <Pressable
+                    onPress={() => confirmAndRemove(item)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete recurring bill ${item.note}`}
+                  >
+                    <Ionicons name="close-circle" size={20} color={theme.tertiaryLabel} />
+                  </Pressable>
                 </View>
-                <AmountText amount={item.amount} currency={settings.currency} size={14} weight="semibold" />
-                <Switch value={item.active} onValueChange={() => toggle(item)} style={styles.switch} />
-                <Pressable onPress={() => remove(item)} hitSlop={8}>
-                  <Ionicons name="close-circle" size={20} color={theme.tertiaryLabel} />
-                </Pressable>
-              </View>
+              </SwipeToDelete>
             );
           })
         )}

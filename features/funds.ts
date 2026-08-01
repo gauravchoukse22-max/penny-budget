@@ -207,6 +207,11 @@ export async function deleteFundAccount(id: string): Promise<void> {
  * Legacy fund_balances rows are swept in the same pass: a device that upgraded
  * before its balances were ever backfilled would otherwise resurrect a deleted
  * fund's money the next time the backfill ran.
+ *
+ * Savings goals pointing here are unlinked in the same pass. A goal left
+ * pointing at a deleted fund would look linked on the Budget screen yet file
+ * nothing on the next tick — a silent no-op is worse than an obvious "not
+ * linked", and the co-member has to be told or their goal keeps the dead link.
  */
 async function deleteFundGridOwner(
   table: 'funds' | 'fund_accounts',
@@ -214,15 +219,27 @@ async function deleteFundGridOwner(
   id: string
 ): Promise<void> {
   const db = await getDb();
+  const linkColumn = foreignKey === 'fundId' ? 'targetFundId' : 'targetAccountId';
   const entries = await db.getAllAsync<{ id: string }>(`SELECT id FROM fund_entries WHERE ${foreignKey} = ?`, [id]);
   const balances = await db.getAllAsync<{ id: string }>(`SELECT id FROM fund_balances WHERE ${foreignKey} = ?`, [id]);
+  const linkedGoals = await db.getAllAsync<{ id: string }>(
+    `SELECT id FROM savings_goals WHERE ${linkColumn} = ?`,
+    [id]
+  );
 
   await db.runAsync(`DELETE FROM fund_entries WHERE ${foreignKey} = ?`, [id]);
   await db.runAsync(`DELETE FROM fund_balances WHERE ${foreignKey} = ?`, [id]);
+  await db.runAsync(`UPDATE savings_goals SET ${linkColumn} = NULL WHERE ${linkColumn} = ?`, [id]);
   await db.runAsync(`DELETE FROM ${table} WHERE id = ?`, [id]);
 
   for (const e of entries) await queueSyncMutation('DELETE', 'fund_entries', e.id, { id: e.id });
   for (const b of balances) await queueSyncMutation('DELETE', 'fund_balances', b.id, { id: b.id });
+  // Re-read each goal so the journaled payload is exactly the row that landed,
+  // cleared link included.
+  for (const g of linkedGoals) {
+    const row = await db.getFirstAsync<Record<string, unknown>>('SELECT * FROM savings_goals WHERE id = ?', [g.id]);
+    if (row) await queueSyncMutation('UPDATE', 'savings_goals', g.id, row);
+  }
   await queueSyncMutation('DELETE', table, id, { id });
 }
 
@@ -352,6 +369,137 @@ export async function adjustFundCell(adjustment: FundCellAdjustment): Promise<Fu
 
   if (toCents(delta) === 0) return null;
   return addFundEntry({ fundId, accountId, amount: delta, date: adjustment.date, note: adjustment.note });
+}
+
+// ── Savings-goal auto-contributions ─────────────────────────────────────────
+//
+// A savings goal can be linked to one cell of this grid. Ticking that goal's
+// "transferred this month" box then files the contribution here instead of the
+// user typing the same number twice — see reconcileSavingsGoalEntries.
+
+/** Marks a fund entry as one the savings-goal checklist owns, not one the user typed. */
+export const SAVINGS_GOAL_ENTRY_PREFIX = 'goal-';
+
+/**
+ * The id an auto-filed contribution always gets, derived from the goal and the
+ * month rather than uuid().
+ *
+ * Same reasoning as the recurring-transaction poster: in a shared household
+ * both phones run this independently, so a random id would file the same
+ * month's saving once per phone and sync them in as two contributions. Keying
+ * on (goal, month) makes them the same record, and the pull's INSERT OR REPLACE
+ * upsert collapses them into one.
+ */
+export function savingsGoalEntryId(goalId: string, yearMonth: string): string {
+  return `${SAVINGS_GOAL_ENTRY_PREFIX}${goalId}-${yearMonth}`;
+}
+
+/** True for a contribution filed by the checklist rather than typed by hand. */
+export function isSavingsGoalEntry(entry: { id: string }): boolean {
+  return entry.id.startsWith(SAVINGS_GOAL_ENTRY_PREFIX);
+}
+
+// Deliberately NOT lib/format's formatMonthLabel, which follows the device
+// locale. This string is STORED data that both phones write to the same record:
+// if one device is en-US and the other isn't, the note would flip back and
+// forth on every sync. A fixed table keeps the record identical everywhere.
+const ENTRY_NOTE_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** "July 2026 savings" — names the month the money was budgeted for. */
+export function savingsGoalEntryNote(yearMonth: string): string {
+  const [year, month] = yearMonth.split('-');
+  const name = ENTRY_NOTE_MONTHS[Number(month) - 1];
+  return name ? `${name} ${year} savings` : `${yearMonth} savings`;
+}
+
+/** The grid cell a goal pays into. Null on either half means "not linked". */
+export type SavingsGoalFundTarget = { fundId: string | null; accountId: string | null };
+
+/** One month the goal's transfer is ticked for, and what it was budgeted at. */
+export type SavingsGoalTransferredMonth = { yearMonth: string; amount: number };
+
+/**
+ * Makes the goal's contributions in the grid match its ticked months exactly.
+ *
+ * Declarative rather than "add one / remove one" on purpose: the caller states
+ * which months are ticked and this files precisely those, so tick, untick,
+ * re-tick, an amount correction, a re-link and an unlink are all the same code
+ * path and none of them can leave a stray or duplicated entry behind. Passing
+ * an empty target (or no months) is therefore also how a goal's entries get
+ * swept when it is unlinked or deleted.
+ *
+ * Rows that already match are skipped rather than rewritten — re-journaling an
+ * identical row on every tick would fill the outbox with no-ops, and it would
+ * ping-pong between two phones that each keep "correcting" the other.
+ *
+ * Entries are dated the 1st of their month, not today: the date has to be
+ * identical on both devices or the last one to sync would silently move the
+ * entry, and the 1st is what puts it in the right bucket in the fund's monthly
+ * history regardless of when the box was actually ticked.
+ */
+export async function reconcileSavingsGoalEntries(
+  goalId: string,
+  target: SavingsGoalFundTarget,
+  months: SavingsGoalTransferredMonth[]
+): Promise<void> {
+  const db = await getDb();
+
+  const desired = new Map<string, FundEntry>();
+  if (target.fundId && target.accountId) {
+    for (const month of months) {
+      const amount = fromCents(toCents(month.amount));
+      // A goal budgeted at zero has no money to file; an entry of 0 is noise.
+      if (toCents(amount) === 0) continue;
+      const id = savingsGoalEntryId(goalId, month.yearMonth);
+      desired.set(id, {
+        id,
+        fundId: target.fundId,
+        accountId: target.accountId,
+        amount,
+        date: `${month.yearMonth}-01`,
+        note: savingsGoalEntryNote(month.yearMonth),
+        createdAt: '', // replaced below — an existing row keeps its own
+      });
+    }
+  }
+
+  // The id prefix is the whole index: goalId is a uuid (hex + hyphens), so it
+  // can't contain a LIKE wildcard and this matches this goal's entries only.
+  const existing = await db.getAllAsync<FundEntry>('SELECT * FROM fund_entries WHERE id LIKE ?', [
+    `${SAVINGS_GOAL_ENTRY_PREFIX}${goalId}-%`,
+  ]);
+
+  for (const row of existing) {
+    const want = desired.get(row.id);
+    if (!want) {
+      await db.runAsync('DELETE FROM fund_entries WHERE id = ?', [row.id]);
+      await queueSyncMutation('DELETE', 'fund_entries', row.id, { id: row.id });
+      continue;
+    }
+    // Keep the original createdAt so re-ticking a box doesn't reshuffle the
+    // order of entries filed on the same day.
+    want.createdAt = row.createdAt;
+    const unchanged =
+      row.fundId === want.fundId &&
+      row.accountId === want.accountId &&
+      toCents(row.amount) === toCents(want.amount) &&
+      row.date === want.date &&
+      row.note === want.note;
+    if (unchanged) desired.delete(row.id);
+  }
+
+  for (const entry of desired.values()) {
+    if (!entry.createdAt) entry.createdAt = new Date().toISOString();
+    await db.runAsync(
+      `INSERT OR REPLACE INTO fund_entries (id, fundId, accountId, amount, date, note, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [entry.id, entry.fundId, entry.accountId, entry.amount, entry.date, entry.note, entry.createdAt]
+    );
+    await queueSyncMutation('CREATE', 'fund_entries', entry.id, entry);
+  }
 }
 
 // ── Totals ──────────────────────────────────────────────────────────────────

@@ -3,10 +3,10 @@ import { View, Text, StyleSheet, SectionList, ScrollView, Pressable, TextInput, 
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius, type } from '../../theme/colors';
 import { TransactionRow } from '../../components/TransactionRow';
+import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { formatDayLabel } from '../../lib/format';
 import { bulkUpdateCategory, bulkUpdateCard, bulkDeleteTransactions } from '../../features/bulk-actions';
@@ -102,152 +102,145 @@ export default function TransactionsScreen() {
       .map(([date, data]) => ({ title: date, data }));
   }, [filtered]);
 
-  const confirmDelete = async (t: Transaction) => {
-    if (await confirmAction({ title: 'Delete transaction?', message: 'This cannot be undone.', confirmLabel: 'Delete', destructive: true })) {
-      removeTransaction(t.id);
-    }
-  };
-
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.groupedBackground }]} edges={['top']}>
-        {selectMode ? (
-          <View style={styles.headerRow}>
-            <Pressable onPress={exitSelect} hitSlop={8}>
-              <Text style={{ color: theme.accent, fontSize: 16 }}>Cancel</Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.groupedBackground }]} edges={['top']}>
+      {selectMode ? (
+        <View style={styles.headerRow}>
+          <Pressable onPress={exitSelect} hitSlop={8}>
+            <Text style={{ color: theme.accent, fontSize: 16 }}>Cancel</Text>
+          </Pressable>
+          <Text style={[type.headline, { color: theme.label }]}>{selectedIds.size} selected</Text>
+          <View style={styles.selectActions}>
+            <Pressable onPress={() => selectedIds.size > 0 && setPicker('category')} hitSlop={8}>
+              <Ionicons name="pricetag-outline" size={24} color={selectedIds.size > 0 ? theme.accent : theme.tertiaryLabel} />
             </Pressable>
-            <Text style={[type.headline, { color: theme.label }]}>{selectedIds.size} selected</Text>
-            <View style={styles.selectActions}>
-              <Pressable onPress={() => selectedIds.size > 0 && setPicker('category')} hitSlop={8}>
-                <Ionicons name="pricetag-outline" size={24} color={selectedIds.size > 0 ? theme.accent : theme.tertiaryLabel} />
-              </Pressable>
-              <Pressable onPress={() => selectedIds.size > 0 && setPicker('card')} hitSlop={8}>
-                <Ionicons name="card-outline" size={24} color={selectedIds.size > 0 ? theme.accent : theme.tertiaryLabel} />
-              </Pressable>
-              <Pressable onPress={doBulkDelete} hitSlop={8}>
-                <Ionicons name="trash-outline" size={24} color={selectedIds.size > 0 ? theme.systemRed : theme.tertiaryLabel} />
-              </Pressable>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.headerRow}>
-            <Text style={[type.title1, { color: theme.label }]}>Transactions</Text>
-            <Pressable onPress={() => router.push('/transaction/add')} hitSlop={8}>
-              <Ionicons name="add-circle" size={30} color={theme.accent} />
+            <Pressable onPress={() => selectedIds.size > 0 && setPicker('card')} hitSlop={8}>
+              <Ionicons name="card-outline" size={24} color={selectedIds.size > 0 ? theme.accent : theme.tertiaryLabel} />
+            </Pressable>
+            <Pressable onPress={doBulkDelete} hitSlop={8}>
+              <Ionicons name="trash-outline" size={24} color={selectedIds.size > 0 ? theme.systemRed : theme.tertiaryLabel} />
             </Pressable>
           </View>
-        )}
-
-        <View style={[styles.searchBox, { backgroundColor: theme.fieldBackground }]}>
-          <Ionicons name="search" size={16} color={theme.tertiaryLabel} />
-          <TextInput
-            style={[styles.searchInput, { color: theme.label }]}
-            placeholder="Search merchant, category, or amount"
-            placeholderTextColor={theme.tertiaryLabel}
-            value={search}
-            onChangeText={setSearch}
-          />
         </View>
-
-        <View style={styles.filterRow}>
-          <FilterChip label="All Cards" active={!cardFilter} onPress={() => setCardFilter(null)} />
-          {cards.map((c) => (
-            <FilterChip key={c.id} label={c.name} active={cardFilter === c.id} onPress={() => setCardFilter(c.id)} color={c.color} />
-          ))}
+      ) : (
+        <View style={styles.headerRow}>
+          <Text style={[type.title1, { color: theme.label }]}>Transactions</Text>
+          <Pressable onPress={() => router.push('/transaction/add')} hitSlop={8}>
+            <Ionicons name="add-circle" size={30} color={theme.accent} />
+          </Pressable>
         </View>
-        <View style={styles.filterRow}>
-          <FilterChip label="All Categories" active={!categoryFilter} onPress={() => setCategoryFilter(null)} />
-          {categories.map((c) => (
-            <FilterChip
-              key={c.id}
-              label={c.name}
-              active={categoryFilter === c.id}
-              onPress={() => setCategoryFilter(c.id)}
-              color={c.color}
-            />
-          ))}
-        </View>
+      )}
 
-        <SectionList
-          sections={sections}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          // Without this the first tap on a row while the search keyboard is up
-          // only dismisses the keyboard, so opening a result takes two taps.
-          keyboardShouldPersistTaps="handled"
-          renderSectionHeader={({ section }) => (
-            <Text style={[styles.sectionHeader, { color: theme.secondaryLabel, backgroundColor: theme.groupedBackground }]}>
-              {formatDayLabel(section.title)}
-            </Text>
-          )}
-          renderItem={({ item }) => {
-            const row = (
-              <View style={{ backgroundColor: theme.groupedBackground, paddingHorizontal: 4 }}>
-                <TransactionRow
-                  transaction={item}
-                  category={item.categoryId ? categoryById.get(item.categoryId) : undefined}
-                  card={cardById.get(item.cardId)}
-                  currency={settings.currency}
-                  selectable={selectMode}
-                  selected={selectedIds.has(item.id)}
-                  onLongPress={() => !selectMode && enterSelect(item.id)}
-                  onPress={() => (selectMode ? toggleSelect(item.id) : router.push(`/transaction/${item.id}`))}
-                />
-              </View>
-            );
-            if (selectMode) return row;
-            return (
-              <Swipeable
-                renderRightActions={() => (
-                  <Pressable style={[styles.deleteAction, { backgroundColor: theme.systemRed }]} onPress={() => confirmDelete(item)}>
-                    <Ionicons name="trash" size={20} color="#FFF" />
-                  </Pressable>
-                )}
-              >
-                {row}
-              </Swipeable>
-            );
-          }}
-          ListEmptyComponent={
-            <Text style={{ color: theme.tertiaryLabel, textAlign: 'center', marginTop: 40 }}>No transactions found</Text>
-          }
+      <View style={[styles.searchBox, { backgroundColor: theme.fieldBackground }]}>
+        <Ionicons name="search" size={16} color={theme.tertiaryLabel} />
+        <TextInput
+          style={[styles.searchInput, { color: theme.label }]}
+          placeholder="Search merchant, category, or amount"
+          placeholderTextColor={theme.tertiaryLabel}
+          value={search}
+          onChangeText={setSearch}
         />
+      </View>
 
-        <Modal visible={picker !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPicker(null)}>
-          <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
-            <Text style={[type.title2, { color: theme.label, marginBottom: spacing.lg }]}>
-              {picker === 'category' ? 'Move to category' : 'Move to card'}
-            </Text>
-            <ScrollView>
-              {picker === 'category' && (
-                <>
-                  {categories.map((c) => (
-                    <Pressable key={c.id} style={styles.pickerRow} onPress={() => doBulkCategory(c.id)}>
-                      <CategoryIcon icon={c.icon} color={c.color} size={18} />
-                      <Text style={{ color: theme.label, fontSize: 16 }}>{c.name}</Text>
-                    </Pressable>
-                  ))}
-                  <Pressable style={styles.pickerRow} onPress={() => doBulkCategory(null)}>
-                    <Ionicons name="close-circle-outline" size={20} color={theme.tertiaryLabel} />
-                    <Text style={{ color: theme.secondaryLabel, fontSize: 16 }}>Uncategorized</Text>
-                  </Pressable>
-                </>
-              )}
-              {picker === 'card' &&
-                cards.map((c) => (
-                  <Pressable key={c.id} style={styles.pickerRow} onPress={() => doBulkCard(c.id)}>
-                    <View style={[styles.cardDot, { backgroundColor: c.color }]} />
+      <View style={styles.filterRow}>
+        <FilterChip label="All Cards" active={!cardFilter} onPress={() => setCardFilter(null)} />
+        {cards.map((c) => (
+          <FilterChip key={c.id} label={c.name} active={cardFilter === c.id} onPress={() => setCardFilter(c.id)} color={c.color} />
+        ))}
+      </View>
+      <View style={styles.filterRow}>
+        <FilterChip label="All Categories" active={!categoryFilter} onPress={() => setCategoryFilter(null)} />
+        {categories.map((c) => (
+          <FilterChip
+            key={c.id}
+            label={c.name}
+            active={categoryFilter === c.id}
+            onPress={() => setCategoryFilter(c.id)}
+            color={c.color}
+          />
+        ))}
+      </View>
+
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        // Without this the first tap on a row while the search keyboard is up
+        // only dismisses the keyboard, so opening a result takes two taps.
+        keyboardShouldPersistTaps="handled"
+        renderSectionHeader={({ section }) => (
+          <Text style={[styles.sectionHeader, { color: theme.secondaryLabel, backgroundColor: theme.groupedBackground }]}>
+            {formatDayLabel(section.title)}
+          </Text>
+        )}
+        renderItem={({ item }) => {
+          const row = (
+            <View style={{ backgroundColor: theme.groupedBackground, paddingHorizontal: 4 }}>
+              <TransactionRow
+                transaction={item}
+                category={item.categoryId ? categoryById.get(item.categoryId) : undefined}
+                card={cardById.get(item.cardId)}
+                currency={settings.currency}
+                selectable={selectMode}
+                selected={selectedIds.has(item.id)}
+                onLongPress={() => !selectMode && enterSelect(item.id)}
+                onPress={() => (selectMode ? toggleSelect(item.id) : router.push(`/transaction/${item.id}`))}
+              />
+            </View>
+          );
+          // No confirmation: one transaction deletes only itself, and the
+          // swipe already takes two deliberate actions. Bulk delete keeps its
+          // dialog because that one removes many rows at once.
+          return (
+            <SwipeToDelete
+              enabled={!selectMode}
+              onDelete={() => removeTransaction(item.id)}
+              accessibilityLabel={`Delete transaction ${item.note ?? 'without a note'}`}
+              actionStyle={styles.deleteAction}
+            >
+              {row}
+            </SwipeToDelete>
+          );
+        }}
+        ListEmptyComponent={
+          <Text style={{ color: theme.tertiaryLabel, textAlign: 'center', marginTop: 40 }}>No transactions found</Text>
+        }
+      />
+
+      <Modal visible={picker !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPicker(null)}>
+        <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
+          <Text style={[type.title2, { color: theme.label, marginBottom: spacing.lg }]}>
+            {picker === 'category' ? 'Move to category' : 'Move to card'}
+          </Text>
+          <ScrollView>
+            {picker === 'category' && (
+              <>
+                {categories.map((c) => (
+                  <Pressable key={c.id} style={styles.pickerRow} onPress={() => doBulkCategory(c.id)}>
+                    <CategoryIcon icon={c.icon} color={c.color} size={18} />
                     <Text style={{ color: theme.label, fontSize: 16 }}>{c.name}</Text>
                   </Pressable>
                 ))}
-            </ScrollView>
-            <Pressable style={[styles.modalCancel, { borderColor: theme.separator }]} onPress={() => setPicker(null)}>
-              <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
-            </Pressable>
-          </View>
-        </Modal>
-      </SafeAreaView>
-    </GestureHandlerRootView>
+                <Pressable style={styles.pickerRow} onPress={() => doBulkCategory(null)}>
+                  <Ionicons name="close-circle-outline" size={20} color={theme.tertiaryLabel} />
+                  <Text style={{ color: theme.secondaryLabel, fontSize: 16 }}>Uncategorized</Text>
+                </Pressable>
+              </>
+            )}
+            {picker === 'card' &&
+              cards.map((c) => (
+                <Pressable key={c.id} style={styles.pickerRow} onPress={() => doBulkCard(c.id)}>
+                  <View style={[styles.cardDot, { backgroundColor: c.color }]} />
+                  <Text style={{ color: theme.label, fontSize: 16 }}>{c.name}</Text>
+                </Pressable>
+              ))}
+          </ScrollView>
+          <Pressable style={[styles.modalCancel, { borderColor: theme.separator }]} onPress={() => setPicker(null)}>
+            <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
+          </Pressable>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
@@ -311,13 +304,7 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, fontWeight: '600' },
   listContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 40 },
   sectionHeader: { fontSize: 13, fontWeight: '600', paddingVertical: 6 },
-  deleteAction: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 64,
-    borderRadius: radius.md,
-    marginVertical: 4,
-  },
+  deleteAction: { marginVertical: 4 },
   selectActions: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center' },
   modalContent: { flex: 1, padding: spacing.xl, paddingTop: 40 },
   pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },

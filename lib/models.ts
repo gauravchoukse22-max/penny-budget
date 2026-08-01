@@ -37,6 +37,18 @@ export type SavingsGoal = {
   name: string;
   monthlyAmount: number;
   sortOrder: number;
+  /**
+   * Optional link to one cell of the Funds grid: ticking this goal's monthly
+   * transfer files a contribution there automatically.
+   *
+   * Both halves must be set for the link to count — a fund entry needs a fund
+   * (which pot) AND an account (which institution). Optional rather than
+   * `string | null` so callers that only ever create a plain goal (onboarding,
+   * the Budget screen's add row) still typecheck; rows read back from SQLite
+   * always carry both, as null when unlinked.
+   */
+  targetFundId?: string | null;
+  targetAccountId?: string | null;
 };
 
 /** Whether a savings goal's monthly transfer was marked done for a given month. */

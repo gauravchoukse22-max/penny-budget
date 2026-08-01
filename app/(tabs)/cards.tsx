@@ -8,13 +8,14 @@ import { useTheme, CATEGORY_PALETTE, spacing, radius, type } from '../../theme/c
 import { WalletCard } from '../../components/WalletCard';
 import { AmountText } from '../../components/AmountText';
 import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
+import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { notify } from '../../lib/confirm';
-import { daysUntilDue } from '../../lib/queries';
+import { daysUntilDue, countTransactionsForCard } from '../../lib/queries';
 
 export default function CardsScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { cards, cardTotals, settings, addCard } = useBudget();
+  const { cards, cardTotals, settings, addCard, removeCard } = useBudget();
   const [showAdd, setShowAdd] = useState(false);
 
   const monthTotal = cards.reduce((sum, c) => sum + (cardTotals.get(c.id) ?? 0), 0);
@@ -56,21 +57,42 @@ export default function CardsScreen() {
             const dueIn = daysUntilDue(c.dueDay);
             const dueSoon = dueIn !== null && dueIn <= 5;
             return (
-              <View key={c.id} style={styles.cardBlock}>
-                <WalletCard
-                  card={c}
-                  total={cardTotals.get(c.id) ?? 0}
-                  currency={settings.currency}
-                  onPress={() => router.push(`/card/${c.id}`)}
-                />
-                {dueIn !== null && (
-                  <Text
-                    style={[styles.dueHint, { color: dueSoon ? theme.negativeMuted : theme.tertiaryLabel }]}
-                  >
-                    {dueIn === 0 ? 'Due today' : `Due in ${dueIn} day${dueIn === 1 ? '' : 's'}`}
-                  </Text>
-                )}
-              </View>
+              // The heaviest delete in the app: deleteCard takes every
+              // transaction on the card with it, across every month. The count
+              // is read at swipe time so the warning states the real loss
+              // instead of a vague "and its transactions".
+              <SwipeToDelete
+                key={c.id}
+                onDelete={() => removeCard(c.id)}
+                accessibilityLabel={`Delete card ${c.name}`}
+                actionStyle={styles.deleteAction}
+                confirm={async () => {
+                  const count = await countTransactionsForCard(c.id);
+                  return {
+                    title: `Delete ${c.name}?`,
+                    message:
+                      count === 0
+                        ? 'This card has no transactions. This cannot be undone.'
+                        : `This also deletes ${count} transaction${count === 1 ? '' : 's'} on this card, across all months. This cannot be undone.`,
+                  };
+                }}
+              >
+                <View style={styles.cardBlock}>
+                  <WalletCard
+                    card={c}
+                    total={cardTotals.get(c.id) ?? 0}
+                    currency={settings.currency}
+                    onPress={() => router.push(`/card/${c.id}`)}
+                  />
+                  {dueIn !== null && (
+                    <Text
+                      style={[styles.dueHint, { color: dueSoon ? theme.negativeMuted : theme.tertiaryLabel }]}
+                    >
+                      {dueIn === 0 ? 'Due today' : `Due in ${dueIn} day${dueIn === 1 ? '' : 's'}`}
+                    </Text>
+                  )}
+                </View>
+              </SwipeToDelete>
             );
           })
         )}
@@ -168,6 +190,9 @@ const styles = StyleSheet.create({
   },
   content: { padding: spacing.lg, gap: spacing.xl, paddingBottom: 60 },
   cardBlock: { gap: spacing.sm },
+  // The wallet card is tall, so the panel gets the card's own corner radius
+  // rather than the default row radius.
+  deleteAction: { borderRadius: radius.lg },
   dueHint: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', marginLeft: spacing.xs },
   empty: { alignItems: 'center', gap: spacing.md, marginTop: 60, paddingHorizontal: spacing.xxl },
   emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
 import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
+import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { confirmAction } from '../../lib/confirm';
 import {
   createFund,
@@ -12,6 +13,7 @@ import {
   deleteFund,
   deleteFundAccount,
   listFundAccounts,
+  listFundEntries,
   listFunds,
   moveFund,
   moveFundAccount,
@@ -26,6 +28,10 @@ export default function ManageFundsScreen() {
   const theme = useTheme();
   const [funds, setFunds] = useState<Fund[]>([]);
   const [accounts, setAccounts] = useState<FundAccount[]>([]);
+  // How many ledger entries each row would take with it. Counted once per load
+  // rather than per confirmation, so the warning can name a real number without
+  // a database round-trip sitting between the tap and the dialog.
+  const [entryCounts, setEntryCounts] = useState<Record<string, number>>({});
   // Name edits are held locally and committed on blur, so each keystroke isn't
   // a database write (and a sync journal entry) of its own.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -33,9 +39,17 @@ export default function ManageFundsScreen() {
   const [newAccount, setNewAccount] = useState('');
 
   const load = useCallback(async () => {
-    const [f, a] = await Promise.all([listFunds(), listFundAccounts()]);
+    const [f, a, entries] = await Promise.all([listFunds(), listFundAccounts(), listFundEntries()]);
     setFunds(f);
     setAccounts(a);
+    // One pass covers both axes: an entry belongs to exactly one fund AND one
+    // account, and deleting either end removes it.
+    const counts: Record<string, number> = {};
+    for (const e of entries) {
+      counts[e.fundId] = (counts[e.fundId] ?? 0) + 1;
+      counts[e.accountId] = (counts[e.accountId] ?? 0) + 1;
+    }
+    setEntryCounts(counts);
     setDrafts({});
   }, []);
 
@@ -56,19 +70,30 @@ export default function ManageFundsScreen() {
     await load();
   };
 
+  // deleteFundGridOwner cascades: the fund (or account) row goes, and so does
+  // every fund_entries and fund_balances row hanging off it. Saying how many
+  // entries that is turns an abstract warning into a number the user can weigh.
+  const removeConfirm = (row: Row, isFund: boolean) => {
+    const n = entryCounts[row.id] ?? 0;
+    const where = isFund ? 'against this fund, at every account' : 'at this account, for every fund';
+    return {
+      title: `Delete "${row.name}"?`,
+      message:
+        n === 0
+          ? 'Nothing has been recorded here yet. This cannot be undone.'
+          : `${n} contribution${n === 1 ? '' : 's'} recorded ${where} ${n === 1 ? 'is' : 'are'} removed with it. This cannot be undone.`,
+    };
+  };
+
   const remove = async (row: Row, isFund: boolean) => {
-    const ok = await confirmAction({
-      title: isFund ? `Delete "${row.name}"?` : `Delete "${row.name}"?`,
-      message: isFund
-        ? 'Every contribution recorded against this fund, at every account, is removed with it. This cannot be undone.'
-        : 'Every contribution recorded at this account, for every fund, is removed with it. This cannot be undone.',
-      confirmLabel: 'Delete',
-      destructive: true,
-    });
-    if (!ok) return;
     if (isFund) await deleteFund(row.id);
     else await deleteFundAccount(row.id);
     await load();
+  };
+
+  const confirmAndRemove = async (row: Row, isFund: boolean) => {
+    const ok = await confirmAction({ ...removeConfirm(row, isFund), confirmLabel: 'Delete', destructive: true });
+    if (ok) await remove(row, isFund);
   };
 
   const move = async (row: Row, delta: number, isFund: boolean) => {
@@ -94,34 +119,47 @@ export default function ManageFundsScreen() {
         <Text style={{ color: theme.tertiaryLabel, paddingVertical: spacing.sm }}>Nothing here yet.</Text>
       ) : (
         rows.map((row, index) => (
-          <View key={row.id} style={[styles.row, { borderBottomColor: theme.separator }]}>
-            <TextInput
-              style={[styles.nameInput, { color: theme.label, backgroundColor: theme.fieldBackground }]}
-              value={drafts[row.id] ?? row.name}
-              onChangeText={(v) => setDrafts((d) => ({ ...d, [row.id]: v }))}
-              onBlur={() => commitName(row, isFund)}
-              onSubmitEditing={() => commitName(row, isFund)}
-              returnKeyType="done"
-            />
-            <Pressable onPress={() => move(row, -1, isFund)} disabled={index === 0} hitSlop={6} style={styles.iconButton}>
-              <Ionicons name="chevron-up" size={18} color={index === 0 ? theme.tertiaryLabel : theme.secondaryLabel} />
-            </Pressable>
-            <Pressable
-              onPress={() => move(row, 1, isFund)}
-              disabled={index === rows.length - 1}
-              hitSlop={6}
-              style={styles.iconButton}
-            >
-              <Ionicons
-                name="chevron-down"
-                size={18}
-                color={index === rows.length - 1 ? theme.tertiaryLabel : theme.secondaryLabel}
+          <SwipeToDelete
+            key={row.id}
+            onDelete={() => remove(row, isFund)}
+            confirm={() => removeConfirm(row, isFund)}
+            accessibilityLabel={`Delete ${isFund ? 'fund' : 'account'} ${row.name}`}
+          >
+            <View style={[styles.row, { borderBottomColor: theme.separator }]}>
+              <TextInput
+                style={[styles.nameInput, { color: theme.label, backgroundColor: theme.fieldBackground }]}
+                value={drafts[row.id] ?? row.name}
+                onChangeText={(v) => setDrafts((d) => ({ ...d, [row.id]: v }))}
+                onBlur={() => commitName(row, isFund)}
+                onSubmitEditing={() => commitName(row, isFund)}
+                returnKeyType="done"
               />
-            </Pressable>
-            <Pressable onPress={() => remove(row, isFund)} hitSlop={6} style={styles.iconButton}>
-              <Ionicons name="close-circle" size={20} color={theme.tertiaryLabel} />
-            </Pressable>
-          </View>
+              <Pressable onPress={() => move(row, -1, isFund)} disabled={index === 0} hitSlop={6} style={styles.iconButton}>
+                <Ionicons name="chevron-up" size={18} color={index === 0 ? theme.tertiaryLabel : theme.secondaryLabel} />
+              </Pressable>
+              <Pressable
+                onPress={() => move(row, 1, isFund)}
+                disabled={index === rows.length - 1}
+                hitSlop={6}
+                style={styles.iconButton}
+              >
+                <Ionicons
+                  name="chevron-down"
+                  size={18}
+                  color={index === rows.length - 1 ? theme.tertiaryLabel : theme.secondaryLabel}
+                />
+              </Pressable>
+              <Pressable
+                onPress={() => confirmAndRemove(row, isFund)}
+                hitSlop={6}
+                style={styles.iconButton}
+                accessibilityRole="button"
+                accessibilityLabel={`Delete ${isFund ? 'fund' : 'account'} ${row.name}`}
+              >
+                <Ionicons name="close-circle" size={20} color={theme.tertiaryLabel} />
+              </Pressable>
+            </View>
+          </SwipeToDelete>
         ))
       )}
 

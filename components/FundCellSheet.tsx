@@ -11,12 +11,14 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme, spacing, radius, type } from '../theme/colors';
-import { formatCurrency, currencySymbol } from '../lib/format';
+import { formatCurrency, currencySymbol, formatShortDate } from '../lib/format';
 import { parseMoneyExpression } from '../lib/parse-number';
 import { PressableScale } from './PressableScale';
 import { DatePickerField, toIsoDate } from './DatePickerField';
 import { FundEntryRow } from './FundEntryRow';
+import { SwipeToDelete } from './SwipeToDelete';
 import { confirmAction } from '../lib/confirm';
 import { tapLight, tapMedium, success } from '../lib/haptics';
 import type { FundAdjustMode, FundEntry } from '../features/models';
@@ -126,6 +128,11 @@ export function FundCellSheet({
     onClose();
   };
 
+  // The × asks; the swipe does not. That difference is about how easy each one
+  // is to trigger, not about the consequence — a 20pt × sits a stray thumb away
+  // inside a scrolling list, whereas revealing the red panel and pressing it is
+  // already two deliberate acts. Deleting one entry costs the same either way:
+  // deleteFundEntry removes that row only.
   const removeEntry = async (entry: FundEntry) => {
     const ok = await confirmAction({
       title: 'Remove this entry?',
@@ -139,6 +146,10 @@ export function FundCellSheet({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      {/* An RN Modal mounts its own native view hierarchy, outside the root
+          wrapper in app/_layout.tsx — without a root of its own here, the swipe
+          rows in the history below simply never receive touches. */}
+      <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: theme.groupedBackground }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -264,12 +275,19 @@ export function FundCellSheet({
               </Text>
             ) : (
               entries.map((entry) => (
-                <FundEntryRow key={entry.id} entry={entry} currency={currency} onDelete={removeEntry} />
+                <SwipeToDelete
+                  key={entry.id}
+                  onDelete={() => onDeleteEntry(entry)}
+                  accessibilityLabel={`Remove entry from ${formatShortDate(entry.date)}`}
+                >
+                  <FundEntryRow entry={entry} currency={currency} onDelete={removeEntry} />
+                </SwipeToDelete>
               ))
             )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      </GestureHandlerRootView>
     </Modal>
   );
 }

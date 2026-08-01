@@ -182,7 +182,23 @@ export async function applyFeatureMigrations(db: SQLite.SQLiteDatabase): Promise
   // bookkeeping, never journaled: a co-member on the old build has no such
   // column, and their INSERT OR REPLACE of a payload carrying it would throw.
   await addColumnIfMissing(db, 'fund_balances', 'migratedAt', 'TEXT');
+  // The goal → Funds-grid link, opt-in and nullable. Both halves are needed
+  // because a fund entry is a CELL: the fund says which savings pot, the
+  // account says which institution the money actually sits at. Storing only the
+  // fund would leave the checklist unable to say where to file the money, so a
+  // goal counts as linked only when both are set.
+  //
+  // Nullable TEXT with no FK on purpose — FK enforcement is off in this app, so
+  // a constraint here would be decoration; features/funds.ts nulls these by hand
+  // when the fund or account is deleted.
+  //
+  // ROLLOUT NOTE: these columns ride along in the savings_goals sync payload
+  // (updateSavingsGoal journals the whole row). A household member still on a
+  // build without this migration would throw applying that payload, stalling
+  // their pull until they update — the same hazard documented on migratedAt
+  // above. It self-heals the moment both devices run this file.
   await addColumnIfMissing(db, 'savings_goals', 'targetFundId', 'TEXT');
+  await addColumnIfMissing(db, 'savings_goals', 'targetAccountId', 'TEXT');
   await addColumnIfMissing(
     db,
     'categories',

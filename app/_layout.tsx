@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useColorScheme, AppState } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BudgetProvider, useBudget } from '../context/BudgetContext';
 import { AuthProvider } from '../context/AuthContext';
 import { authenticateUser } from '../features/biometrics';
@@ -132,11 +133,16 @@ function RootNavigator() {
 export default function RootLayout() {
   const scheme = useColorScheme();
   return (
-    <AuthProvider>
-      <BudgetProvider>
-        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-        <RootNavigator />
-      </BudgetProvider>
-    </AuthProvider>
+    // expo-router does not provide this itself, and gesture-handler's touch
+    // handling is inert without it — every swipe-to-delete row in the app is
+    // dead on Android and unreliable on iOS if this wrapper is missing.
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <BudgetProvider>
+          <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+          <RootNavigator />
+        </BudgetProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

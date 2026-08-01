@@ -1,6 +1,9 @@
 import { getDb, currentYearMonth } from './db';
 import { uuid } from './uuid';
 import { queueSyncMutation } from '../features/cloudkit-sync';
+// One-way edge: features/funds.ts owns every fund_entries write (and its
+// journaling) and imports nothing from here, so this cannot become a cycle.
+import { reconcileSavingsGoalEntries } from '../features/funds';
 import type {
   AppSettings,
   BudgetStatus,
@@ -143,6 +146,19 @@ export async function deleteCard(id: string): Promise<void> {
   await queueSyncMutation('DELETE', 'cards', id, { id });
 }
 
+/**
+ * How many transactions deleteCard would take with it.
+ *
+ * Counted straight from the database rather than from the loaded month, because
+ * deleteCard reaches across every month — a warning built from the visible
+ * month would understate the loss on exactly the cards that matter most.
+ */
+export async function countTransactionsForCard(cardId: string): Promise<number> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) as n FROM transactions WHERE cardId = ?', [cardId]);
+  return row?.n ?? 0;
+}
+
 // ---------- Categories ----------
 
 export async function listCategories(): Promise<Category[]> {
@@ -213,13 +229,13 @@ export async function createSavingsGoal(input: Omit<SavingsGoal, 'id' | 'sortOrd
   const db = await getDb();
   const maxRow = await db.getFirstAsync<{ maxOrder: number | null }>('SELECT MAX(sortOrder) as maxOrder FROM savings_goals');
   const sortOrder = (maxRow?.maxOrder ?? -1) + 1;
-  const goal: SavingsGoal = { id: uuid(), sortOrder, ...input };
-  await db.runAsync('INSERT INTO savings_goals (id, name, monthlyAmount, sortOrder) VALUES (?, ?, ?, ?)', [
-    goal.id,
-    goal.name,
-    goal.monthlyAmount,
-    goal.sortOrder,
-  ]);
+  // A new goal starts unlinked: filing money into a fund is opt-in, never a
+  // guess from the goal's name.
+  const goal: SavingsGoal = { id: uuid(), sortOrder, targetFundId: null, targetAccountId: null, ...input };
+  await db.runAsync(
+    'INSERT INTO savings_goals (id, name, monthlyAmount, sortOrder, targetFundId, targetAccountId) VALUES (?, ?, ?, ?, ?, ?)',
+    [goal.id, goal.name, goal.monthlyAmount, goal.sortOrder, goal.targetFundId ?? null, goal.targetAccountId ?? null]
+  );
   await queueSyncMutation('CREATE', 'savings_goals', goal.id, goal);
   return goal;
 }
@@ -228,20 +244,77 @@ export async function updateSavingsGoal(id: string, patch: Partial<Omit<SavingsG
   const db = await getDb();
   const existing = await db.getFirstAsync<SavingsGoal>('SELECT * FROM savings_goals WHERE id = ?', [id]);
   if (!existing) return;
-  const next = { ...existing, ...patch };
-  await db.runAsync('UPDATE savings_goals SET name = ?, monthlyAmount = ?, sortOrder = ? WHERE id = ?', [
-    next.name,
-    next.monthlyAmount,
-    next.sortOrder,
-    id,
-  ]);
+  // Coalesce rather than letting undefined through: SQLite can't bind it, and a
+  // row read back before the migration ran has no such property at all.
+  const targetFundId: string | null =
+    (patch.targetFundId !== undefined ? patch.targetFundId : existing.targetFundId) ?? null;
+  const targetAccountId: string | null =
+    (patch.targetAccountId !== undefined ? patch.targetAccountId : existing.targetAccountId) ?? null;
+  const next: SavingsGoal = { ...existing, ...patch, targetFundId, targetAccountId };
+  await db.runAsync(
+    'UPDATE savings_goals SET name = ?, monthlyAmount = ?, sortOrder = ?, targetFundId = ?, targetAccountId = ? WHERE id = ?',
+    [next.name, next.monthlyAmount, next.sortOrder, targetFundId, targetAccountId, id]
+  );
   await queueSyncMutation('UPDATE', 'savings_goals', id, next);
+  // Re-run after ANY goal edit, not just a link change: the amount also feeds
+  // the filed contributions, so editing it would otherwise leave the Funds grid
+  // showing the number the goal used to have.
+  await reconcileGoalFundEntries(id);
 }
 
 export async function deleteSavingsGoal(id: string): Promise<void> {
   const db = await getDb();
+  // FK enforcement is off, so the schema's ON DELETE CASCADE never fires and
+  // every row hanging off this goal has to be swept by hand — otherwise its
+  // contributions keep propping up a fund's balance with nothing on screen to
+  // explain them, and the co-member's total stays permanently higher than ours.
+  // The Funds entries go first, while the goal's link is still readable.
+  await reconcileSavingsGoalEntries(id, { fundId: null, accountId: null }, []);
+  const transfers = await db.getAllAsync<{ id: string }>('SELECT id FROM savings_goal_transfers WHERE goalId = ?', [id]);
+  const budgets = await db.getAllAsync<{ id: string }>('SELECT id FROM savings_goal_budgets WHERE goalId = ?', [id]);
+  await db.runAsync('DELETE FROM savings_goal_transfers WHERE goalId = ?', [id]);
+  await db.runAsync('DELETE FROM savings_goal_budgets WHERE goalId = ?', [id]);
   await db.runAsync('DELETE FROM savings_goals WHERE id = ?', [id]);
+  for (const t of transfers) await queueSyncMutation('DELETE', 'savings_goal_transfers', t.id, { id: t.id });
+  for (const b of budgets) await queueSyncMutation('DELETE', 'savings_goal_budgets', b.id, { id: b.id });
   await queueSyncMutation('DELETE', 'savings_goals', id, { id });
+}
+
+/**
+ * Files this goal's ticked months into the Funds grid — the whole point of the
+ * goal ↔ fund link.
+ *
+ * Rebuilds the goal's contributions from scratch on every call instead of
+ * reacting to the one box that changed, so ticking, unticking, correcting an
+ * amount, re-linking and unlinking all converge on the same answer and none of
+ * them can strand an entry. Cheap: a goal has one transfer row per month it has
+ * ever been ticked in.
+ *
+ * A missing goal, or one with no link, produces an empty target — which is how
+ * a deleted or unlinked goal's entries get swept rather than left behind.
+ */
+export async function reconcileGoalFundEntries(goalId: string): Promise<void> {
+  const db = await getDb();
+  const goal = await db.getFirstAsync<SavingsGoal>('SELECT * FROM savings_goals WHERE id = ?', [goalId]);
+  const ticked = await db.getAllAsync<{ yearMonth: string }>(
+    'SELECT yearMonth FROM savings_goal_transfers WHERE goalId = ? AND transferred = 1 ORDER BY yearMonth ASC',
+    [goalId]
+  );
+
+  const months = [];
+  for (const t of ticked) {
+    // Per month, because each one carries the amount that month was actually
+    // budgeted at — resolveSavingsGoalAmounts carries the last snapshot forward,
+    // so a raise in June doesn't rewrite what went into the pot in March.
+    const amounts = await resolveSavingsGoalAmounts(t.yearMonth);
+    months.push({ yearMonth: t.yearMonth, amount: amounts.get(goalId) ?? goal?.monthlyAmount ?? 0 });
+  }
+
+  await reconcileSavingsGoalEntries(
+    goalId,
+    { fundId: goal?.targetFundId ?? null, accountId: goal?.targetAccountId ?? null },
+    months
+  );
 }
 
 export function resolvedGoalAmount(goal: SavingsGoal, overrides?: Map<string, number>): number {
@@ -328,6 +401,10 @@ export async function setSavingsGoalAmountForMonth(goalId: string, yearMonth: st
     [uuid(), goalId, yearMonth, monthlyAmount]
   );
   await journalUpsert('savings_goal_budgets', 'goalId = ? AND yearMonth = ?', [goalId, yearMonth]);
+  // Correcting the amount of a month already ticked has to move the money that
+  // was filed for it, or the Funds grid keeps showing the old figure with no
+  // way to tell it apart from a real contribution.
+  await reconcileGoalFundEntries(goalId);
 }
 
 // ---------- Savings goal monthly transfer checklist ----------
@@ -350,6 +427,11 @@ export async function setTransferStatus(goalId: string, yearMonth: string, trans
     [uuid(), goalId, yearMonth, transferred ? 1 : 0]
   );
   await journalUpsert('savings_goal_transfers', 'goalId = ? AND yearMonth = ?', [goalId, yearMonth]);
+  // The tick means the money really moved, so a goal linked to a fund files the
+  // contribution here rather than making the user type the same number into the
+  // Funds grid as well. Unticking removes it again. Lives in the write layer,
+  // not the screen, so every caller gets it — and journals — identically.
+  await reconcileGoalFundEntries(goalId);
 }
 
 // ---------- Monthly Settings (variable salary) ----------
