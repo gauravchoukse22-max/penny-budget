@@ -21,9 +21,22 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 ## Claude
 
 ### Next
-- [ ] Build iOS + Android once the current work lands, and hand Gary the upload steps.
+- [ ] **Month switcher on every bottom-tab screen.** Gary wants to move between
+      months from anywhere and see what he did last month. Home, Budget and
+      Insights already read `selectedMonth` from BudgetContext; **Transactions and
+      Cards do not reference it at all**, so those two need month scoping as well
+      as a control, not just a header. Use one shared component so the control
+      cannot drift between tabs, and keep it out of Settings.
+- [ ] **Finish the in-flight agent work**: transaction filters into a dropdown,
+      and the seeded "Cash" card so deleting a card reassigns its transactions
+      instead of deleting them. If the working tree has uncommitted changes to
+      `app/(tabs)/transactions.tsx`, `app/(tabs)/cards.tsx`, `lib/queries.ts` or
+      `features/db-migrations.ts`, that is this work — typecheck it, then commit.
+- [ ] Build iOS + Android, and hand Gary the upload steps.
 - [ ] **Disha rejoins with Replace** — the flow exists now; walk them through it.
-      That is what clears her duplicate categories and cards in one action.
+      That is what clears her duplicate categories and cards in one action. She
+      should back up first (Settings → Backup), since Replace discards whatever
+      is only on her phone.
 
 ### Known gaps, not yet built
 - [ ] **Currency does not sync.** Household members with different currencies see
@@ -49,6 +62,27 @@ These are real risks, not paperwork. Each changed behaviour no agent could obser
 - [ ] The Funds ledger backfill, on a device that already holds fund balances.
 
 ---
+
+## Where things stand (2026-08-01)
+
+Family sync **works and is verified** — Disha's transaction reached Gary's phone,
+and the database shows two members and two distinct writers on household
+`f4ea2b4e-b257-4e01-b1bf-cea0356bb5ce` ("Our Household"). Getting there took
+fixing six tables that never journaled, a global sync watermark that silently
+skipped records after switching households, activation that sampled the session
+once at boot, and the absence of any realtime subscription. Do not casually
+refactor that area — it took a long time to make correct.
+
+Shipped versions: **iOS 1.2.0 build 12** is what is on both phones. 1.1.0 is live
+on the App Store, which is why the version had to move to 1.2.0 — a build-number
+bump alone is rejected once a version is approved. **Android 1.2.0 vc7** is built
+but not uploaded. Everything committed after build 12 — the sharing rework, tap
+targets, swipe-to-delete, the savings→funds link, Funds moving under Budget — is
+**not in any build the user has**.
+
+Duplicates on Gary's phone are expected until Disha rejoins with Replace: joining
+used to pull the shared budget without pushing local rows, leaving the joiner
+holding both sets.
 
 ## How this app's sync works, in one paragraph
 
