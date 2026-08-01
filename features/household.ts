@@ -127,6 +127,53 @@ export async function seedHouseholdFromLocal(householdId: string): Promise<void>
   }
 }
 
+// Children before parents, so the wipe still holds if a later build turns on
+// PRAGMA foreign_keys (it is off today, which is also why the pull can apply
+// remote rows in arbitrary order).
+const CLEAR_ORDER = [
+  'transactions',
+  'recurring_transactions',
+  'category_rules',
+  'category_budgets',
+  'savings_goal_budgets',
+  'savings_goal_transfers',
+  'monthly_settings',
+  'fund_entries',
+  'fund_balances',
+  'fund_accounts',
+  'funds',
+  'savings_goals',
+  'categories',
+  'cards',
+];
+
+/**
+ * Deletes this device's copy of every syncable table — the "use the shared
+ * budget instead of mine" half of joining a household.
+ *
+ * Deliberately NOT routed through lib/queries: those deletes would be journaled
+ * to the outbox and pushed into the household as tombstones. The rows were never
+ * in that household, so the tombstones say nothing true, and any that happened
+ * to share an id with a co-member's row would delete THEIR data. Draining the
+ * outbox is the same argument — anything queued there is a write aimed at a
+ * budget this device is giving up.
+ *
+ * Only ever call this once the join has actually succeeded.
+ */
+export async function clearLocalBudgetData(): Promise<void> {
+  const db = await getDb();
+  // Ordered tables first, then anything else in the set, so a table added to
+  // SYNCABLE_TABLES later is still cleared rather than silently surviving.
+  const rest = [...SYNCABLE_TABLES].filter((t) => !CLEAR_ORDER.includes(t));
+  await db.withTransactionAsync(async () => {
+    for (const table of [...CLEAR_ORDER, ...rest]) {
+      if (!SYNCABLE_TABLES.has(table)) continue;
+      await db.runAsync(`DELETE FROM ${table}`);
+    }
+    await db.runAsync('DELETE FROM outbox');
+  });
+}
+
 // ── RPC wrappers ────────────────────────────────────────────────────────────
 
 const NOT_CONFIGURED: Result<any> = { success: false, message: "Cloud accounts aren't configured for this build." };

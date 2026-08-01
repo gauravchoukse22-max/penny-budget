@@ -9,7 +9,13 @@ import {
 import * as q from '../lib/queries';
 import { processRecurringTransactions } from '../features/recurring-transactions';
 import { updateLoggingStreak } from '../features/streaks-and-gamification';
-import { setSyncEnabled, getCloudKitAdapter, runCloudKitSyncCycle } from '../features/cloudkit-sync';
+import {
+  setSyncEnabled,
+  getCloudKitAdapter,
+  runCloudKitSyncCycle,
+  pullChangesFromCloudKit,
+  resetSyncTokenForHousehold,
+} from '../features/cloudkit-sync';
 import {
   activateHousehold,
   deactivateHousehold,
@@ -17,6 +23,7 @@ import {
   createHousehold as createHouseholdRpc,
   joinHousehold as joinHouseholdRpc,
   leaveHousehold as leaveHouseholdRpc,
+  clearLocalBudgetData,
   seedHouseholdFromLocal,
   myHouseholdsResult,
 } from '../features/household';
@@ -83,7 +90,7 @@ type BudgetContextValue = {
   // refuses transitions that would silently put this device on a second budget.
   syncNow: () => Promise<void>;
   createHousehold: (name?: string, opts?: { evenIfAlreadyAMember?: boolean }) => Promise<SharingResult>;
-  joinHousehold: (code: string) => Promise<SharingResult>;
+  joinHousehold: (code: string, mode?: JoinMode) => Promise<SharingResult>;
   connectToHousehold: (householdId: string) => Promise<SharingResult>;
   startDeviceSync: () => Promise<SharingResult>;
   pauseSharing: () => Promise<SharingResult>;
@@ -91,6 +98,18 @@ type BudgetContextValue = {
 };
 
 export type SharingResult = { success: boolean; message: string };
+
+/**
+ * What joining does with the budget already on this device.
+ *
+ * 'merge' keeps it — the historic behaviour, and a trap worth naming: joining
+ * only ever PULLED, so the joiner's own rows were never pushed up. They stayed
+ * private to that one device while looking, side by side with the shared rows,
+ * exactly like duplicates that only one phone could see.
+ *
+ * 'replace' throws it away and takes the shared budget as-is.
+ */
+export type JoinMode = 'merge' | 'replace';
 
 const BudgetContext = createContext<BudgetContextValue | null>(null);
 
@@ -240,11 +259,12 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   // Join an existing household by invite code and pull its shared budget.
   const joinExistingHousehold = useCallback(
-    async (code: string): Promise<SharingResult> => {
+    async (code: string, mode: JoinMode = 'merge'): Promise<SharingResult> => {
       const previous = settings.householdId;
       const res = await joinHouseholdRpc(code);
       if (!res.success || !res.data) return res;
-      if (previous === res.data) {
+      const householdId = res.data;
+      if (previous === householdId) {
         return { success: true, message: 'This device was already on that shared budget.' };
       }
       // Drop the previous membership. Leaving it in place is what let one
@@ -252,8 +272,48 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       // could pick up instead of the one holding the real budget. Ordered after
       // the join so a bad code never costs the household you were in.
       if (previous) await leaveHouseholdRpc(previous);
-      activateHousehold(res.data);
-      await updateSettings({ householdId: res.data });
+
+      if (mode === 'replace') {
+        // Everything destructive happens strictly AFTER the join is known to
+        // have succeeded: a wrong code, an expired invite or a dead connection
+        // must cost the user nothing. From here the join is real, so the worst
+        // remaining case is an empty device with the data still in the cloud.
+        await clearLocalBudgetData();
+        await resetSyncTokenForHousehold(householdId);
+      }
+
+      activateHousehold(householdId);
+      // Committed before the pull: the pull reads app_settings.householdId to
+      // pick which household's watermark it is following.
+      await updateSettings({ householdId });
+
+      if (mode === 'replace') {
+        // Pull only, never the full cycle. The outbox went with the local rows,
+        // so there is nothing of ours left to push — and a push here is exactly
+        // what would leak the just-wiped rows into someone else's budget.
+        const pull = await pullChangesFromCloudKit();
+        await refresh();
+        if (!pull.success) {
+          // The device is empty and the shared budget has not arrived. Say so —
+          // it is recoverable (the watermark is still cleared, so any later sync
+          // replays the whole household), but only if the user knows to retry.
+          return {
+            success: false,
+            message:
+              'Joined, but the shared budget could not be downloaded, so this device is empty right now. Nothing was lost from the shared budget. Tap Sync now once you are back online.',
+          };
+        }
+        // A successful pull of nothing leaves a blank app, which looks exactly
+        // like a bug unless we say which of the two it is.
+        if (pull.pulledCount === 0) {
+          return {
+            success: true,
+            message: 'Joined, but that shared budget has nothing in it yet, so this device is empty. It fills in as they add to it.',
+          };
+        }
+        return { success: true, message: 'Joined. This device now shows the shared budget.' };
+      }
+
       await runCloudKitSyncCycle();
       await refresh();
       return {
@@ -297,7 +357,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     deactivateHousehold();
     await updateSettings({ householdId: null });
     await refresh();
-    return { success: true, message: 'Left the shared budget. Everything already on this device stays.' };
+    return { success: true, message: 'Left the shared budget. The copy on this device stays and keeps working offline.' };
   }, [refresh, updateSettings, settings.householdId]);
 
   // "Just my devices" — the same household machinery with one member. Reuses

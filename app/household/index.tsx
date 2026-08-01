@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, View, Text, Pressable, ActivityIndicator, Platf
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
-import { useBudget } from '../../context/BudgetContext';
+import { useBudget, type JoinMode } from '../../context/BudgetContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import {
   GroupedSection,
@@ -14,7 +14,7 @@ import {
   OrDivider,
 } from '../../components/AuthUI';
 import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
-import { createInvite, type Household, type HouseholdMember } from '../../features/household';
+import { createInvite, removeMember, type Household, type HouseholdMember } from '../../features/household';
 import { useHouseholdStatus, type HouseholdStatus } from '../../lib/useHouseholdStatus';
 import { confirmAction } from '../../lib/confirm';
 
@@ -27,7 +27,17 @@ import { confirmAction } from '../../lib/confirm';
 // success. Settings now only links here, and every path below states what it
 // will do before it does it.
 
-type BusyAction = 'device' | 'join' | 'create' | 'connect' | 'invite' | 'sync' | 'pause' | 'leave';
+type BusyAction = 'device' | 'join' | 'create' | 'connect' | 'invite' | 'sync' | 'pause' | 'leave' | 'remove';
+
+// Membership controls WHO RECEIVES CHANGES. It does not control who holds a
+// copy — every member's device carries a complete offline copy of the budget,
+// and nothing in the app or the backend can reach in and take it back. "Remove"
+// therefore reads as far stronger than it is, so every screen and dialog that
+// ends a membership says this in full rather than implying a revoke.
+const COPY_STAYS_WITH_THEM =
+  'The copy already on their device stays there and keeps working. It is a full copy of this budget, and removing them does not delete it or take it back.';
+const COPY_STAYS_WITH_YOU =
+  'The copy on this device stays and keeps working offline. You keep everything you can see now, and nobody else can take it back.';
 
 export default function SharingScreen() {
   const theme = useTheme();
@@ -51,6 +61,10 @@ export default function SharingScreen() {
   const [invite, setInvite] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
+  // No default. Joining used to silently mean "merge", which is what left the
+  // joiner holding private rows nobody else could see, so the choice is made
+  // deliberately or not at all.
+  const [joinMode, setJoinMode] = useState<JoinMode | null>(null);
 
   const run = async (action: BusyAction, fn: () => Promise<{ success: boolean; message: string } | void>) => {
     setBusy(action);
@@ -85,9 +99,12 @@ export default function SharingScreen() {
     const ok = await confirmAction({
       title: `Use ${h.name} on this device?`,
       message:
+        // "Merged in" was wrong here in the same way it was wrong on join: this
+        // path pulls the shared budget down and never sends this device's rows
+        // up, so they stay local and read as duplicates.
         h.memberCount > 1
-          ? `That budget already has ${h.memberCount} people in it. This device starts syncing with it, and what is on this device now is merged in.`
-          : 'This device starts syncing with that budget, and what is on this device now is merged in.',
+          ? `That budget already has ${h.memberCount} people in it. This device starts syncing with it. What is on this device now stays here and is not sent to them, so anything that budget already has will appear twice.`
+          : 'This device starts syncing with that budget. What is on this device now stays here, alongside whatever that budget already holds.',
       confirmLabel: 'Use it',
     });
     if (!ok) return;
@@ -96,24 +113,36 @@ export default function SharingScreen() {
 
   // ── Join with an invite code ─────────────────────────────────────────────
   const doJoin = async () => {
+    if (!joinMode) return;
     // Joining while already in a household leaves that one. Saying so here is
     // the difference between a deliberate switch and a silently split budget.
-    const ok = status.sharingOn
-      ? await confirmAction({
-          title: `Leave ${currentName} and join the new one?`,
-          message: `You can be in one shared budget at a time. This device stops syncing with ${currentName} and anyone else in it keeps their copy. The budget on this device is then merged into the new one.`,
-          confirmLabel: 'Leave and join',
-          destructive: true,
-        })
-      : await confirmAction({
-          title: 'Join this shared budget?',
-          message:
-            'The budget on this device is merged into theirs, and from then on you both edit the same one. Back up first if you are unsure (Settings → Backup).',
-          confirmLabel: 'Join',
-        });
+    const leaving = status.sharingOn
+      ? `You can be in one shared budget at a time, so this device stops syncing with ${currentName} and anyone still in it keeps their copy. `
+      : '';
+    const ok =
+      joinMode === 'replace'
+        ? await confirmAction({
+            title: 'Delete this budget and use the shared one?',
+            message:
+              leaving +
+              'The cards, categories, transactions and savings goals on this device are deleted and replaced with the shared budget. This cannot be undone. To keep a copy, cancel and export one first from Settings → Backup.',
+            confirmLabel: 'Delete and join',
+            destructive: true,
+          })
+        : await confirmAction({
+            title: 'Join and keep this budget?',
+            message:
+              leaving +
+              'What is on this device is kept and the shared budget is added alongside it. Your existing items are not sent to the others, so only this device will ever show them, and anything the shared budget already has will appear twice.',
+            confirmLabel: status.sharingOn ? 'Leave and join' : 'Join',
+            destructive: status.sharingOn,
+          });
     if (!ok) return;
-    await run('join', () => joinHousehold(code.trim()));
+    await run('join', () => joinHousehold(code.trim(), joinMode));
     setCode('');
+    // Cleared even on failure: a pre-armed destructive choice must not sit
+    // waiting behind a button the user comes back to later.
+    setJoinMode(null);
   };
 
   // ── Create a shared budget and invite someone into it ────────────────────
@@ -188,14 +217,33 @@ export default function SharingScreen() {
   const doLeave = async () => {
     const ok = await confirmAction({
       title: `Leave ${currentName}?`,
-      message:
-        'The budget on this device stays and keeps working offline, but it stops syncing and stops receiving their changes. The others keep the shared budget. Rejoining needs a new invite code.',
+      message: `You stop receiving their changes and can no longer edit the shared budget. ${COPY_STAYS_WITH_YOU} The others keep the shared budget, and rejoining needs a new invite code.`,
       confirmLabel: 'Leave',
       destructive: true,
     });
     if (!ok) return;
     await run('leave', leaveHousehold);
     setInvite(null);
+  };
+
+  // ── Remove someone else from the shared budget ───────────────────────────
+  const doRemove = async (member: HouseholdMember) => {
+    const hid = settings.householdId;
+    if (!hid) return;
+    const who = member.email ?? 'this person';
+    const ok = await confirmAction({
+      title: `Remove ${who}?`,
+      message: `They stop receiving changes and can no longer edit this shared budget. ${COPY_STAYS_WITH_THEM}`,
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (!ok) return;
+    await run('remove', async () => {
+      const res = await removeMember(hid, member.userId);
+      return res.success
+        ? { success: true, message: `${who} no longer receives changes. The copy on their device stays with them.` }
+        : res;
+    });
   };
 
   // ── Guards ──────────────────────────────────────────────────────────────
@@ -230,6 +278,10 @@ export default function SharingScreen() {
   // ── Sharing is on ────────────────────────────────────────────────────────
   if (status.sharingOn) {
     const alone = status.checked && status.others.length === 0;
+    // Only the owner may remove anyone (the RPC enforces it too); showing the
+    // control to a member would promise something the server refuses.
+    const iAmOwner = status.members.some((m) => m.userId === user.id && m.role === 'owner');
+    const canRemove = iAmOwner && status.others.length > 0;
     return (
       <KeyboardAwareScreen
         backgroundColor={theme.groupedBackground}
@@ -238,7 +290,11 @@ export default function SharingScreen() {
       >
         <GroupedSection
           header="Sharing is on"
-          footnote="Everyone listed here edits the same budget. Changes sync while the app is open."
+          footnote={
+            canRemove
+              ? 'Everyone listed here edits the same budget. Changes sync while the app is open. Removing someone stops them receiving changes and stops them editing. The copy already on their device stays with them and cannot be taken back.'
+              : 'Everyone listed here edits the same budget. Changes sync while the app is open.'
+          }
         >
           <Text style={{ color: theme.label, fontSize: 17, fontWeight: '700' }}>{status.current?.name ?? 'Shared budget'}</Text>
           <Text style={{ color: theme.secondaryLabel, fontSize: 14, lineHeight: 20 }}>{membershipLine(status)}</Text>
@@ -246,7 +302,15 @@ export default function SharingScreen() {
           {status.loading && status.members.length === 0 ? (
             <ActivityIndicator color={theme.accent} />
           ) : (
-            status.members.map((m) => <MemberRow key={m.userId} member={m} isYou={m.userId === user.id} />)
+            status.members.map((m) => (
+              <MemberRow
+                key={m.userId}
+                member={m}
+                isYou={m.userId === user.id}
+                onRemove={iAmOwner && m.userId !== user.id ? () => doRemove(m) : undefined}
+                removeDisabled={!!busy}
+              />
+            ))
           )}
 
           {!status.loading && !status.checked && !status.detached && (
@@ -299,11 +363,12 @@ export default function SharingScreen() {
             autoCorrect={false}
             maxLength={8}
           />
+          <JoinModeChoice value={joinMode} onChange={setJoinMode} disabled={!!busy} />
           <PrimaryButton
-            title="Join with this code"
+            title={joinButtonTitle(joinMode)}
             onPress={doJoin}
             loading={busy === 'join'}
-            disabled={code.trim().length < 4 || (!!busy && busy !== 'join')}
+            disabled={!joinMode || code.trim().length < 4 || (!!busy && busy !== 'join')}
           />
         </GroupedSection>
 
@@ -401,7 +466,7 @@ export default function SharingScreen() {
 
       <GroupedSection
         header="Share with someone"
-        footnote="Joining merges this device's budget into theirs. Creating starts the shared budget from what is on this device."
+        footnote="Joining puts this device on their budget. Creating starts the shared budget from what is on this device."
       >
         <Text style={{ color: theme.secondaryLabel, fontSize: 14, lineHeight: 20 }}>
           You and another person edit one budget together — the same numbers on both phones. Enter the invite code they
@@ -416,11 +481,12 @@ export default function SharingScreen() {
           autoCorrect={false}
           maxLength={8}
         />
+        <JoinModeChoice value={joinMode} onChange={setJoinMode} disabled={!!busy} />
         <PrimaryButton
-          title="Join with their code"
+          title={joinButtonTitle(joinMode)}
           onPress={doJoin}
           loading={busy === 'join'}
-          disabled={code.trim().length < 4 || (!!busy && busy !== 'join')}
+          disabled={!joinMode || code.trim().length < 4 || (!!busy && busy !== 'join')}
         />
         <OrDivider />
         <AuthTextField label="Name (optional)" value={name} onChangeText={setName} placeholder="Our Household" autoCapitalize="words" />
@@ -447,7 +513,17 @@ function membershipLine(status: HouseholdStatus): string {
   return `Shared with ${status.others.length} other people. Everyone edits the same budget.`;
 }
 
-function MemberRow({ member, isYou }: { member: HouseholdMember; isYou: boolean }) {
+function MemberRow({
+  member,
+  isYou,
+  onRemove,
+  removeDisabled,
+}: {
+  member: HouseholdMember;
+  isYou: boolean;
+  onRemove?: () => void;
+  removeDisabled?: boolean;
+}) {
   const theme = useTheme();
   return (
     <View style={styles.memberRow}>
@@ -457,7 +533,114 @@ function MemberRow({ member, isYou }: { member: HouseholdMember; isYou: boolean 
         {isYou ? ' (you)' : ''}
       </Text>
       {member.role === 'owner' && <Text style={{ color: theme.tertiaryLabel, fontSize: 12, fontWeight: '600' }}>OWNER</Text>}
+      {onRemove && (
+        <Pressable
+          onPress={onRemove}
+          disabled={removeDisabled}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${member.email ?? 'this person'} from the shared budget`}
+          style={{ marginLeft: 12, opacity: removeDisabled ? 0.5 : 1 }}
+        >
+          <Text style={{ color: theme.systemRed, fontWeight: '600' }}>Remove</Text>
+        </Pressable>
+      )}
     </View>
+  );
+}
+
+/** The button never says only "Join" — the label carries which of the two very
+ * different things is about to happen to the budget on this device. */
+function joinButtonTitle(mode: JoinMode | null): string {
+  if (mode === 'replace') return 'Join and replace this budget';
+  if (mode === 'merge') return 'Join and keep this budget';
+  return 'Choose an option above to join';
+}
+
+/**
+ * The question joining never used to ask.
+ *
+ * Nothing is preselected: merge was the silent default and it is the one that
+ * produced invisible duplicates, while replace deletes data outright. Neither is
+ * safe to assume, so the join button stays disabled until the user picks.
+ */
+function JoinModeChoice({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: JoinMode | null;
+  onChange: (mode: JoinMode) => void;
+  disabled?: boolean;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={{ gap: spacing.sm }}>
+      <Text style={{ color: theme.label, fontSize: 15, fontWeight: '600' }}>
+        What happens to the budget already on this device?
+      </Text>
+      <ChoiceRow
+        selected={value === 'merge'}
+        title="Keep it and add theirs"
+        detail="Nothing here is deleted. Nothing here is sent to them either, so your existing cards and transactions stay visible on this device only, and anything the shared budget already has will appear twice."
+        onPress={() => onChange('merge')}
+        disabled={disabled}
+      />
+      <ChoiceRow
+        selected={value === 'replace'}
+        title="Replace it with theirs"
+        detail="This device's budget is deleted and the shared one is used instead. This cannot be undone. Export a copy from Settings → Backup first if you want to keep it."
+        onPress={() => onChange('replace')}
+        disabled={disabled}
+        destructive
+      />
+    </View>
+  );
+}
+
+function ChoiceRow({
+  selected,
+  title,
+  detail,
+  onPress,
+  disabled,
+  destructive,
+}: {
+  selected: boolean;
+  title: string;
+  detail: string;
+  onPress: () => void;
+  disabled?: boolean;
+  destructive?: boolean;
+}) {
+  const theme = useTheme();
+  const tint = destructive ? theme.systemRed : theme.accent;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="radio"
+      accessibilityState={{ selected, disabled: !!disabled }}
+      accessibilityLabel={`${title}. ${detail}`}
+      style={[
+        styles.choiceRow,
+        {
+          borderColor: selected ? tint : theme.separator,
+          backgroundColor: selected ? theme.fieldBackground : 'transparent',
+          opacity: disabled ? 0.5 : 1,
+        },
+      ]}
+    >
+      <Ionicons
+        name={selected ? 'radio-button-on' : 'radio-button-off'}
+        size={22}
+        color={selected ? tint : theme.tertiaryLabel}
+      />
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: theme.label, fontSize: 16, fontWeight: '600' }}>{title}</Text>
+        <Text style={{ color: theme.secondaryLabel, fontSize: 13, lineHeight: 18, marginTop: 2 }}>{detail}</Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -466,6 +649,15 @@ const styles = StyleSheet.create({
   memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   membershipRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 6 },
   actionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11 },
+  choiceRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    borderWidth: 1.5,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    minHeight: 44,
+  },
   outlineButton: { paddingVertical: 14, borderRadius: radius.md, alignItems: 'center', borderWidth: 1.5 },
   code: { fontSize: 22, letterSpacing: 4, padding: 14, borderRadius: radius.sm, textAlign: 'center', fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
 });

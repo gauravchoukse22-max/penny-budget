@@ -167,12 +167,29 @@ export async function pushPendingChangesToCloudKit(
  * Read straight from app_settings rather than lib/queries: queries.ts imports
  * queueSyncMutation from this module, so importing it back would be a cycle.
  */
+const householdTokenKey = (householdId: string) => `main:${householdId}`;
+
 async function syncTokenKey(): Promise<string> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ householdId: string | null }>(
     'SELECT householdId FROM app_settings WHERE id = 1'
   );
-  return row?.householdId ? `main:${row.householdId}` : 'main';
+  return row?.householdId ? householdTokenKey(row.householdId) : 'main';
+}
+
+/**
+ * Forgets the watermark for one household so the next pull replays that
+ * household's whole history instead of only what changed since last time.
+ *
+ * Needed by "replace my budget with the shared one" on join: a device that was
+ * previously in that household still holds its watermark, and pulling from it
+ * onto tables we just emptied would leave the user with a near-empty budget and
+ * no way to tell why. Goes through householdTokenKey so this can never drift
+ * from the key the pull actually reads.
+ */
+export async function resetSyncTokenForHousehold(householdId: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM sync_meta WHERE id = ?', [householdTokenKey(householdId)]);
 }
 
 /** Applies remote changes into local tables and advances the change token. */
