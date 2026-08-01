@@ -8,7 +8,7 @@ import { useTheme, spacing, radius, type } from '../../theme/colors';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { DateField } from '../../components/DateField';
 import { confirmAction } from '../../lib/confirm';
-import { formatDayLabel } from '../../lib/format';
+import { currencySymbol, formatDayLabel } from '../../lib/format';
 import { parseMoneyInput } from '../../lib/parse-number';
 
 // Matches the add-transaction screen so both screens' buttons are the same
@@ -117,7 +117,7 @@ export default function EditTransactionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const router = useRouter();
-  const { transactions, categories, cards, editTransaction, removeTransaction } = useBudget();
+  const { transactions, categories, cards, settings, editTransaction, removeTransaction } = useBudget();
 
   const transaction = transactions.find((t) => t.id === id);
 
@@ -178,7 +178,7 @@ export default function EditTransactionScreen() {
     >
       <View style={styles.amountRow}>
         <Text style={[styles.currencySymbol, { color: isRefund ? theme.systemGreen : theme.secondaryLabel }]}>
-          {isRefund ? '+' : '$'}
+          {isRefund ? '+' : currencySymbol(settings.currency)}
         </Text>
         <TextInput
           style={[styles.amountInput, { color: isRefund ? theme.systemGreen : theme.label }]}
