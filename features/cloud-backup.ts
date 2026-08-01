@@ -1,5 +1,12 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { collectAllTables, restoreAllTables, validateBackup, BACKUP_VERSION, type BackupData } from './backup-restore';
+import {
+  collectAllTables,
+  restoreAllTables,
+  restoreCompletionMessage,
+  validateBackup,
+  BACKUP_VERSION,
+  type BackupData,
+} from './backup-restore';
 
 const BUCKET = 'backups';
 const OBJECT_NAME = 'backup.json';
@@ -63,9 +70,9 @@ export async function restoreFromCloud(userId: string): Promise<{ success: boole
     const validation = validateBackup(parsed);
     if (!validation.valid) return { success: false, message: validation.message };
 
-    await restoreAllTables(validation.backup.tables);
+    await restoreAllTables(validation.backup);
 
-    return { success: true, message: 'Data restored. Please close and reopen the app.' };
+    return { success: true, message: restoreCompletionMessage(validation.backup.version) };
   } catch (error) {
     console.error('Failed to restore from cloud:', error);
     return { success: false, message: 'An unexpected error occurred during restore.' };

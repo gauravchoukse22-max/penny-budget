@@ -10,7 +10,11 @@ import { readPickedFileAsText, downloadOrShareFile } from '../lib/files';
 // as the schema gains columns — no hand-maintained column lists to fall out of
 // sync with lib/db.ts.
 
-export const BACKUP_VERSION = 2;
+// Version history. A restore branches on this to decide what it is allowed to
+// wipe, so it is load-bearing rather than decoration:
+//   2 — everything below except the Funds grid.
+//   3 — adds funds, fund_accounts, fund_entries and the legacy fund_balances.
+export const BACKUP_VERSION = 3;
 
 // Parent tables first so a restore inserts them before the rows that reference
 // them. (Deletes run in reverse.) Transient sync state (outbox, sync_meta) is
@@ -19,6 +23,16 @@ export const BACKUP_TABLES = [
   'cards',
   'categories',
   'savings_goals',
+  // The Funds grid. funds and fund_accounts are the row and column headers that
+  // every fund_entries row points at, so they must be inserted before the
+  // entries and deleted after them. fund_balances is the pre-ledger table the
+  // backfill still reads (features/funds.ts): leaving it out would drop its
+  // migratedAt stamps, and a restored device would then re-create opening
+  // entries for cells it had already converted.
+  'funds',
+  'fund_accounts',
+  'fund_entries',
+  'fund_balances',
   'transactions',
   'recurring_transactions',
   'category_rules',
@@ -40,6 +54,32 @@ export type BackupData = {
 
 type SQLiteParam = string | number | null;
 
+/** The first BACKUP_VERSION whose files carry the Funds grid. */
+const FUNDS_BACKUP_VERSION = 3;
+
+const FUNDS_TABLES: ReadonlySet<string> = new Set(['funds', 'fund_accounts', 'fund_entries', 'fund_balances']);
+
+/**
+ * The tables a backup of this version is authoritative for — the only ones a
+ * restore may wipe.
+ *
+ * A version-2 file was written by a build that had never heard of the Funds
+ * grid. Its silence about funds means "I don't know about that", not "there
+ * was nothing there", so wiping on it would turn restoring an old backup into
+ * permanent loss of every savings balance in the grid — strictly worse than
+ * the missing-funds bug it replaced.
+ *
+ * Keyed off the declared version rather than off whether the file happens to
+ * contain a `funds` key: the version is stated by the writer and checked by
+ * validateBackup, whereas a key-presence rule infers intent from an absence and
+ * would silently downgrade a truncated current file into a half-merge, with
+ * nothing on screen to say so.
+ */
+export function restorableTables(version: number): readonly string[] {
+  if (version >= FUNDS_BACKUP_VERSION) return BACKUP_TABLES;
+  return BACKUP_TABLES.filter((table) => !FUNDS_TABLES.has(table));
+}
+
 /**
  * Reads every user table into a plain object, keyed by table name. Shared by
  * both the local (share-sheet) export and cloud backup, so they stay in sync.
@@ -54,21 +94,32 @@ export async function collectAllTables(): Promise<Record<string, Row[]>> {
 }
 
 /**
- * Wipes and reinserts every user table from a tables object, in one
- * transaction so a partial failure leaves existing data untouched. Shared by
- * both local restore and cloud restore.
+ * Wipes and reinserts every table the backup covers, in one transaction so a
+ * partial failure leaves existing data untouched. Shared by both local restore
+ * and cloud restore.
+ *
+ * Takes the whole backup rather than just its tables because what may be wiped
+ * depends on the file's format version — see restorableTables.
+ *
+ * Deliberately does NOT journal these writes to the outbox, which is what the
+ * restore has always done for the other tables. Journaling would push a whole
+ * stale copy of the budget at the other member of a shared household and
+ * overwrite what they currently have. The cost is that a restore stays local:
+ * a later pull can bring back rows it removed, which is the recoverable
+ * direction of the two.
  */
-export async function restoreAllTables(tables: Record<string, Row[]>): Promise<void> {
+export async function restoreAllTables(backup: BackupData): Promise<void> {
   const db = await getDb();
+  const restorable = restorableTables(backup.version);
   await db.withTransactionAsync(async () => {
     // Wipe in reverse dependency order.
-    for (let i = BACKUP_TABLES.length - 1; i >= 0; i--) {
-      await db.runAsync(`DELETE FROM ${BACKUP_TABLES[i]}`);
+    for (let i = restorable.length - 1; i >= 0; i--) {
+      await db.runAsync(`DELETE FROM ${restorable[i]}`);
     }
 
     // Restore in dependency order, inserting each row generically.
-    for (const table of BACKUP_TABLES) {
-      const rows = tables[table];
+    for (const table of restorable) {
+      const rows = backup.tables[table];
       if (!Array.isArray(rows)) continue;
       for (const row of rows) {
         const cols = Object.keys(row);
@@ -82,6 +133,19 @@ export async function restoreAllTables(tables: Record<string, Row[]>): Promise<v
       }
     }
   });
+}
+
+/**
+ * What to tell the user once a restore succeeds.
+ *
+ * A pre-Funds file leaves the grid untouched while replacing everything else,
+ * which contradicts the "this replaces ALL current data" warning they just
+ * accepted. Saying it out loud is the difference between trusting the balances
+ * still on screen and wondering whether the restore quietly missed them.
+ */
+export function restoreCompletionMessage(version: number): string {
+  if (version >= FUNDS_BACKUP_VERSION) return 'Data restored. Please close and reopen the app.';
+  return 'Data restored. This backup predates the Funds grid, so your Funds were left exactly as they are. Please close and reopen the app.';
 }
 
 /** Validates a parsed backup's shape/version before any data is touched. */
@@ -151,9 +215,9 @@ export async function importDatabaseFromJson(): Promise<{ success: boolean; mess
     const validation = validateBackup(parsed);
     if (!validation.valid) return { success: false, message: validation.message };
 
-    await restoreAllTables(validation.backup.tables);
+    await restoreAllTables(validation.backup);
 
-    return { success: true, message: 'Data restored. Please close and reopen the app.' };
+    return { success: true, message: restoreCompletionMessage(validation.backup.version) };
   } catch (error) {
     console.error('Failed to import database:', error);
     return { success: false, message: 'An unexpected error occurred during import.' };
