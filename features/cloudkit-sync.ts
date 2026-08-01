@@ -148,14 +148,36 @@ export async function pushPendingChangesToCloudKit(
   }
 }
 
+/**
+ * The change token is a per-household watermark ("I have everything up to
+ * this timestamp"), so it MUST be keyed by household.
+ *
+ * A single global token silently loses data when a device switches households:
+ * it carries the old household's timestamp into the new one, and every record
+ * already in the new household older than that timestamp is skipped forever —
+ * the join looks successful and half the budget never arrives.
+ *
+ * Read straight from app_settings rather than lib/queries: queries.ts imports
+ * queueSyncMutation from this module, so importing it back would be a cycle.
+ */
+async function syncTokenKey(): Promise<string> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ householdId: string | null }>(
+    'SELECT householdId FROM app_settings WHERE id = 1'
+  );
+  return row?.householdId ? `main:${row.householdId}` : 'main';
+}
+
 /** Applies remote changes into local tables and advances the change token. */
 export async function pullChangesFromCloudKit(
   adapter: CloudKitAdapter = activeAdapter
 ): Promise<{ success: boolean; pulledCount: number }> {
   try {
     const db = await getDb();
+    const tokenKey = await syncTokenKey();
     const meta = await db.getFirstAsync<{ syncToken: string | null }>(
-      "SELECT syncToken FROM sync_meta WHERE id = 'main'"
+      'SELECT syncToken FROM sync_meta WHERE id = ?',
+      [tokenKey]
     );
     const lastToken = meta?.syncToken ?? null;
 
@@ -183,7 +205,8 @@ export async function pullChangesFromCloudKit(
         pulledCount++;
       }
 
-      await db.runAsync("INSERT OR REPLACE INTO sync_meta (id, syncToken) VALUES ('main', ?)", [
+      await db.runAsync('INSERT OR REPLACE INTO sync_meta (id, syncToken) VALUES (?, ?)', [
+        tokenKey,
         changes.newToken,
       ]);
     });
