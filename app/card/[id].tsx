@@ -52,7 +52,6 @@ export default function CardDetailScreen() {
     <KeyboardAwareScreen
       backgroundColor={theme.groupedBackground}
       contentContainerStyle={styles.content}
-      contentInsetAdjustmentBehavior="automatic"
     >
       <WalletCard card={card} total={cardTotals.get(card.id) ?? 0} currency={settings.currency} />
 

@@ -172,6 +172,9 @@ export default function TransactionsScreen() {
           sections={sections}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          // Without this the first tap on a row while the search keyboard is up
+          // only dismisses the keyboard, so opening a result takes two taps.
+          keyboardShouldPersistTaps="handled"
           renderSectionHeader={({ section }) => (
             <Text style={[styles.sectionHeader, { color: theme.secondaryLabel, backgroundColor: theme.groupedBackground }]}>
               {formatDayLabel(section.title)}

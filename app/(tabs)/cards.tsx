@@ -108,7 +108,12 @@ function AddCardModal({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
+      {/* Scrolling sheet, not a plain View: on a short screen the keyboard
+          otherwise sits over the Add Card button with no way to reach it. */}
+      <KeyboardAwareScreen
+        backgroundColor={theme.groupedBackground}
+        contentContainerStyle={styles.modalContent}
+      >
         <Text style={[type.title2, { color: theme.label, marginBottom: spacing.xl }]}>New Card</Text>
         <Text style={[styles.fieldLabel, { color: theme.secondaryLabel }]}>CARD NAME</Text>
         <TextInput
@@ -137,7 +142,7 @@ function AddCardModal({
             <Text style={{ color: theme.onAccent, fontWeight: '600' }}>Add Card</Text>
           </Pressable>
         </View>
-      </View>
+      </KeyboardAwareScreen>
     </Modal>
   );
 }
@@ -166,7 +171,9 @@ const styles = StyleSheet.create({
   dueHint: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', marginLeft: spacing.xs },
   empty: { alignItems: 'center', gap: spacing.md, marginTop: 60, paddingHorizontal: spacing.xxl },
   emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  modalContent: { flex: 1, padding: spacing.xl, paddingTop: spacing.xxxl },
+  // Scroll content, so no flex: 1 here — that would pin the sheet to the
+  // viewport height and stop it scrolling the fields clear of the keyboard.
+  modalContent: { padding: spacing.xl, paddingTop: spacing.xxxl, paddingBottom: spacing.xxxl },
   fieldLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: spacing.sm },
   input: { padding: spacing.md, borderRadius: radius.sm, fontSize: 16 },
   button: { flex: 1, paddingVertical: 14, borderRadius: radius.md, alignItems: 'center' },

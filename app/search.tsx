@@ -52,7 +52,6 @@ export default function SearchScreen() {
     <KeyboardAwareScreen
       backgroundColor={theme.groupedBackground}
       contentContainerStyle={styles.content}
-      contentInsetAdjustmentBehavior="automatic"
     >
       <Surface>
         <TextInput

@@ -119,7 +119,6 @@ export default function RecurringScreen() {
     <KeyboardAwareScreen
       backgroundColor={theme.groupedBackground}
       contentContainerStyle={styles.content}
-      contentInsetAdjustmentBehavior="automatic"
     >
       <Surface>
         <Text style={[styles.sectionTitle, { color: theme.label }]}>Recurring Bills</Text>
