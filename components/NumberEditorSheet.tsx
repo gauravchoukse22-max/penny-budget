@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Modal, Pressable, TextInput, Platform, Keyboard
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, radius, type } from '../theme/colors';
 import { formatCurrency, currencySymbol } from '../lib/format';
-import { parseMoneyInput } from '../lib/parse-number';
+import { parseMoneyExpression } from '../lib/parse-number';
 import { PressableScale } from './PressableScale';
 import { tapLight, tapMedium, success } from '../lib/haptics';
 
@@ -48,7 +48,9 @@ export function NumberEditorSheet({
   // Strict parse: "1,500" is 1500, junk ("abc", "1e9", "-20") is invalid and
   // blocks Save — this sheet edits salaries, limits, and goals, none of which
   // may go negative. Previously raw parseFloat made "1,500" save as $1.
-  const parsed = parseMoneyInput(draft);
+  // Also accepts a typed sum ("1200+300") so a raise or an extra bill doesn't
+  // have to be worked out in your head first.
+  const parsed = parseMoneyExpression(draft);
   const invalid = draft.trim() !== '' && parsed === null;
   const numeric = parsed ?? 0;
 
@@ -92,7 +94,10 @@ export function NumberEditorSheet({
             <Text style={[styles.currency, { color: theme.secondaryLabel }]}>{currencySymbol(currency)}</Text>
             <TextInput
               style={[styles.input, { color: theme.label }]}
-              keyboardType="numeric"
+              // iOS gets the punctuation pad so a sum is typable; Android keeps
+              // its numeric pad, because the fallback there is a full text
+              // keyboard and this sheet is mostly used to type a plain number.
+              keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'numeric'}
               value={draft}
               onChangeText={setDraft}
               placeholder="0"

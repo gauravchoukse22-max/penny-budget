@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBudget } from '../../context/BudgetContext';
@@ -13,6 +13,7 @@ import { currentYearMonth } from '../../lib/db';
 import type { TrendPoint, CategoryMover } from '../../lib/models';
 import { formatMonthLabel } from '../../lib/format';
 import { getHistoricalCategoryProjections, detectAnomalies } from '../../features/predictive-engine';
+import { buildFundGrid, listFundAccounts, listFundBalances, listFunds } from '../../features/funds';
 import { generateMonthlySummary } from '../../features/streaks-and-gamification';
 import type { CategoryProjection, AnomalyAlert, MonthlySummary } from '../../features/models';
 
@@ -26,6 +27,17 @@ export default function InsightsScreen() {
   const [anomalies, setAnomalies] = useState<AnomalyAlert[]>([]);
   const [summary, setSummary] = useState<MonthlySummary | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  // Funds aren't month-scoped, so they refresh on focus rather than with the
+  // month selector — including after a trip to the Funds screen.
+  const [fundsTotal, setFundsTotal] = useState<number | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      Promise.all([listFunds(), listFundAccounts(), listFundBalances()]).then(([f, a, b]) =>
+        setFundsTotal(f.length === 0 ? null : buildFundGrid(f, a, b).grandTotal)
+      );
+    }, [])
+  );
 
   // The forecast projects the rest of the *current* month from spend-to-date;
   // it's meaningless for a past or future month, so only compute it when the
@@ -101,6 +113,29 @@ export default function InsightsScreen() {
             onDismiss={() => setDismissed((prev) => new Set(prev).add(a.transactionId))}
           />
         ))}
+
+        {/* Funds — savings buckets by account. Lives here rather than in a
+            seventh tab: it answers "how much have we put aside", which is the
+            question this screen is already for. */}
+        <Pressable onPress={() => router.push('/funds')}>
+          <Surface>
+            <View style={styles.fundsRow}>
+              <View style={[styles.fundsIcon, { backgroundColor: theme.accentTint }]}>
+                <Ionicons name="grid-outline" size={18} color={theme.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.fundsTitle, { color: theme.label }]}>Funds</Text>
+                <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }}>
+                  {fundsTotal === null ? 'Track savings by fund and account' : 'Saved across all funds'}
+                </Text>
+              </View>
+              {fundsTotal !== null && (
+                <AmountText amount={fundsTotal} currency={settings.currency} size={17} weight="semibold" />
+              )}
+              <Ionicons name="chevron-forward" size={16} color={theme.tertiaryLabel} />
+            </View>
+          </Surface>
+        </Pressable>
 
         {!hasAnyData && (
           <Surface>
@@ -374,6 +409,10 @@ function NoticeRow({ text, critical, onDismiss }: { text: string; critical: bool
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 60 },
+
+  fundsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  fundsIcon: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  fundsTitle: { fontSize: 15, fontWeight: '600' },
 
   sectionLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sectionLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 1 },

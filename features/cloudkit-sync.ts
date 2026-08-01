@@ -100,6 +100,9 @@ export const SYNCABLE_TABLES = new Set([
   'savings_goal_budgets',
   'savings_goal_transfers',
   'monthly_settings',
+  'funds',
+  'fund_accounts',
+  'fund_balances',
 ]);
 
 /**

@@ -53,3 +53,55 @@ export function parseMoneyInput(raw: string, opts: ParseMoneyOptions = {}): numb
   // Money is cents — round away float dust ("0.1"+"0.2" style artifacts).
   return Math.round(value * 100) / 100;
 }
+
+// ── Arithmetic expressions ──────────────────────────────────────────────────
+//
+// "1200+300" is how people actually adjust a balance they already know, so the
+// money fields a HUMAN types accept a chain of + / − terms.
+//
+// Deliberately NOT eval() or new Function(): this runs on arbitrary user text,
+// and a real evaluator would happily accept — and execute — far more than
+// arithmetic. Scanning the string into signed numeric terms can only ever
+// produce a number, so there is nothing to escape from.
+//
+// This is a SEPARATE entry point rather than a change to parseMoneyInput,
+// because that one also parses machine data (lib/csv.ts): a statement column
+// reading "100-200" must stay invalid there, not quietly become −100.
+
+const TERM = String.raw`(?:\d+\.?\d*|\.\d+)`;
+/** The whole cleaned string must be a chain of signed terms — never a partial parse. */
+const EXPRESSION_RE = new RegExp(`^[+-]?${TERM}(?:[+-]${TERM})*$`);
+const TERM_RE = new RegExp(`[+-]?${TERM}`, 'g');
+/** An operator only means arithmetic when it FOLLOWS a digit. A leading "−" is
+ * a plain negative amount and stays parseMoneyInput's business. */
+const HAS_OPERATOR_RE = /[\d.]\s*[+-]/;
+
+/**
+ * Parses user-typed money text, additionally accepting simple `+`/`−` chains
+ * ("1200+300", "5,000 - 250", "$40+12.50"). Anything without an operator falls
+ * straight through to parseMoneyInput, so every existing rule — currency
+ * symbols, thousands commas, parentheses-negative, no exponents, the
+ * MAX_MONEY_VALUE ceiling — still applies unchanged.
+ */
+export function parseMoneyExpression(raw: string, opts: ParseMoneyOptions = {}): number | null {
+  const s = (raw ?? '').trim();
+  if (!s) return null;
+  if (!HAS_OPERATOR_RE.test(s)) return parseMoneyInput(s, opts);
+
+  const cleaned = s.replace(/[$£€¥₹\s,]/g, '');
+  if (!EXPRESSION_RE.test(cleaned)) return null;
+
+  // Accumulate in whole cents so a long chain can't drift a fraction of a cent.
+  let cents = 0;
+  for (const term of cleaned.match(TERM_RE) ?? []) {
+    const sign = term.startsWith('-') ? -1 : 1;
+    const n = parseFloat(term.replace(/^[+-]/, ''));
+    if (!Number.isFinite(n)) return null;
+    cents += sign * Math.round(n * 100);
+  }
+
+  const value = cents / 100;
+  if (!opts.allowNegative && value < 0) return null;
+  if (Math.abs(value) > MAX_MONEY_VALUE) return null;
+  return value;
+}

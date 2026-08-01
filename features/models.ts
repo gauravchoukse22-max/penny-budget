@@ -26,6 +26,39 @@ export type CategoryRule = {
   categoryId: string;
 };
 
+// ── Funds grid ──────────────────────────────────────────────────────────────
+// Models a savings spreadsheet: funds are the rows, fund accounts are the
+// columns, and a fund balance is one cell. Every total is derived, never
+// stored, so a rename or a reorder can't leave a stale number behind.
+
+/** A savings bucket the user keeps adding to — a row in the Funds grid. */
+export type Fund = {
+  id: string;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
+};
+
+/** An institution funds are held at — a column in the Funds grid. */
+export type FundAccount = {
+  id: string;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
+};
+
+/** How much of one fund sits in one account — a single cell. */
+export type FundBalance = {
+  id: string;
+  fundId: string;
+  accountId: string;
+  amount: number;
+  updatedAt: string;
+};
+
+/** How a cell edit combines with what's already there. */
+export type FundAdjustMode = 'add' | 'subtract' | 'set';
+
 /** Tracks user engagement streaks (e.g. logging every day). */
 export type Streak = {
   id: string;

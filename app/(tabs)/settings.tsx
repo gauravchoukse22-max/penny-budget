@@ -271,6 +271,8 @@ export default function SettingsScreen() {
           <View style={[styles.divider, { backgroundColor: theme.separator }]} />
           <SettingsLink label="Recurring Bills" onPress={() => router.push('/recurring')} />
           <View style={[styles.divider, { backgroundColor: theme.separator }]} />
+          <SettingsLink label="Funds" onPress={() => router.push('/funds')} />
+          <View style={[styles.divider, { backgroundColor: theme.separator }]} />
           <SettingsLink label="Search Transactions" onPress={() => router.push('/search')} />
         </Surface>
 

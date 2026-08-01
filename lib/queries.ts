@@ -292,7 +292,7 @@ export async function resolveCategoryLimits(yearMonth: string): Promise<Map<stri
  * every member converges on the same record instead of the row silently staying
  * on one device.
  */
-async function journalUpsert(table: string, whereSql: string, params: (string | number)[]): Promise<void> {
+export async function journalUpsert(table: string, whereSql: string, params: (string | number)[]): Promise<void> {
   const db = await getDb();
   const row = await db.getFirstAsync<Record<string, unknown>>(`SELECT * FROM ${table} WHERE ${whereSql}`, params);
   if (row?.id) await queueSyncMutation('UPDATE', table, row.id as string, row);
