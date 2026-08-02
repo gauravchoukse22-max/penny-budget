@@ -24,6 +24,34 @@ import type {
   TrendPoint,
 } from './models';
 
+// ---------- Sync journaling ----------
+
+/** Splits an id list into `IN (...)`-safe batches; see journalRowsAsUpdates. */
+export function chunkIds(ids: string[]): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 400) chunks.push(ids.slice(i, i + 400));
+  return chunks;
+}
+
+/**
+ * Journals every named row of `table` as an UPDATE, reading the rows back so the
+ * payload is what actually landed rather than what the caller intended.
+ *
+ * Chunked because SQLite caps bound parameters (999 on older builds) and a card
+ * that has been in use for a couple of years can easily hold more transactions
+ * than that — the one case where losing the journal would matter most.
+ */
+export async function journalRowsAsUpdates(table: string, ids: string[]): Promise<void> {
+  const db = await getDb();
+  for (const chunk of chunkIds(ids)) {
+    const rows = await db.getAllAsync<Record<string, unknown>>(
+      `SELECT * FROM ${table} WHERE id IN (${chunk.map(() => '?').join(', ')})`,
+      chunk
+    );
+    for (const row of rows) await queueSyncMutation('UPDATE', table, row.id as string, row);
+  }
+}
+
 // ---------- Settings ----------
 
 export async function getAppSettings(): Promise<AppSettings> {
@@ -182,26 +210,6 @@ export async function ensureCashCard(): Promise<Card> {
   );
   await queueSyncMutation('CREATE', 'cards', card.id, card);
   return card;
-}
-
-/**
- * Journals every named row of `table` as an UPDATE, reading the rows back so the
- * payload is what actually landed rather than what the caller intended.
- *
- * Chunked because SQLite caps bound parameters (999 on older builds) and a card
- * that has been in use for a couple of years can easily hold more transactions
- * than that — the one case where losing the journal would matter most.
- */
-async function journalRowsAsUpdates(table: string, ids: string[]): Promise<void> {
-  const db = await getDb();
-  for (let i = 0; i < ids.length; i += 400) {
-    const chunk = ids.slice(i, i + 400);
-    const rows = await db.getAllAsync<Record<string, unknown>>(
-      `SELECT * FROM ${table} WHERE id IN (${chunk.map(() => '?').join(', ')})`,
-      chunk
-    );
-    for (const row of rows) await queueSyncMutation('UPDATE', table, row.id as string, row);
-  }
 }
 
 export async function deleteCard(id: string): Promise<void> {
