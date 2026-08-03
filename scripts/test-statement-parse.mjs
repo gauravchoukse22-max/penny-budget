@@ -26,6 +26,7 @@ const { readStatementLine, linesToRecords, sectionSignFor, hasTrailingBalanceCol
 const layout = await import(await transform(join(root, 'lib/pdf-layout.ts'), [], { './statement-lines': linesUrl }));
 const { clusterRowsFromRuns, pageToRecords, documentToRecords, rowsToLines } = layout;
 const { parseMoneyInput } = await import(await transform(join(root, 'lib/parse-number.ts'), []));
+const { matchStatementCategory, normalizeCategoryName } = await import(await transform(join(root, 'lib/statement-categories.ts'), []));
 
 // Deterministic "now" so year inference doesn't drift with the calendar.
 const TODAY = new Date(2026, 6, 18); // 2026-07-18
@@ -136,12 +137,12 @@ const chase = `Transaction Date,Post Date,Description,Category,Type,Amount
 06/20/2026,06/21/2026,AMAZON REFUND,Shopping,Return,20.00`;
 
 run('Chase real CSV: purchases positive after flip, payment/refund negative', chase, [
-  { date: '2026-06-03', note: 'AMAZON.COM AMZN.COM/BILL WA', amount: 14.17 },
-  { date: '2026-06-07', note: 'SHELL OIL 574123', amount: 48.2 },
+  { date: '2026-06-03', note: 'AMAZON.COM AMZN.COM/BILL WA', amount: 14.17, category: 'Shopping' },
+  { date: '2026-06-07', note: 'SHELL OIL 574123', amount: 48.2, category: 'Gas' },
   { date: '2026-06-08', note: 'Payment Thank You-Mobile', amount: -212.3 },
-  { date: '2026-06-11', note: 'CHIPOTLE 1842', amount: 14.28 },
-  { date: '2026-06-14', note: 'DELTA AIR LINES', amount: 412.6 },
-  { date: '2026-06-20', note: 'AMAZON REFUND', amount: -20 },
+  { date: '2026-06-11', note: 'CHIPOTLE 1842', amount: 14.28, category: 'Food & Drink' },
+  { date: '2026-06-14', note: 'DELTA AIR LINES', amount: 412.6, category: 'Travel' },
+  { date: '2026-06-20', note: 'AMAZON REFUND', amount: -20, category: 'Shopping' },
 ]);
 
 // ── Fixture 3: Bank export with preamble + separate Debit/Credit columns ─
@@ -613,6 +614,83 @@ eq(hasTrailingBalanceColumn([
   '06/05 TRANSFER 200.00',
   '06/08 SPOTIFY 11.99',
 ]), false, 'no balance column on a normal card statement');
+
+// ══ Issuer CSV exports: the statement's own category comes through ═══
+// These are the real header layouts each bank's "Download CSV" produces. When
+// an export has a Category column, the issuer has already classified the
+// merchant from its MCC code — the parser must carry that through so the app
+// can prefer it over guessing from the merchant name.
+
+run('chase csv export: category column carried through',
+  'Transaction Date,Post Date,Description,Category,Type,Amount\n' +
+  '07/02/2026,07/03/2026,STARBUCKS STORE 06253,Food & Drink,Sale,-6.75\n' +
+  '07/05/2026,07/06/2026,SHELL OIL 57444120108,Gas,Sale,-48.02\n' +
+  '07/08/2026,07/08/2026,Payment Thank You-Mobile,,Payment,1500.00\n',
+  [
+    { date: '2026-07-02', note: 'STARBUCKS STORE 06253', amount: 6.75, category: 'Food & Drink' },
+    { date: '2026-07-05', note: 'SHELL OIL 57444120108', amount: 48.02, category: 'Gas' },
+    { date: '2026-07-08', note: 'Payment Thank You-Mobile', amount: -1500 },
+  ]);
+
+run('discover csv export: category column carried through',
+  'Trans. Date,Post Date,Description,Amount,Category\n' +
+  '07/03/2026,07/04/2026,WAL-MART #1234 HUNTSVILLE AL,87.33,Merchandise\n' +
+  '07/06/2026,07/06/2026,DIRECTPAY FULL BALANCE,-1022.15,Payments and Credits\n',
+  [
+    { date: '2026-07-03', note: 'WAL-MART #1234 HUNTSVILLE AL', amount: 87.33, category: 'Merchandise' },
+    { date: '2026-07-06', note: 'DIRECTPAY FULL BALANCE', amount: -1022.15, category: 'Payments and Credits' },
+  ]);
+
+run('capital one csv export: debit/credit columns plus category',
+  'Transaction Date,Posted Date,Card No.,Description,Category,Debit,Credit\n' +
+  '2026-07-02,2026-07-03,1234,TARGET.COM *,Merchandise,63.21,\n' +
+  '2026-07-08,2026-07-08,1234,CAPITAL ONE MOBILE PYMT,Payment/Credit,,350.00\n',
+  [
+    { date: '2026-07-02', note: 'TARGET.COM *', amount: 63.21, category: 'Merchandise' },
+    { date: '2026-07-08', note: 'CAPITAL ONE MOBILE PYMT', amount: -350, category: 'Payment/Credit' },
+  ]);
+
+run('apple card csv export: merchant and category columns',
+  'Transaction Date,Clearing Date,Description,Merchant,Category,Type,Amount (USD)\n' +
+  '07/14/2026,07/15/2026,APPLE STORE R123,Apple Store,Shopping,Purchase,999.00\n' +
+  '07/18/2026,07/19/2026,TRADER JOES 210,Trader Joes,Grocery,Purchase,76.42\n',
+  [
+    { date: '2026-07-14', note: 'APPLE STORE R123', amount: 999, category: 'Shopping' },
+    { date: '2026-07-18', note: 'TRADER JOES 210', amount: 76.42, category: 'Grocery' },
+  ]);
+
+// ── The category translator: issuer vocabulary → the user's own list ──
+// Modelled on the app's actual default categories.
+const USER_CATEGORIES = [
+  { id: 'mortgage', name: 'Mortgage' },
+  { id: 'car', name: 'Car Payment' },
+  { id: 'utilities', name: 'Utilities' },
+  { id: 'internet', name: 'Internet & Subscriptions' },
+  { id: 'phone', name: 'Phone Service' },
+  { id: 'groceries', name: 'Groceries' },
+  { id: 'dining', name: 'Dining' },
+  { id: 'gas', name: 'Gas' },
+  { id: 'clothing', name: 'Clothing' },
+  { id: 'family', name: 'Family/Baby' },
+  { id: 'other', name: 'Other' },
+];
+const m = (raw) => matchStatementCategory(raw, USER_CATEGORIES);
+eq(m('Food & Drink'), 'dining', 'cat: chase Food & Drink → Dining');
+eq(m('Groceries'), 'groceries', 'cat: exact name');
+eq(m('Grocery'), 'groceries', 'cat: singular/plural ignored');
+eq(m('Gasoline'), 'gas', 'cat: discover Gasoline → Gas');
+eq(m('Gas'), 'gas', 'cat: exact short name');
+eq(m('Bills & Utilities'), 'utilities', 'cat: chase Bills & Utilities → Utilities');
+eq(m('Merchandise'), 'clothing', 'cat: Merchandise → Clothing (shopping alias)');
+eq(m('Shopping'), 'clothing', 'cat: apple Shopping → Clothing');
+eq(m('Streaming'), 'internet', 'cat: Streaming → Internet & Subscriptions');
+eq(m('Telecommunications'), 'phone', 'cat: Telecommunications → Phone Service');
+eq(m('Automotive'), 'gas', 'cat: Automotive → Gas (first alias the user has)');
+eq(m('Education & Childcare'), 'family', 'cat: childcare → Family/Baby');
+eq(m('Travel'), null, 'cat: no matching user category returns null, never a wrong one');
+eq(m(''), null, 'cat: empty is null');
+eq(m('Payment/Credit'), null, 'cat: payment pseudo-category maps to nothing');
+eq(normalizeCategoryName('Bills & Utilities'), 'bill and utility', 'cat: normalization');
 
 // ── Amount glued to the description ──────────────────────────────────
 // A real Chase PDF imported ZERO of 162 rows because its amount column never

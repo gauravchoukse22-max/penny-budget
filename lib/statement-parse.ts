@@ -22,6 +22,15 @@ export type ParsedStatementRow = {
   date: string; // YYYY-MM-DD
   note: string;
   amount: number; // positive = money spent, negative = credit/refund/payment
+  /**
+   * The statement's OWN category for this row ("Food & Drink", "Gas"), present
+   * only when the export has a category column — Chase, Discover, Capital One
+   * and Apple Card CSVs all do. The issuer classified the merchant from its
+   * MCC code, which beats guessing from the name; lib/statement-categories.ts
+   * translates it into the user's categories. Absent (not null) when the file
+   * has no category column, so fixtures without one are unaffected.
+   */
+  category?: string;
 };
 
 export type SkippedRow = {
@@ -266,7 +275,7 @@ function findColumn(headers: string[], keywords: string[]): number {
   return -1;
 }
 
-type Header = { line: number; fields: string[]; dateIdx: number; descIdx: number; amountIdx: number; debitIdx: number; creditIdx: number };
+type Header = { line: number; fields: string[]; dateIdx: number; descIdx: number; amountIdx: number; debitIdx: number; creditIdx: number; categoryIdx: number };
 
 /**
  * Finds the real header row. Exports often begin with a title or an account
@@ -281,8 +290,9 @@ function findHeader(rows: string[][], maxScan = 25): Header | null {
     const amountIdx = findColumn(fields, ['amount']);
     const debitIdx = findColumn(fields, ['debit', 'withdrawal', 'charge']);
     const creditIdx = findColumn(fields, ['credit', 'deposit', 'payment']);
+    const categoryIdx = findColumn(fields, ['category']);
     if (dateIdx !== -1 && descIdx !== -1 && (amountIdx !== -1 || debitIdx !== -1 || creditIdx !== -1)) {
-      return { line: i, fields, dateIdx, descIdx, amountIdx, debitIdx, creditIdx };
+      return { line: i, fields, dateIdx, descIdx, amountIdx, debitIdx, creditIdx, categoryIdx };
     }
   }
   return null;
@@ -324,15 +334,16 @@ export function parseStatementRecords(
   }
 
   const body = nonEmpty.slice(header.line + 1);
-  const { dateIdx, descIdx, amountIdx, debitIdx, creditIdx } = header;
+  const { dateIdx, descIdx, amountIdx, debitIdx, creditIdx, categoryIdx } = header;
 
   const dateOrder = detectDateOrder(body.map((f) => f[dateIdx] ?? ''));
 
   // Two passes: the first reads every row so the sign convention can be judged
   // from the whole file, the second commits to an interpretation.
-  type Draft = { line: number; raw: string; date: string | null; note: string; amount: number | null; fromDebitCredit: boolean };
+  type Draft = { line: number; raw: string; date: string | null; note: string; amount: number | null; fromDebitCredit: boolean; category: string };
   const drafts: Draft[] = body.map((fields, i) => {
     let note = (fields[descIdx] ?? '').trim();
+    const category = categoryIdx !== -1 ? (fields[categoryIdx] ?? '').trim() : '';
     const date = parseStatementDate(fields[dateIdx] ?? '', dateOrder, opts.statementYear ?? null, today);
 
     let amount: number | null = null;
@@ -366,7 +377,7 @@ export function parseStatementRecords(
         if (salvaged.note) note = salvaged.note;
       }
     }
-    return { line: header.line + 2 + i, raw: fields.join(','), date, note, amount, fromDebitCredit };
+    return { line: header.line + 2 + i, raw: fields.join(','), date, note, amount, fromDebitCredit, category };
   });
 
   const signCandidates = drafts
@@ -401,6 +412,9 @@ export function parseStatementRecords(
       // A blank description is not a reason to lose a real charge.
       note: d.note || 'Imported transaction',
       amount,
+      // Only set when the file HAS one, so `category` stays absent (and
+      // fixture expectations stay byte-identical) for files without.
+      ...(d.category ? { category: d.category } : {}),
     });
   }
 

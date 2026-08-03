@@ -2,7 +2,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import { parseCsv } from '../lib/csv';
 import { readPickedFileAsText, readPickedFileAsBytes } from '../lib/files';
 import { documentToRecords } from '../lib/pdf-layout';
-import { listAllTransactions, createTransaction } from '../lib/queries';
+import { listAllTransactions, createTransaction, listCategories } from '../lib/queries';
+import { matchStatementCategory } from '../lib/statement-categories';
 import { listRecurringTransactions } from './recurring-transactions';
 import { suggestCategory } from './smart-categorizer';
 import {
@@ -118,7 +119,11 @@ export async function pickAndParseStatement(): Promise<StatementPickResult> {
 
   if ('unrecognizedFormat' in parsed) return { unrecognizedFormat: true };
 
-  const [existingTransactions, recurring] = await Promise.all([listAllTransactions(), listRecurringTransactions()]);
+  const [existingTransactions, recurring, categories] = await Promise.all([
+    listAllTransactions(),
+    listRecurringTransactions(),
+    listCategories(),
+  ]);
   const existingKeys = new Set(
     existingTransactions.map((t) => `${t.date}|${t.amount.toFixed(2)}|${(t.note ?? '').trim().toLowerCase()}`)
   );
@@ -131,10 +136,15 @@ export async function pickAndParseStatement(): Promise<StatementPickResult> {
     const normalizedNote = row.note.trim().toLowerCase();
     const exactKey = `${row.date}|${row.amount.toFixed(2)}|${normalizedNote}`;
     const recurringKey = `${row.amount.toFixed(2)}|${normalizedNote}`;
-    const suggestion = await suggestCategory(row.note);
+    // The statement's own category wins when it maps onto the user's list: the
+    // issuer classified the merchant from its MCC code, which beats guessing
+    // from the name. The guesser fills in when there is no category column or
+    // the issuer's term matches nothing the user has.
+    const fromStatement = row.category ? matchStatementCategory(row.category, categories) : null;
+    const suggestion = fromStatement ? null : await suggestCategory(row.note);
     rows.push({
       ...row,
-      categoryId: suggestion?.categoryId ?? null,
+      categoryId: fromStatement ?? suggestion?.categoryId ?? null,
       duplicate: existingKeys.has(exactKey),
       recurring: recurringKeys.has(recurringKey),
     });
