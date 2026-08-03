@@ -16,6 +16,20 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-08-03-statement-import',
+    version: '1.2.0',
+    date: 'August 2026',
+    title: 'Import a statement from any bank',
+    changes: [
+      'Importing a PDF statement reads the transactions properly now. It used to find the wrong table on the page — the payment slip near the top instead of the actual list of charges — and then report that it couldn’t read a date on a single row.',
+      'It no longer matters which bank the statement came from. Chase, Amex, Citi, Capital One, Discover, Bank of America, Wells Fargo and Apple Card statements all read, along with dates written any of the usual ways and credits marked with a minus, a trailing dash, or brackets.',
+      'When your bank includes its own category for a charge, that category is used instead of a guess from the merchant name — banks know what kind of business they billed you for. It is matched to your own categories, so "Food & Drink" lands in Dining and "Gasoline" lands in Gas, and anything that doesn’t match falls back to the usual guess.',
+      'Refunds and payments no longer import as if you had spent the money.',
+      'On a checking statement with a running balance down the side, the balance is no longer imported as the amount of the charge.',
+      'If an import still finds nothing, it now tells you why — including when a PDF is a scan or a photo, which has no text in it for any app to read.',
+    ],
+  },
+  {
     id: '2026-08-01-month-anywhere',
     version: '1.2.0',
     date: 'August 2026',
