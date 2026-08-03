@@ -27,6 +27,38 @@ const GRACE_OPTIONS = [
   { value: 15, label: '15 min' },
 ];
 
+/**
+ * Turns the parser's skip reasons into something a person can act on.
+ *
+ * The point is the quoted line: when an import fails, the one thing that makes
+ * it fixable is seeing what the app actually read. Section headers are excluded
+ * from the count because skipping those is correct behaviour, not a failure —
+ * counting them made a working import look broken.
+ */
+function describeWhyNothingImported(skipped: { reason: string; raw: string }[]): string {
+  const real = skipped.filter((s) => s.reason !== 'section-total');
+  if (real.length === 0) {
+    return 'That file only had headings and totals in it — no transaction rows to import.';
+  }
+  const counts = real.reduce<Record<string, number>>((acc, s) => {
+    acc[s.reason] = (acc[s.reason] ?? 0) + 1;
+    return acc;
+  }, {});
+  const worst = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+  const example = real.find((s) => s.reason === worst)?.raw.trim().slice(0, 90);
+
+  const why =
+    worst === 'no-date'
+      ? `Couldn't read a date on any of the ${real.length} rows.`
+      : worst === 'no-amount'
+        ? `Couldn't find an amount on any of the ${real.length} rows.`
+        : `Every one of the ${real.length} rows had an amount of zero.`;
+
+  return example
+    ? `${why}\n\nThis is what one row looked like:\n"${example}"\n\nIf that looks wrong, a CSV export from your bank will import cleanly.`
+    : `${why} A CSV export from your bank will import cleanly.`;
+}
+
 export default function SettingsScreen() {
   const theme = useTheme();
   const router = useRouter();
@@ -132,10 +164,12 @@ export default function SettingsScreen() {
         return;
       }
       if (result.rows.length === 0) {
-        const reason = result.skipped.length > 0
-          ? `All ${result.skipped.length} row(s) were skipped — nothing matched a date + amount.`
-          : 'No transactions were found in that file.';
-        notify('Nothing to import', reason);
+        // Say WHICH check failed and show a line that failed it. The old text
+        // ("nothing matched a date + amount") named both possible causes at
+        // once and quoted nothing, so a statement that imported zero rows gave
+        // no clue whether the dates or the amounts were the problem — and no
+        // way to tell us either.
+        notify('Nothing to import', describeWhyNothingImported(result.skipped));
         return;
       }
       // Hand off to the preview screen for review before anything is written.

@@ -19,7 +19,7 @@ const root = join(__dirname, '..');
 
 const { parseCsv } = await import(await transform(join(root, 'lib/csv.ts'), ['expo-document-picker', './queries', './particulars', './files', './models', './parse-number']));
 const parse = await import(await transform(join(root, 'lib/statement-parse.ts'), []));
-const { parseStatementRecords, parseStatementAmount, parseStatementDate, detectDateOrder, detectSignConvention, findStatementYear } = parse;
+const { parseStatementRecords, parseStatementAmount, parseStatementDate, detectDateOrder, detectSignConvention, findStatementYear, extractTrailingAmount } = parse;
 const layout = await import(await transform(join(root, 'lib/pdf-layout.ts'), []));
 const { clusterRowsFromRuns, pageToRecords, documentToRecords } = layout;
 const { parseMoneyInput } = await import(await transform(join(root, 'lib/parse-number.ts'), []));
@@ -382,6 +382,50 @@ const wrapRuns = [
       { date: '2026-06-07', note: 'SHELL OIL 574123', amount: 48.2 },
       { date: '2026-06-12', note: 'NETFLIX.COM', amount: 15.49 },
     ], 'pdf e2e: bytes -> pdfjs -> layout -> transactions');
+  }
+}
+
+// ── Amount glued to the description ──────────────────────────────────
+// A real Chase PDF imported ZERO of 162 rows because its amount column never
+// separated: every amount ended up on the end of the description, so each row
+// failed with "no amount". These lock in the salvage AND, just as importantly,
+// that it cannot eat a merchant's store number.
+eq(extractTrailingAmount('STARBUCKS STORE 12345 HUNTSVILLE AL 6.75'),
+  { amount: 6.75, note: 'STARBUCKS STORE 12345 HUNTSVILLE AL' }, 'trailing amount: plain');
+eq(extractTrailingAmount('AUTOMATIC PAYMENT - THANK YOU -445.94'),
+  { amount: -445.94, note: 'AUTOMATIC PAYMENT - THANK YOU' }, 'trailing amount: negative');
+eq(extractTrailingAmount('BIG PURCHASE $1,234.56'),
+  { amount: 1234.56, note: 'BIG PURCHASE' }, 'trailing amount: thousands + currency');
+eq(extractTrailingAmount('REFUND (25.00)'),
+  { amount: -25, note: 'REFUND' }, 'trailing amount: parenthesised negative');
+eq(extractTrailingAmount('CREDIT 445.94-'),
+  { amount: -445.94, note: 'CREDIT' }, 'trailing amount: trailing minus');
+// The guard: bare integers are NOT amounts, or every store number becomes one.
+eq(extractTrailingAmount('STARBUCKS STORE 12345'), null, 'trailing amount: bare integer is not an amount');
+eq(extractTrailingAmount('SHELL OIL 5744221'), null, 'trailing amount: long store number ignored');
+eq(extractTrailingAmount('NETFLIX.COM'), null, 'trailing amount: no number at all');
+eq(extractTrailingAmount(''), null, 'trailing amount: empty');
+
+{
+  // End to end through the real parser, with an EMPTY amount column.
+  const records = [
+    ['Date of Transaction', 'Merchant Name or Transaction Description', '$ Amount'],
+    ['PAYMENTS AND OTHER CREDITS', '', ''],
+    ['06/28', 'AUTOMATIC PAYMENT - THANK YOU -445.94', ''],
+    ['PURCHASE', '', ''],
+    ['07/02', 'STARBUCKS STORE 12345 HUNTSVILLE AL 6.75', ''],
+    ['07/04', 'TARGET 00012345 MADISON AL 54.10', ''],
+  ];
+  const result = parseStatementRecords(records, { statementYear: 2026 });
+  if ('unrecognizedFormat' in result) {
+    failures.push('✗ glued-amount e2e: unrecognizedFormat');
+    failed++;
+  } else {
+    eq(result.rows, [
+      { date: '2026-06-28', note: 'AUTOMATIC PAYMENT - THANK YOU', amount: -445.94 },
+      { date: '2026-07-02', note: 'STARBUCKS STORE 12345 HUNTSVILLE AL', amount: 6.75 },
+      { date: '2026-07-04', note: 'TARGET 00012345 MADISON AL', amount: 54.1 },
+    ], 'glued-amount e2e: recovers every row and strips the amount from the note');
   }
 }
 

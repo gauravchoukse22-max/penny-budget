@@ -107,6 +107,38 @@ export function parseStatementAmount(raw: string): number | null {
   return negative ? -n : n;
 }
 
+/**
+ * Pulls a trailing amount off the END of a description, for the very common
+ * case where a PDF's amount never landed in its own column and got glued to
+ * the description instead: "STARBUCKS STORE 12345 HUNTSVILLE AL 6.75".
+ *
+ * A PDF has no delimiters — only text at coordinates — so whether the amount
+ * becomes its own cell depends on the issuer's column geometry. When it
+ * doesn't, every row of the statement fails with "no amount" and the import
+ * reports zero transactions, which is what a real Chase statement did.
+ *
+ * The guard against eating real text is REQUIRING two decimal places. Merchant
+ * names are full of bare digits ("STARBUCKS STORE 12345", "SHELL OIL 5744221")
+ * and none of them end in `.dd`, so this cannot swallow a store number. A bare
+ * integer is deliberately NOT accepted for the same reason.
+ *
+ * Returns null when there's nothing money-shaped at the end, leaving the row to
+ * be skipped and reported exactly as before.
+ */
+export function extractTrailingAmount(description: string): { amount: number; note: string } | null {
+  const s = (description ?? '').trimEnd();
+  if (!s) return null;
+  // Optional currency symbol / sign / parens, digits with optional thousands
+  // separators, then a REQUIRED 2-decimal tail, then optional close-paren or
+  // trailing minus (some issuers write "445.94-").
+  const match = s.match(/(?:^|\s)([-+(]?\s*[$£€¥]?\s*\d{1,3}(?:,\d{3})*(?:\.\d{2})|[-+(]?\s*[$£€¥]?\s*\d+\.\d{2})\s*\)?-?$/);
+  if (!match) return null;
+  const amount = parseStatementAmount(s.slice(match.index ?? 0).trim());
+  if (amount === null) return null;
+  const note = s.slice(0, match.index ?? 0).trim();
+  return { amount, note };
+}
+
 type DateParts = { a: number; b: number; year: number | null };
 
 /**
@@ -300,7 +332,7 @@ export function parseStatementRecords(
   // from the whole file, the second commits to an interpretation.
   type Draft = { line: number; raw: string; date: string | null; note: string; amount: number | null; fromDebitCredit: boolean };
   const drafts: Draft[] = body.map((fields, i) => {
-    const note = (fields[descIdx] ?? '').trim();
+    let note = (fields[descIdx] ?? '').trim();
     const date = parseStatementDate(fields[dateIdx] ?? '', dateOrder, opts.statementYear ?? null, today);
 
     let amount: number | null = null;
@@ -319,6 +351,19 @@ export function parseStatementRecords(
       } else if (credit !== null && credit !== 0) {
         amount = -Math.abs(credit);
         fromDebitCredit = true;
+      }
+    }
+    // Last resort, and only for rows that otherwise have nothing: the amount
+    // may be sitting at the end of the description because the PDF's columns
+    // didn't separate cleanly. Runs after the real columns so a statement with
+    // a proper amount column is completely unaffected.
+    if (amount === null) {
+      const salvaged = extractTrailingAmount(note);
+      if (salvaged) {
+        amount = salvaged.amount;
+        // Keep the description without the number, so the imported note reads
+        // "STARBUCKS STORE 12345 HUNTSVILLE AL" and not "… AL 6.75".
+        if (salvaged.note) note = salvaged.note;
       }
     }
     return { line: header.line + 2 + i, raw: fields.join(','), date, note, amount, fromDebitCredit };
