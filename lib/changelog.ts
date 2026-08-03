@@ -16,6 +16,27 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-08-01-month-anywhere',
+    version: '1.2.0',
+    date: 'August 2026',
+    title: 'Move between months from anywhere',
+    changes: [
+      'Every tab now has the same month control at the top — Home, Transactions, Budget, Cards and Insights. Before, only Home could change month, so checking what you spent last month meant going Home, stepping back, and then navigating to what you actually wanted to see.',
+      'Transactions and Cards were already showing one month at a time; they just never said which. A card reading "$420 this month" was really showing whichever month Home had been left on. Both now name the month, and the card itself reads "JUL 2026" rather than "THIS MONTH" once you step off the current one.',
+      'A "This month" button appears as soon as you move away from the current month, so getting back is one tap instead of stepping forward six times.',
+      'Editing several transactions at once — select a few, then change their category or card — now reaches the other people on your shared budget. Those bulk edits were being saved on one phone only, with nothing to say the other person was still seeing the old categories.',
+      'Deleting a card no longer deletes its transactions. They move to Cash, across every month, and the confirmation says how many are moving.',
+      'Swipe left on a transaction, category, goal or card to delete it.',
+      'The Transactions filters are one line instead of two rows of chips that pushed the list off screen, and you can now filter to transactions with no category — the ones a deleted category leaves behind.',
+      'Funds now live under Budget, and buttons across the app have proper tap targets, so the ones near an edge are easier to actually hit.',
+      'Importing a PDF credit card statement closed the app the moment you picked the file — the PDF reader needed two things this phone runtime does not provide, and the failure killed the app before any error could show. Both are now supplied: the PDF is read on the phone, and a statement that cannot be parsed gets a clear message instead of a crash.',
+      'PDF statements then imported nothing at all: a PDF has no columns, only text at positions, and on many statements the amount ends up attached to the shop name instead of in its own column — so every row looked like it had no amount. Those amounts are now recovered and taken off the description, so the row reads "STARBUCKS STORE 12345" with the amount alongside it.',
+      'When an import still finds nothing, it now says which part it could not read, how many rows were affected, and shows one of them, instead of "nothing matched a date + amount".',
+      'You can edit a card after adding it — its name, its last 4 digits, and its colour, from the card\'s own screen. Only the name was changeable before.',
+      'The Sharing and Account screens no longer draw their title over the top of the list as you scroll.',
+    ],
+  },
+  {
     id: '2026-08-01-sharing-one-screen',
     version: '1.2.0',
     date: 'August 2026',
