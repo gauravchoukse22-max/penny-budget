@@ -47,7 +47,11 @@ export type StatementPreview = {
 
 export type StatementPickResult =
   | StatementPreview
-  | { unrecognizedFormat: true }
+  // `diagnostic` replaces the generic "no columns" wording when we know
+  // something more specific — most usefully that the PDF is a scan with no text
+  // in it at all, which no parser can ever read and which otherwise looks
+  // identical to a parsing failure.
+  | { unrecognizedFormat: true; diagnostic?: string }
   | { pdfUnsupported: true; reason: string }
   | null;
 
@@ -94,6 +98,17 @@ export async function pickAndParseStatement(): Promise<StatementPickResult> {
     if ('pdfUnsupported' in extracted) return extracted;
     records = documentToRecords(extracted.pages);
     statementYear = findStatementYear(extracted.fullText);
+    if (records.length <= 1) {
+      // Nothing in the document looked like a transaction. The user needs to
+      // know which of the two very different causes it was, because only one of
+      // them is fixable by picking a different file.
+      return {
+        unrecognizedFormat: true,
+        diagnostic: extracted.fullText.trim()
+          ? 'That PDF was read, but no line in it looked like a transaction — a date, a description and an amount together on one line. If you picked a summary or rewards page, try the full statement. Otherwise a CSV export from your bank will import cleanly.'
+          : 'That PDF has no text in it — it’s a scan or a photo, so there is nothing to read. Download the statement PDF from your bank’s website or app rather than scanning it, or export a CSV.',
+      };
+    }
   } else {
     const content = await readPickedFileAsText(asset);
     records = parseCsv(content);

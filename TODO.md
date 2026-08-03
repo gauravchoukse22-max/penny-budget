@@ -53,6 +53,53 @@ Verified: two arcing scrolls that each drifted ~70pt sideways (past the old
 moved it to July. **Only Home has this gesture** — the other tabs use the
 MonthSwitcher arrows, so nothing else needed the fix.
 
+### Rewritten 2026-08-03: the statement importer is no longer issuer-specific
+Third report of a real Chase statement importing nothing, and the previous two
+fixes were aimed at the wrong layer. The dialog said *"Couldn't read a date on
+any of the 162 rows"* and quoted **"The amount of your payment should be at
+least your minimum payment,"** — a line of legal prose. That quote is the whole
+diagnosis: the reader was not looking at the transaction table at all.
+
+**Root cause — the design, not a parsing detail.** `lib/pdf-layout.ts` found ONE
+column header in the document and then read every page's rows through that
+header's x positions. A real statement has several tables; the payment
+information box contains "date", "payment" and "name", so it matched first.
+From then on column 1 meant "Payment Due Date", and all 162 real transaction
+rows read their *description* as their date and were dropped. Any statement
+whose first table isn't the transaction table fails this way — so this was never
+going to be a Chase-only problem.
+
+**The fix — recognise transactions by shape, not by geometry.** New
+`lib/statement-lines.ts` reads the printed LINES: a transaction is a line that
+begins with a date and ends with an amount. That is true of every issuer,
+needs no header, survives tables split across pages, and cannot be derailed by
+another table elsewhere in the document. `documentToRecords` now tries the line
+reader first and keeps the old header-anchored path only as a fallback for
+genuinely tabular PDFs. Interpretation (year, sign, date order, section
+subtotals) is unchanged — both CSV and PDF still share it.
+
+Also handled, each with a fixture: two dates per row (Discover, Capital One),
+trailing-minus and parenthesised credits (Capital One, Citi), `$`-prefixed
+amounts (Amex, Apple Card), month-name dates, reference/authorisation ids
+stripped from the note, wrapped merchant names, and a running-balance column
+(Wells Fargo) — where taking the last number on the line imports the balance as
+the charge. Section banners now set the sign ONLY when the statement signs
+nothing itself; a "Payments" heading with no matching "Purchases" heading after
+it used to turn every later purchase into a credit.
+
+Fixtures went 53 → 77, one per real issuer layout, plus the exact multi-table
+Chase document that failed. `tsc --noEmit` clean.
+
+**NOT yet verified against Gary's actual Chase PDF** — that is the only test
+that counts, and it is the one both previous fixes skipped. New tool for it:
+
+```
+node scripts/check-statement-pdf.mjs ~/Downloads/statement.pdf --lines
+```
+
+Reads one local file, prints exactly what would be imported, masks amounts and
+merchant names by default. Nothing is uploaded.
+
 ### Fixed 2026-08-03: PDF statements imported ZERO rows
 Separate bug from the crash, and only visible once the crash was gone: Gary's
 real Chase statement read fine (162 rows) and then skipped every one. Cause is

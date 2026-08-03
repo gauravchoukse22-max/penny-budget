@@ -15,6 +15,8 @@
 // The result is a string[][] with stable column indices, which is exactly the
 // shape a CSV gives — so both formats share one interpretation path.
 
+import { linesToRecords } from './statement-lines';
+
 export type PdfTextRun = {
   str: string;
   x: number;
@@ -201,15 +203,41 @@ export function pageToRecords(rows: PdfRow[]): string[][] | null {
   return records;
 }
 
+/** One page's clustered rows as printed lines, in reading order. */
+export function rowsToLines(rows: PdfRow[]): string[] {
+  return rows.map((row) => row.cells.map((c) => c.text).join(' ').trim());
+}
+
 /**
- * Full document → one matrix. Pages without a recognizable transaction table
- * are skipped; pages with one are concatenated under the FIRST page's header
- * (statements repeat the same table header on every page).
+ * Full document → one matrix.
+ *
+ * CONTENT FIRST, geometry second. The line reader (lib/statement-lines.ts)
+ * recognises a transaction by its shape — leading date, trailing amount — and
+ * needs no header, which is what makes it work on statements this code has
+ * never seen. The header-anchored path below it is kept only for genuinely
+ * tabular documents where no line carries both a date and an amount (a
+ * CSV-shaped PDF export, for instance).
+ *
+ * The order matters and is the whole fix: a real Chase statement contains
+ * several tables, and the old code locked onto whichever one first showed the
+ * words date/payment/name — usually the payment-information box — then read all
+ * 162 transaction rows through that table's column positions and dropped every
+ * one of them for having no date.
  */
 export function documentToRecords(pages: PdfTextRun[][]): string[][] {
-  const all: string[][] = [];
+  const lines: string[] = [];
+  const pageRows: PdfRow[][] = [];
   for (const runs of pages) {
     const rows = clusterRowsFromRuns(runs);
+    pageRows.push(rows);
+    lines.push(...rowsToLines(rows));
+  }
+
+  const byContent = linesToRecords(lines);
+  if (byContent.length > 1) return byContent;
+
+  const all: string[][] = [];
+  for (const rows of pageRows) {
     const records = pageToRecords(rows);
     if (!records) continue;
     if (all.length === 0) {

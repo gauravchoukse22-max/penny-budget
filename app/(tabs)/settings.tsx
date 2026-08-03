@@ -158,8 +158,9 @@ export default function SettingsScreen() {
       }
       if ('unrecognizedFormat' in result) {
         notify(
-          'Unrecognized format',
-          "Couldn't find date, description, and amount columns in that file. Export it as a CSV with those columns and try again."
+          'Nothing to import',
+          result.diagnostic ??
+            "Couldn't find date, description, and amount columns in that file. Export it as a CSV with those columns and try again."
         );
         return;
       }

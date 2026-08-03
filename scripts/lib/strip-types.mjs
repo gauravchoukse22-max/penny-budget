@@ -27,8 +27,11 @@ writeFileSync(emptyStub, 'export default {}; export const __stub = true;\n');
  * Transpile `tsPath` to an ESM file and return its file:// URL.
  * `stubImports` lists import specifiers to redirect to an empty module (used for
  * expo/native/relative deps the harness never calls into).
+ * `rewrites` maps an import specifier to an already-transpiled URL, for real
+ * sibling modules the harness DOES exercise (the transpiled output lands in a
+ * different directory, so a relative specifier would no longer resolve).
  */
-export async function transform(tsPath, stubImports = []) {
+export async function transform(tsPath, stubImports = [], rewrites = {}) {
   let source = readFileSync(tsPath, 'utf8');
   // Delete whole import statements for stubbed specifiers — the harness never
   // calls the code that uses them, so removing them avoids resolving expo /
@@ -49,6 +52,10 @@ export async function transform(tsPath, stubImports = []) {
 
   const stubUrl = pathToFileURL(emptyStub).href;
   let rewritten = outputText;
+  for (const [spec, url] of Object.entries(rewrites)) {
+    const escaped = spec.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    rewritten = rewritten.replace(new RegExp(`(['"\`])${escaped}\\1`, 'g'), `'${url}'`);
+  }
   for (const spec of stubImports) {
     // Replace the module specifier in `from '...'` / `import '...'` with the stub.
     const escaped = spec.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

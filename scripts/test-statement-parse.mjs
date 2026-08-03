@@ -20,8 +20,11 @@ const root = join(__dirname, '..');
 const { parseCsv } = await import(await transform(join(root, 'lib/csv.ts'), ['expo-document-picker', './queries', './particulars', './files', './models', './parse-number']));
 const parse = await import(await transform(join(root, 'lib/statement-parse.ts'), []));
 const { parseStatementRecords, parseStatementAmount, parseStatementDate, detectDateOrder, detectSignConvention, findStatementYear, extractTrailingAmount } = parse;
-const layout = await import(await transform(join(root, 'lib/pdf-layout.ts'), []));
-const { clusterRowsFromRuns, pageToRecords, documentToRecords } = layout;
+const linesUrl = await transform(join(root, 'lib/statement-lines.ts'), []);
+const statementLines = await import(linesUrl);
+const { readStatementLine, linesToRecords, sectionSignFor, hasTrailingBalanceColumn } = statementLines;
+const layout = await import(await transform(join(root, 'lib/pdf-layout.ts'), [], { './statement-lines': linesUrl }));
+const { clusterRowsFromRuns, pageToRecords, documentToRecords, rowsToLines } = layout;
 const { parseMoneyInput } = await import(await transform(join(root, 'lib/parse-number.ts'), []));
 
 // Deterministic "now" so year inference doesn't drift with the calendar.
@@ -384,6 +387,232 @@ const wrapRuns = [
     ], 'pdf e2e: bytes -> pdfjs -> layout -> transactions');
   }
 }
+
+// ══ Universal line reader: one fixture per real issuer layout ═════════
+// These are the printed LINES of a statement, which is what the app now works
+// from. They are modelled on each issuer's published statement layout — column
+// positions differ wildly between them, and none of that matters any more,
+// because a transaction is recognised by its shape: leading date, trailing
+// amount. Every issuer here was previously unreadable unless its table header
+// happened to be the first one in the document.
+function runLines(name, lines, expected, opts = {}) {
+  const records = linesToRecords(lines);
+  const result = parseStatementRecords(records, { today: TODAY, ...opts });
+  if ('unrecognizedFormat' in result) {
+    failed++;
+    failures.push(`✗ ${name}: unrecognizedFormat (records: ${JSON.stringify(records.slice(0, 3))})`);
+    return;
+  }
+  eq(result.rows, expected, name);
+  return result;
+}
+
+// ── THE REGRESSION: Chase, with the payment-information box FIRST ─────
+// This is the exact shape that imported 0 of 162 rows, twice. The document has
+// three tables; the old reader locked onto the payment box (it contains "date",
+// "payment" and "name") and then read every real transaction row through THAT
+// table's columns, so all 162 failed with "no date" and the dialog quoted a
+// line of legal prose back at the user.
+const chaseFull = [
+  'CHASE FREEDOM UNLIMITED',
+  'Opening/Closing Date 06/09/26 - 07/08/26',
+  'Payment Information',
+  'New Balance $2,345.67',
+  'Minimum Payment Due $35.00',
+  'Payment Due Date 08/05/26',
+  'Account Number: 1234 5678 9012 3456',
+  'Late Payment Warning: If we do not receive your minimum payment by the date listed',
+  'above, you may have to pay a late fee of up to $40.00.',
+  'The amount of your payment should be at least your minimum payment,',
+  'Minimum Payment Warning: If you make only the minimum payment each period, you will',
+  'pay more in interest and it will take you longer to pay off your balance.',
+  'ACCOUNT ACTIVITY',
+  'Date of',
+  'Transaction Merchant Name or Transaction Description $ Amount',
+  'PAYMENTS AND OTHER CREDITS',
+  '06/12 Payment Thank You - Web -1,500.00',
+  '06/20 AMAZON.COM RETURN CREDIT AMZN.COM/BILL WA -32.18',
+  'PURCHASE',
+  '06/14 AMAZON.COM*RT4G61OI3 AMZN.COM/BILL WA 42.19',
+  '06/16 STARBUCKS STORE 06253 HUNTSVILLE AL 6.75',
+  '06/21 SHELL OIL 57444120108 HUNTSVILLE AL 48.02',
+  '07/01 PUBLIX SUPER MAR HUNTSVILLE AL 132.44',
+  'INTEREST CHARGED',
+  '07/08 PURCHASE INTEREST CHARGE 12.31',
+  '2026 Totals Year-to-Date',
+  'Total fees charged in 2026 $0.00',
+  'Total interest charged in 2026 $84.12',
+];
+runLines('chase: payment box + legal text + real activity', chaseFull, [
+  { date: '2026-06-12', note: 'Payment Thank You - Web', amount: -1500 },
+  { date: '2026-06-20', note: 'AMAZON.COM RETURN CREDIT AMZN.COM/BILL WA', amount: -32.18 },
+  { date: '2026-06-14', note: 'AMAZON.COM*RT4G61OI3 AMZN.COM/BILL WA', amount: 42.19 },
+  { date: '2026-06-16', note: 'STARBUCKS STORE 06253 HUNTSVILLE AL', amount: 6.75 },
+  { date: '2026-06-21', note: 'SHELL OIL 57444120108 HUNTSVILLE AL', amount: 48.02 },
+  { date: '2026-07-01', note: 'PUBLIX SUPER MAR HUNTSVILLE AL', amount: 132.44 },
+  { date: '2026-07-08', note: 'PURCHASE INTEREST CHARGE', amount: 12.31 },
+], { statementYear: 2026 });
+
+// ── American Express: full dates, $ on every amount, credits signed ───
+runLines('amex: MM/DD/YY dates, $ amounts, signed credit', [
+  'Card Ending 3-71005',
+  'New Balance $1,204.88',
+  'Minimum Payment Due $40.00',
+  'Detail',
+  '06/02/26 AplPay COSTCO WHSE #1234 HUNTSVILLE AL $124.56',
+  '06/05/26 UBER TRIP HELP.UBER.COM CA $18.40',
+  '06/11/26 PAYMENT RECEIVED - THANK YOU -$500.00',
+  '06/19/26 DELTA AIR LINES ATLANTA GA $412.60',
+], [
+  { date: '2026-06-02', note: 'AplPay COSTCO WHSE #1234 HUNTSVILLE AL', amount: 124.56 },
+  { date: '2026-06-05', note: 'UBER TRIP HELP.UBER.COM CA', amount: 18.4 },
+  { date: '2026-06-11', note: 'PAYMENT RECEIVED - THANK YOU', amount: -500 },
+  { date: '2026-06-19', note: 'DELTA AIR LINES ATLANTA GA', amount: 412.6 },
+]);
+
+// ── Discover: TWO dates per row, and NO signs anywhere ────────────────
+// The only layout where the section banner decides the sign, because the
+// issuer never marks a credit. Getting this wrong imports a $1,022 payment as
+// $1,022 of spending.
+runLines('discover: trans+post dates, unsigned amounts, banner sets sign', [
+  'PAYMENTS AND CREDITS',
+  '06/04 06/04 DIRECTPAY FULL BALANCE 1,022.15',
+  'PURCHASES',
+  '06/06 06/07 WAL-MART #1234 HUNTSVILLE AL 87.33',
+  '06/09 06/10 NETFLIX.COM LOS GATOS CA 15.49',
+  '06/22 06/23 KROGER FUEL #0442 HUNTSVILLE AL 41.08',
+], [
+  { date: '2026-06-04', note: 'DIRECTPAY FULL BALANCE', amount: -1022.15 },
+  { date: '2026-06-06', note: 'WAL-MART #1234 HUNTSVILLE AL', amount: 87.33 },
+  { date: '2026-06-09', note: 'NETFLIX.COM LOS GATOS CA', amount: 15.49 },
+  { date: '2026-06-22', note: 'KROGER FUEL #0442 HUNTSVILLE AL', amount: 41.08 },
+]);
+
+// ── Capital One: month-name dates and a TRAILING minus ────────────────
+runLines('capital one: "Jun 3" dates, trailing-minus credit', [
+  'Transactions',
+  'Jun 3 CAPITAL ONE MOBILE PYMT AUTHDATE 03-JUN $ 350.00 -',
+  'Jun 7 TARGET.COM * HUNTSVILLE AL $ 63.21',
+  'Jun 18 SPOTIFY USA NEW YORK NY $ 11.99',
+], [
+  { date: '2026-06-03', note: 'CAPITAL ONE MOBILE PYMT AUTHDATE 03-JUN', amount: -350 },
+  { date: '2026-06-07', note: 'TARGET.COM * HUNTSVILLE AL', amount: 63.21 },
+  { date: '2026-06-18', note: 'SPOTIFY USA NEW YORK NY', amount: 11.99 },
+]);
+
+// ── Citi: parenthesised credit ────────────────────────────────────────
+runLines('citi: parentheses mean credit', [
+  'Standard Purchases',
+  '06/05 COSTCO GAS #0812 MADISON AL 52.10',
+  '06/09 ONLINE PAYMENT, THANK YOU (825.00)',
+  '06/14 HOME DEPOT #0917 HUNTSVILLE AL 214.77',
+], [
+  { date: '2026-06-05', note: 'COSTCO GAS #0812 MADISON AL', amount: 52.1 },
+  { date: '2026-06-09', note: 'ONLINE PAYMENT, THANK YOU', amount: -825 },
+  { date: '2026-06-14', note: 'HOME DEPOT #0917 HUNTSVILLE AL', amount: 214.77 },
+]);
+
+// ── Wells Fargo checking: a RUNNING BALANCE column after the amount ───
+// Taking the last number on the line would import the balance as the charge —
+// $1,918.42 of groceries instead of $82.14.
+runLines('wells fargo: running-balance column is dropped, not imported', [
+  'Date Description Amount Ending daily balance',
+  '06/03 PURCHASE AUTHORIZED ON 06/01 KROGER #123 HUNTSVILLE AL 82.14 1,918.42',
+  '06/05 ONLINE TRANSFER TO SAVINGS 200.00 1,718.42',
+  '06/08 RECURRING PAYMENT AUTHORIZED ON 06/07 SPOTIFY 11.99 1,706.43',
+  '06/12 PURCHASE AUTHORIZED ON 06/11 PUBLIX #1234 45.90 1,660.53',
+], [
+  { date: '2026-06-03', note: 'PURCHASE AUTHORIZED ON 06/01 KROGER #123 HUNTSVILLE AL', amount: 82.14 },
+  { date: '2026-06-05', note: 'ONLINE TRANSFER TO SAVINGS', amount: 200 },
+  { date: '2026-06-08', note: 'RECURRING PAYMENT AUTHORIZED ON 06/07 SPOTIFY', amount: 11.99 },
+  { date: '2026-06-12', note: 'PURCHASE AUTHORIZED ON 06/11 PUBLIX #1234', amount: 45.9 },
+]);
+
+// ── Bank of America / USAA / Apple Card: plain one-line rows ──────────
+runLines('bofa: CHECKCARD rows', [
+  'Purchases and Adjustments',
+  '06/12/26 CHECKCARD 0611 PUBLIX #1234 HUNTSVILLE AL 45.90',
+  '06/15/26 CHECKCARD 0614 CHICK-FIL-A #0284 45.12',
+], [
+  { date: '2026-06-12', note: 'CHECKCARD 0611 PUBLIX #1234 HUNTSVILLE AL', amount: 45.9 },
+  { date: '2026-06-15', note: 'CHECKCARD 0614 CHICK-FIL-A #0284', amount: 45.12 },
+]);
+
+runLines('apple card: four-digit year, $ amounts', [
+  'Transactions',
+  '06/14/2026 Apple Store $999.00',
+  '06/18/2026 Trader Joes Huntsville $76.42',
+], [
+  { date: '2026-06-14', note: 'Apple Store', amount: 999 },
+  { date: '2026-06-18', note: 'Trader Joes Huntsville', amount: 76.42 },
+]);
+
+// ── Wrapped merchant names across two printed lines ───────────────────
+runLines('wrapped description continues onto the next printed line', [
+  'PURCHASE',
+  '06/11 SQ *THE VERY LONG COFFEE SHOP NAME 14.28',
+  'HUNTSVILLE AL',
+  '06/14 DELTA AIR LINES 412.60',
+], [
+  { date: '2026-06-11', note: 'SQ *THE VERY LONG COFFEE SHOP NAME HUNTSVILLE AL', amount: 14.28 },
+  { date: '2026-06-14', note: 'DELTA AIR LINES', amount: 412.6 },
+]);
+
+// ── Nothing in a page of legal prose may become a transaction ─────────
+{
+  const prose = linesToRecords([
+    'The amount of your payment should be at least your minimum payment,',
+    'and must reach us by 08/05/26 to avoid a late fee of up to $40.00.',
+    'Balance Subject to Interest Rate $1,204.88',
+    'Annual Percentage Rate (APR) 24.99%',
+    'How to Avoid Paying Interest on Purchases: Your due date is at least 25 days',
+    'after the close of each billing cycle.',
+    'Page 3 of 6',
+    'Previous Balance $980.14',
+    'New Balance $2,345.67',
+  ]);
+  eq(prose.length, 1, 'legal prose page yields zero transactions (header row only)');
+}
+
+// ── Dates with no year take the statement's year, not today's ─────────
+runLines('year comes from the statement period, across a year boundary', [
+  'PURCHASE',
+  '12/28 AMAZON.COM AMZN.COM/BILL WA 61.20',
+  '01/03 KROGER #0442 HUNTSVILLE AL 84.55',
+], [
+  { date: '2025-12-28', note: 'AMAZON.COM AMZN.COM/BILL WA', amount: 61.2 },
+  { date: '2025-01-03', note: 'KROGER #0442 HUNTSVILLE AL', amount: 84.55 },
+], { statementYear: 2025 });
+
+// ── Unit: the line reader itself ──────────────────────────────────────
+eq(readStatementLine('06/16 STARBUCKS STORE 06253 HUNTSVILLE AL 6.75'),
+  { date: '06/16', note: 'STARBUCKS STORE 06253 HUNTSVILLE AL', amount: '6.75' },
+  'line: date + merchant + amount');
+eq(readStatementLine('Payment Due Date 08/05/26'), null, 'line: summary row with no amount is not a transaction');
+eq(readStatementLine('Minimum Payment Due $35.00'), null, 'line: no leading date is not a transaction');
+eq(readStatementLine('The amount of your payment should be at least your minimum payment,'), null,
+  'line: legal prose is not a transaction');
+eq(readStatementLine('06/12 New Balance 2,345.67'), null, 'line: dated summary row is rejected by name');
+eq(readStatementLine('06/28 8521333J400XS6H17 ONLINE PAYMENT THANK YOU -$489.44'),
+  { date: '06/28', note: 'ONLINE PAYMENT THANK YOU', amount: '-$489.44' },
+  'line: reference id stripped from the note');
+eq(readStatementLine('06/07 SHELL OIL 574123 48.20'),
+  { date: '06/07', note: 'SHELL OIL 574123', amount: '48.20' },
+  'line: a short store number is NOT mistaken for a reference id');
+eq(readStatementLine('06/03 SHELL OIL 5744221'), null, 'line: bare store number is not an amount');
+eq(sectionSignFor('PAYMENTS AND OTHER CREDITS'), 'credit', 'section: credits banner');
+eq(sectionSignFor('PURCHASE'), 'debit', 'section: purchases banner');
+eq(sectionSignFor('06/11 CHIPOTLE 1842 14.28'), null, 'section: a transaction line is not a banner');
+eq(hasTrailingBalanceColumn([
+  '06/03 KROGER 82.14 1,918.42',
+  '06/05 TRANSFER 200.00 1,718.42',
+  '06/08 SPOTIFY 11.99 1,706.43',
+]), true, 'balance column detected');
+eq(hasTrailingBalanceColumn([
+  '06/03 KROGER 82.14',
+  '06/05 TRANSFER 200.00',
+  '06/08 SPOTIFY 11.99',
+]), false, 'no balance column on a normal card statement');
 
 // ── Amount glued to the description ──────────────────────────────────
 // A real Chase PDF imported ZERO of 162 rows because its amount column never
