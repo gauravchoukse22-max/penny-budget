@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius, type } from '../../theme/colors';
-import { formatCurrency } from '../../lib/format';
+import { formatCurrency, formatMonthLabel } from '../../lib/format';
 import { takePendingImport } from '../../features/import-preview-store';
 import { commitStatementRows, type StatementPreviewRow } from '../../features/statement-import';
 import { confirmAction, notify } from '../../lib/confirm';
@@ -25,7 +25,7 @@ type Row = StatementPreviewRow & { include: boolean; id: number };
 export default function ImportPreviewScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { categories, cards, settings, refresh } = useBudget();
+  const { categories, cards, settings, refresh, selectedMonth, setSelectedMonth } = useBudget();
   // Matches the screen's `gestureEnabled: false`: the parsed rows are handed
   // over once, so backing out here loses the whole import silently.
   useAndroidBackGuard();
@@ -89,9 +89,25 @@ export default function ImportPreviewScreen() {
     setCommitting(true);
     try {
       const result = await commitStatementRows(pending.cardId, toImport);
+
+      // A statement is history: its rows are almost never dated in the month
+      // the app is currently showing. Every screen filters to `selectedMonth`,
+      // so importing a June statement in August adds the rows and shows an
+      // unchanged, empty August — indistinguishable from the import having
+      // failed. Move to the month the rows actually landed in, and SAY so.
+      const months = [...new Set(toImport.map((r) => r.date.slice(0, 7)))].sort();
+      const target = months[months.length - 1] ?? selectedMonth;
+      if (target !== selectedMonth) setSelectedMonth(target);
       await refresh();
+
+      const span =
+        months.length > 1
+          ? `\n\nThey're dated ${formatMonthLabel(months[0])} – ${formatMonthLabel(months[months.length - 1])}. Showing ${formatMonthLabel(target)} — use the month arrows at the top to see the rest.`
+          : months.length === 1 && target !== selectedMonth
+            ? `\n\nThey're dated ${formatMonthLabel(target)}, so that's the month you're now looking at.`
+            : '';
       const extra = result.uncategorized > 0 ? `\n${result.uncategorized} still need a category — find them under Uncategorized.` : '';
-      if (await confirmAction({ title: 'Import complete', message: `Added ${result.imported} transaction(s) to ${card?.name ?? 'your card'}.${extra}`, confirmLabel: 'Done' })) {
+      if (await confirmAction({ title: 'Import complete', message: `Added ${result.imported} transaction(s) to ${card?.name ?? 'your card'}.${extra}${span}`, confirmLabel: 'Done' })) {
         router.back();
       }
     } catch (e) {
