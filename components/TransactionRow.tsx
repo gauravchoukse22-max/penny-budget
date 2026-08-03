@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { CategoryIcon } from './CategoryIcon';
 import { AmountText } from './AmountText';
 import { useTheme } from '../theme/colors';
+import { formatShortDate } from '../lib/format';
 import type { Category, Card, Transaction } from '../lib/models';
 
 export function TransactionRow({
@@ -15,6 +16,7 @@ export function TransactionRow({
   onLongPress,
   selected,
   selectable,
+  showDate,
 }: {
   transaction: Transaction;
   category?: Category;
@@ -26,6 +28,14 @@ export function TransactionRow({
   selectable?: boolean;
   /** Whether this row is currently selected (only meaningful when selectable). */
   selected?: boolean;
+  /**
+   * Show the full date on the row. Off by default because the month tabs
+   * already group by day and print a date header above each group — repeating
+   * it on every row would be noise. Search has no such grouping and spans every
+   * month and year, so a result there is unplaceable without it: "I can see the
+   * charges in search but I don't know where they are."
+   */
+  showDate?: boolean;
 }) {
   const theme = useTheme();
   return (
@@ -52,6 +62,9 @@ export function TransactionRow({
           {transaction.note || category?.name || 'Uncategorized'}
         </Text>
         <View style={styles.subRow}>
+          {showDate && (
+            <Text style={[styles.dateText, { color: theme.secondaryLabel }]}>{formatShortDate(transaction.date)}</Text>
+          )}
           {card && (
             <View style={[styles.badge, { backgroundColor: card.color }]}>
               <Text style={styles.badgeText}>{card.name}</Text>
@@ -97,5 +110,9 @@ const styles = StyleSheet.create({
   },
   sourceTag: {
     fontSize: 11,
+  },
+  dateText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

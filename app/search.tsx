@@ -154,6 +154,7 @@ export default function SearchScreen() {
                 category={t.categoryId ? categoryById.get(t.categoryId) : undefined}
                 card={cardById.get(t.cardId)}
                 currency={settings.currency}
+                showDate
                 onPress={() => router.push(`/transaction/${t.id}`)}
               />
             ))
