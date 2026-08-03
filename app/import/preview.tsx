@@ -26,10 +26,6 @@ export default function ImportPreviewScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { categories, cards, settings, refresh, selectedMonth, setSelectedMonth } = useBudget();
-  // Matches the screen's `gestureEnabled: false`: the parsed rows are handed
-  // over once, so backing out here loses the whole import silently.
-  useAndroidBackGuard();
-
   // Read the hand-off exactly once. If it's missing (deep-linked here directly,
   // or committed already), there's nothing to show.
   const [pending] = useState(() => takePendingImport());
@@ -42,6 +38,25 @@ export default function ImportPreviewScreen() {
   );
   const [committing, setCommitting] = useState(false);
   const [categoryPickerFor, setCategoryPickerFor] = useState<number | null>(null);
+
+  // Leaving loses the parsed rows (they're handed over exactly once), so it is
+  // confirmed rather than free — but it is always POSSIBLE. This screen is
+  // presented as a modal, which gives it no back button, and it blocks
+  // Android's back button; with no Cancel of its own, the only way off it was
+  // to import transactions the user had already decided against. Android back
+  // now runs this same confirm.
+  const cancelImport = async () => {
+    if (committing) return;
+    const ok = await confirmAction({
+      title: 'Discard this import?',
+      message: 'Nothing has been added to your budget. You can pick the file again whenever you want.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep reviewing',
+      destructive: true,
+    });
+    if (ok) router.back();
+  };
+  useAndroidBackGuard(true, () => void cancelImport());
 
   const currency = settings.currency;
   const card = cards.find((c) => c.id === pending?.cardId) ?? null;
@@ -119,7 +134,18 @@ export default function ImportPreviewScreen() {
 
   return (
     <SafeAreaView style={[styles.flex, { backgroundColor: theme.groupedBackground }]} edges={['bottom']}>
-      <Stack.Screen options={{ title: 'Review Import' }} />
+      <Stack.Screen
+        options={{
+          title: 'Review Import',
+          // A modal has no back button of its own. Without this the only way
+          // off the screen was to import.
+          headerLeft: () => (
+            <Pressable onPress={cancelImport} disabled={committing} hitSlop={12} accessibilityRole="button" accessibilityLabel="Cancel import">
+              <Text style={[type.body, { color: committing ? theme.tertiaryLabel : theme.accent }]}>Cancel</Text>
+            </Pressable>
+          ),
+        }}
+      />
       <ScrollView contentContainerStyle={styles.scroll} contentInsetAdjustmentBehavior="automatic">
         {/* What the parser decided, stated plainly so a wrong guess is catchable. */}
         <View style={[styles.banner, { backgroundColor: theme.accentTint }]}>
