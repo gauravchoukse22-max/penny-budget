@@ -9,6 +9,8 @@ import { WalletCard } from '../../components/WalletCard';
 import { AmountText } from '../../components/AmountText';
 import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { SwipeToDelete } from '../../components/SwipeToDelete';
+import { MonthSwitcher } from '../../components/MonthSwitcher';
+import { formatMonthLabel } from '../../lib/format';
 import { notify } from '../../lib/confirm';
 import { daysUntilDue, countTransactionsForCard } from '../../lib/queries';
 import { isCashCard } from '../../lib/models';
@@ -16,7 +18,7 @@ import { isCashCard } from '../../lib/models';
 export default function CardsScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { cards, cardTotals, settings, addCard, removeCard } = useBudget();
+  const { cards, cardTotals, settings, selectedMonth, addCard, removeCard } = useBudget();
   const [showAdd, setShowAdd] = useState(false);
 
   const monthTotal = cards.reduce((sum, c) => sum + (cardTotals.get(c.id) ?? 0), 0);
@@ -36,7 +38,9 @@ export default function CardsScreen() {
                 {'   ·   '}
               </Text>
               <AmountText amount={monthTotal} currency={settings.currency} size={13} color={theme.secondaryLabel} />
-              <Text style={[styles.summaryText, { color: theme.secondaryLabel }]}> this month</Text>
+              {/* Was "this month", which was wrong the moment you stepped back a
+                  month — the totals have always come from selectedMonth. */}
+              <Text style={[styles.summaryText, { color: theme.secondaryLabel }]}> in {formatMonthLabel(selectedMonth)}</Text>
             </View>
           )}
         </View>
@@ -48,6 +52,7 @@ export default function CardsScreen() {
           <Ionicons name="add" size={22} color={theme.accent} />
         </Pressable>
       </View>
+      <MonthSwitcher style={styles.monthSwitcher} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {realCards.length === 0 && (
           <View style={styles.empty}>
@@ -91,6 +96,7 @@ export default function CardsScreen() {
                   card={c}
                   total={cardTotals.get(c.id) ?? 0}
                   currency={settings.currency}
+                  yearMonth={selectedMonth}
                   onPress={() => router.push(`/card/${c.id}`)}
                 />
                 {isCash ? (
@@ -202,6 +208,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  monthSwitcher: { marginTop: spacing.xs, marginHorizontal: spacing.lg },
   content: { padding: spacing.lg, gap: spacing.xl, paddingBottom: 60 },
   cardBlock: { gap: spacing.sm },
   // The wallet card is tall, so the panel gets the card's own corner radius

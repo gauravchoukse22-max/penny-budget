@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBudget } from '../../context/BudgetContext';
-import { useTheme, spacing, radius, type } from '../../theme/colors';
+import { useTheme, spacing, radius } from '../../theme/colors';
 import { AmountText } from '../../components/AmountText';
 import { AnimatedAmount } from '../../components/AnimatedAmount';
 import { totalSavingsGoals } from '../../lib/queries';
@@ -15,7 +15,8 @@ import { PressableScale } from '../../components/PressableScale';
 import { RemainingLabel } from '../../components/RemainingLabel';
 import { TransactionRow } from '../../components/TransactionRow';
 import { StreakBadge } from '../../components/FeatureCards';
-import { formatMonthLabel, daysLeftInMonth, formatCurrency } from '../../lib/format';
+import { MonthSwitcher } from '../../components/MonthSwitcher';
+import { daysLeftInMonth, formatCurrency } from '../../lib/format';
 import { getStreaks } from '../../features/streaks-and-gamification';
 import { selection, tapLight } from '../../lib/haptics';
 
@@ -57,6 +58,9 @@ export default function HomeScreen() {
       Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }),
     ]).start();
   };
+  // The swipe still lives here rather than in MonthSwitcher: it belongs to this
+  // screen's ScrollView, and a pan responder inside a SectionList (Transactions)
+  // fights the list's own scrolling.
   const handlePrev = () => {
     selection();
     goToPrevMonth();
@@ -77,16 +81,32 @@ export default function HomeScreen() {
   // moment a goal's amount was edited for the month.
   const savingsTarget = totalSavingsGoals(savingsGoals, savingsGoalAmounts);
 
+  // Scrolling this screen used to change the month by itself. The cause was
+  // `onMoveShouldSetPanResponderCapture`: the CAPTURE phase runs before the
+  // ScrollView can claim the touch, so this handler got first refusal on every
+  // gesture and only had a threshold (dx > 15, dx > dy × 1.5) standing between
+  // a scroll and a month change. A thumb arcs as it flicks, so a fast vertical
+  // scroll clears 15pt sideways easily — the month then moved on release.
+  //
+  // The fix is the non-capture `onMoveShouldSetPanResponder`, which asks only
+  // AFTER the ScrollView has declined. While the list is scrolling the
+  // ScrollView owns the responder and this never runs, so a scroll cannot
+  // change the month no matter how diagonal it is. Thresholds are still raised
+  // for the remaining case (a drag that starts horizontal), and
+  // onPanResponderTerminationRequest lets the ScrollView reclaim the gesture if
+  // it turns vertical mid-drag.
   const monthSwipe = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponderCapture: (_, gesture) =>
-        Math.abs(gesture.dx) > 15 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5,
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        Math.abs(gesture.dx) > 24 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 2.5,
+      onPanResponderTerminationRequest: () => true,
       onPanResponderRelease: (_, gesture) => {
-        if (gesture.dx <= -50) {
-          handleNext();
-        } else if (gesture.dx >= 50) {
-          handlePrev();
-        }
+        // Re-checked at release, not just at claim: a gesture can start
+        // horizontal and end up mostly vertical, and that is a scroll.
+        if (Math.abs(gesture.dx) < 60) return;
+        if (Math.abs(gesture.dx) < Math.abs(gesture.dy) * 2) return;
+        if (gesture.dx < 0) handleNext();
+        else handlePrev();
       },
     })
   ).current;
@@ -98,15 +118,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         {...monthSwipe.panHandlers}
       >
-        <View style={styles.header}>
-          <Pressable onPress={handlePrev} hitSlop={12} style={styles.monthArrow}>
-            <Ionicons name="chevron-back" size={20} color={theme.secondaryLabel} />
-          </Pressable>
-          <Text style={[type.headline, { color: theme.label }]}>{formatMonthLabel(selectedMonth)}</Text>
-          <Pressable onPress={handleNext} hitSlop={12} style={styles.monthArrow}>
-            <Ionicons name="chevron-forward" size={20} color={theme.secondaryLabel} />
-          </Pressable>
-        </View>
+        <MonthSwitcher onChange={animateMonth} />
 
         <Animated.View style={{ gap: spacing.lg, opacity: fade, transform: [{ translateX: slide }] }}>
           {streak.current > 0 && (
@@ -238,14 +250,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 110 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xl,
-    paddingVertical: spacing.xs,
-  },
-  monthArrow: { padding: spacing.xs },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -13,6 +13,7 @@ import { PressableScale } from '../../components/PressableScale';
 import { NumberEditorSheet } from '../../components/NumberEditorSheet';
 import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { CategoryIcon, CATEGORY_ICON_CHOICES } from '../../components/CategoryIcon';
+import { MonthSwitcher } from '../../components/MonthSwitcher';
 import { formatMonthLabel, formatCurrency } from '../../lib/format';
 import { confirmAction, notify } from '../../lib/confirm';
 import { tapLight, success } from '../../lib/haptics';
@@ -123,6 +124,7 @@ export default function BudgetScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.groupedBackground }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Text style={[type.title1, { color: theme.label }]}>Budget</Text>
+        <MonthSwitcher />
 
         <Surface>
           <Text style={[styles.sectionTitle, { color: theme.label }]}>Categories</Text>
@@ -215,7 +217,8 @@ export default function BudgetScreen() {
         <Surface>
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: theme.label, marginBottom: 0 }]}>Savings Goals</Text>
-            <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }}>Transferred this month</Text>
+            {/* The tick marks a transfer for the SELECTED month, not today's. */}
+            <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }}>Transferred in {formatMonthLabel(selectedMonth)}</Text>
           </View>
           {savingsGoals.map((g) => {
             const transferred = transferStatus.get(g.id) ?? false;

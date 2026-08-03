@@ -11,6 +11,7 @@ import { LineChart } from '../../components/charts/LineChart';
 import { computeTrendSeries, computeCategoryMovers } from '../../lib/queries';
 import { currentYearMonth } from '../../lib/db';
 import type { TrendPoint, CategoryMover } from '../../lib/models';
+import { MonthSwitcher } from '../../components/MonthSwitcher';
 import { formatMonthLabel } from '../../lib/format';
 import { getHistoricalCategoryProjections, detectAnomalies } from '../../features/predictive-engine';
 import { loadFundGrid } from '../../features/funds';
@@ -98,10 +99,10 @@ export default function InsightsScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.groupedBackground }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View>
-          <Text style={[typeScale.title1, { color: theme.label }]}>Insights</Text>
-          <Text style={{ color: theme.secondaryLabel, marginTop: 2 }}>{formatMonthLabel(selectedMonth)}</Text>
-        </View>
+        <Text style={[typeScale.title1, { color: theme.label }]}>Insights</Text>
+        {/* Replaces a plain month caption. The month was already readable here;
+            what was missing was being able to change it without going Home. */}
+        <MonthSwitcher />
 
         {visibleAnomalies.map((a) => (
           <NoticeRow
@@ -131,7 +132,12 @@ export default function InsightsScreen() {
             <AmountText amount={Math.abs(net)} currency={settings.currency} size={40} weight="semibold" color={netColor} />
           </View>
           <Text style={[styles.netCaption, { color: theme.tertiaryLabel }]}>
-            {hasIncome ? 'Income minus spending this month' : 'Spending this month — set income to see net cash flow'}
+            {/* Names the month rather than saying "this month". With a switcher
+                on the screen the caption is read as a claim about which month
+                the number covers, and on any past month that claim was wrong. */}
+            {hasIncome
+              ? `Income minus spending in ${formatMonthLabel(selectedMonth)}`
+              : `Spending in ${formatMonthLabel(selectedMonth)} — set income to see net cash flow`}
           </Text>
 
           <View style={[styles.divider, { backgroundColor: theme.separator }]} />

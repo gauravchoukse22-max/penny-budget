@@ -33,30 +33,15 @@ import type {
   FundMonthSummary,
 } from './models';
 
-// Seeded on first open so the grid already looks like the spreadsheet it
-// replaces. Everything here is editable afterwards — nothing is special-cased.
-export const DEFAULT_FUNDS: string[] = [
-  'Emergency',
-  'Savings',
-  'Child / Education Savings',
-  'Vacation',
-  'Kanha',
-  'House',
-  'House Investment (IBKR)',
-  'Invested (as of Jan 1st)',
-  'Send to Family',
-  'Amount for Tax returns',
-  'Amount earning Interest for the month',
-];
-
-export const DEFAULT_FUND_ACCOUNTS: string[] = [
-  'Wealthfront',
-  'Apple Savings',
-  'T bill + T Note',
-  'Robinhood',
-  'Cash (India)',
-  'Disha Axis + IDFC',
-];
+// The grid intentionally starts EMPTY — the user names their own rows and
+// columns. It used to seed ~17 rows on first open, copied from the developer's
+// personal spreadsheet ("Kanha", "Disha Axis + IDFC", …), which meant every
+// fresh install shipped one household's finances as app content and pushed all
+// of it into a shared household as journaled writes. The empty state on the
+// Funds screen shows a SAMPLE grid instead, rendered from these labels without
+// ever touching the database.
+export const SAMPLE_FUNDS: string[] = ['Emergency', 'Vacation'];
+export const SAMPLE_FUND_ACCOUNTS: string[] = ['Savings', 'Brokerage'];
 
 /** The note the backfill puts on a converted legacy balance. */
 export const OPENING_BALANCE_NOTE = 'Opening balance';
@@ -698,23 +683,3 @@ export async function loadFundGrid(): Promise<{
 
 // ── Seeding ─────────────────────────────────────────────────────────────────
 
-/**
- * Fills in the default rows and columns the first time the Funds screen opens.
- *
- * Deliberately lazy rather than part of app startup: it keeps ~17 rows out of
- * the database (and out of the shared household) for anyone who never opens the
- * feature, and it means a second device in a household has usually already
- * pulled the real funds before it ever gets here — so it finds a non-empty
- * table and doesn't seed a duplicate set.
- *
- * Goes through the normal create* helpers so each seeded row is journaled.
- */
-export async function seedDefaultFundsIfEmpty(): Promise<void> {
-  const db = await getDb();
-  const fundCount = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM funds');
-  const accountCount = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM fund_accounts');
-  if ((fundCount?.count ?? 0) > 0 || (accountCount?.count ?? 0) > 0) return;
-
-  for (const name of DEFAULT_FUNDS) await createFund(name);
-  for (const name of DEFAULT_FUND_ACCOUNTS) await createFundAccount(name);
-}

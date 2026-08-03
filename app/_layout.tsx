@@ -111,7 +111,12 @@ function RootNavigator() {
         <Stack.Screen name="funds/manage" options={{ headerShown: true, title: 'Funds & Accounts' }} />
         <Stack.Screen name="funds/[id]" options={{ headerShown: true, title: 'Fund History' }} />
         <Stack.Screen name="search" options={{ headerShown: true, title: 'Search' }} />
-        <Stack.Screen name="account/index" options={{ headerShown: true, title: 'Account', headerLargeTitle: true }} />
+        {/* No headerLargeTitle. Its translucent large-title bar rendered with
+            no background here, so the member list scrolled visibly through the
+            title and the back button instead of under an opaque header. Every
+            other screen in the app uses the standard bar and reads correctly —
+            the large title bought nothing and cost legibility. */}
+        <Stack.Screen name="account/index" options={{ headerShown: true, title: 'Account' }} />
         <Stack.Screen name="account/forgot-password" options={{ presentation: 'modal', headerShown: true, title: 'Reset Password' }} />
         <Stack.Screen name="account/update-password" options={{ headerShown: true, title: 'New Password', gestureEnabled: false }} />
         <Stack.Screen name="account/verify-email" options={{ presentation: 'modal', headerShown: true, title: 'Confirm Email' }} />
@@ -120,7 +125,7 @@ function RootNavigator() {
         <Stack.Screen name="account/security" options={{ headerShown: true, title: 'Security' }} />
         {/* One screen owns sync-my-devices AND share-with-someone, so the title
             covers both rather than implying it is only about family. */}
-        <Stack.Screen name="household/index" options={{ headerShown: true, title: 'Sharing', headerLargeTitle: true }} />
+        <Stack.Screen name="household/index" options={{ headerShown: true, title: 'Sharing' }} />
         <Stack.Screen name="import/preview" options={{ presentation: 'modal', headerShown: true, title: 'Review Import', gestureEnabled: false }} />
         <Stack.Screen name="bank/index" options={{ headerShown: true, title: 'Linked Banks' }} />
         <Stack.Screen name="whats-new/index" options={{ presentation: 'modal', headerShown: true, title: "What's New" }} />

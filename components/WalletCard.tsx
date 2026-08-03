@@ -3,7 +3,17 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AmountText } from './AmountText';
 import { radius, spacing, mixHex, useTheme } from '../theme/colors';
+import { formatShortMonth } from '../lib/format';
+import { currentYearMonth } from '../lib/db';
 import type { Card } from '../lib/models';
+
+// "THIS MONTH" while you are on it, "JUL 2026" once you step off. Keeping the
+// familiar wording for the common case, and only spending the space on a date
+// when the card would otherwise be lying — the label sits on one narrow line.
+function formatCardPeriod(yearMonth: string): string {
+  if (yearMonth === currentYearMonth()) return 'THIS MONTH';
+  return `${formatShortMonth(yearMonth)} ${yearMonth.slice(0, 4)}`.toUpperCase();
+}
 
 // A restrained, Apple Wallet / Amex-style card: the stored bright hue is blended
 // deep toward graphite so every card reads as a quiet metal card, with the
@@ -13,11 +23,17 @@ export function WalletCard({
   card,
   total,
   currency,
+  yearMonth,
   onPress,
 }: {
   card: Card;
   total: number;
   currency: string;
+  /** The month `total` covers. Required, because the label used to read a
+   *  hardcoded "THIS MONTH" while the total was already scoped to whatever
+   *  month the user had selected — so stepping back a month left the card
+   *  confidently mislabelling a past total as the current one. */
+  yearMonth: string;
   onPress?: () => void;
 }) {
   const theme = useTheme();
@@ -44,7 +60,7 @@ export function WalletCard({
               empty Text keeps space-between pinning the amount to the right. */}
           <Text style={styles.lastFour}>{card.lastFour ? `•••• ${card.lastFour}` : ''}</Text>
           <View style={styles.amountBlock}>
-            <Text style={styles.amountLabel}>THIS MONTH</Text>
+            <Text style={styles.amountLabel}>{formatCardPeriod(yearMonth)}</Text>
             <AmountText amount={total} currency={currency} size={24} weight="bold" color="#FFFFFF" />
           </View>
         </View>

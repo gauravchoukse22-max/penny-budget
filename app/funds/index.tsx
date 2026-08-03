@@ -16,7 +16,8 @@ import {
   createFundAccount,
   deleteFundEntry,
   loadFundGrid,
-  seedDefaultFundsIfEmpty,
+  SAMPLE_FUNDS,
+  SAMPLE_FUND_ACCOUNTS,
 } from '../../features/funds';
 import type { Fund, FundAccount, FundEntry } from '../../features/models';
 
@@ -44,7 +45,9 @@ export default function FundsScreen() {
   const [promptDraft, setPromptDraft] = useState('');
 
   const load = useCallback(async () => {
-    await seedDefaultFundsIfEmpty();
+    // No seeding: the grid starts empty on purpose, and the empty state below
+    // shows a sample instead. Seeded defaults were one household's personal
+    // fund names shipped to everyone — see SAMPLE_FUNDS in features/funds.ts.
     // loadFundGrid runs the legacy balance → ledger backfill first, so a phone
     // upgrading with money already in the grid never sees it as zero.
     const data = await loadFundGrid();
@@ -134,13 +137,48 @@ export default function FundsScreen() {
       </View>
 
       {isEmpty ? (
-        <View style={styles.empty}>
-          <Ionicons name="grid-outline" size={40} color={theme.tertiaryLabel} />
-          <Text style={[styles.emptyTitle, { color: theme.label }]}>No funds yet</Text>
+        <ScrollView contentContainerStyle={styles.empty} showsVerticalScrollIndicator={false}>
+          <Text style={[styles.emptyTitle, { color: theme.label }]}>Your funds, your names</Text>
           <Text style={[styles.emptyBody, { color: theme.secondaryLabel }]}>
-            Add a fund for each savings bucket, and an account for each place you hold money.
+            A fund is a savings bucket (a row). An account is where the money actually sits (a column). Here's the idea:
           </Text>
-        </View>
+
+          {/* A SAMPLE, not data: rendered from constants, never written to the
+              database, and visibly labelled so nobody hunts for the edit that
+              removes "Emergency". It exists to teach the rows × columns shape,
+              which the sentence above can't do on its own. */}
+          <View style={[styles.sampleCard, { backgroundColor: theme.card, borderColor: theme.separator }]}>
+            <Text style={[styles.sampleBadge, { color: theme.tertiaryLabel }]}>SAMPLE</Text>
+            <View style={styles.sampleRow}>
+              <Text style={[styles.sampleHead, { color: theme.tertiaryLabel, textAlign: 'left' }]}>Fund</Text>
+              {SAMPLE_FUND_ACCOUNTS.map((a) => (
+                <Text key={a} style={[styles.sampleHead, { color: theme.tertiaryLabel }]}>{a}</Text>
+              ))}
+            </View>
+            {SAMPLE_FUNDS.map((f, row) => (
+              <View key={f} style={[styles.sampleRow, { borderTopColor: theme.separator, borderTopWidth: StyleSheet.hairlineWidth }]}>
+                <Text style={[styles.sampleCell, { color: theme.secondaryLabel, textAlign: 'left', fontWeight: '600' }]}>{f}</Text>
+                {SAMPLE_FUND_ACCOUNTS.map((a, col) => (
+                  <Text key={a} style={[styles.sampleCell, { color: theme.tertiaryLabel }]}>
+                    {row === 0 && col === 0 ? '$500' : row === 1 && col === 1 ? '$120' : '—'}
+                  </Text>
+                ))}
+              </View>
+            ))}
+          </View>
+
+          <PressableScale
+            haptic
+            onPress={() => openPrompt('fund')}
+            style={[styles.emptyCta, { backgroundColor: theme.accent }]}
+          >
+            <Ionicons name="add" size={18} color="#FFFFFF" />
+            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Add your first fund</Text>
+          </PressableScale>
+          <Text style={[styles.emptyBody, { color: theme.tertiaryLabel, fontSize: 12 }]}>
+            Nothing is added until you do it — name things whatever makes sense to you.
+          </Text>
+        </ScrollView>
       ) : (
         <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
           <View style={styles.table}>
@@ -376,9 +414,31 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderRadius: radius.md,
   },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.sm },
+  empty: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.md },
   emptyTitle: { fontSize: 20, fontWeight: '700', marginTop: spacing.md },
   emptyBody: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  sampleCard: {
+    alignSelf: 'stretch',
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    gap: 0,
+  },
+  sampleBadge: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: spacing.sm },
+  sampleRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9 },
+  sampleHead: { flex: 1, fontSize: 11, fontWeight: '700', textAlign: 'right' },
+  sampleCell: { flex: 1, fontSize: 13, textAlign: 'right' },
+  emptyCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radius.pill,
+    marginTop: spacing.sm,
+  },
   promptBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   promptCard: { width: '100%', maxWidth: 380, borderRadius: radius.lg, padding: spacing.xl, gap: spacing.sm },
   promptInput: { padding: spacing.md, borderRadius: radius.sm, fontSize: 15, marginTop: spacing.sm },

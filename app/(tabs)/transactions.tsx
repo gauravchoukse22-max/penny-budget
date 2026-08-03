@@ -8,7 +8,8 @@ import { useTheme, spacing, radius, type } from '../../theme/colors';
 import { TransactionRow } from '../../components/TransactionRow';
 import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { CategoryIcon } from '../../components/CategoryIcon';
-import { formatDayLabel } from '../../lib/format';
+import { MonthSwitcher } from '../../components/MonthSwitcher';
+import { formatDayLabel, formatMonthLabel } from '../../lib/format';
 import { bulkUpdateCategory, bulkUpdateCard, bulkDeleteTransactions } from '../../features/bulk-actions';
 import { confirmAction } from '../../lib/confirm';
 import type { Category, Transaction } from '../../lib/models';
@@ -27,7 +28,7 @@ const ALL_CATEGORIES: CategoryFilter = { kind: 'all' };
 export default function TransactionsScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { transactions, categories, cards, settings, removeTransaction, refresh } = useBudget();
+  const { transactions, categories, cards, settings, selectedMonth, removeTransaction, refresh } = useBudget();
 
   const [search, setSearch] = useState('');
   const [cardFilter, setCardFilter] = useState<string | null>(null);
@@ -162,6 +163,11 @@ export default function TransactionsScreen() {
         </View>
       )}
 
+      {/* Hidden in select mode: the header above has already become a selection
+          toolbar, and changing month mid-selection would leave the user holding
+          ids they can no longer see. */}
+      {!selectMode && <MonthSwitcher style={styles.monthSwitcher} />}
+
       <View style={[styles.searchBox, { backgroundColor: theme.fieldBackground }]}>
         <Ionicons name="search" size={16} color={theme.tertiaryLabel} />
         <TextInput
@@ -263,7 +269,9 @@ export default function TransactionsScreen() {
           // way out right here.
           <View style={styles.emptyState}>
             <Text style={{ color: theme.tertiaryLabel, textAlign: 'center' }}>
-              {filtersActive || search.trim() ? 'No transactions match these filters' : 'No transactions yet'}
+              {filtersActive || search.trim()
+                ? `No transactions match these filters in ${formatMonthLabel(selectedMonth)}`
+                : `No transactions in ${formatMonthLabel(selectedMonth)}`}
             </Text>
             {filtersActive && (
               <Pressable onPress={clearFilters} hitSlop={8} accessibilityRole="button">
@@ -426,6 +434,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
   },
+  monthSwitcher: { marginTop: spacing.xs, marginHorizontal: spacing.lg },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
