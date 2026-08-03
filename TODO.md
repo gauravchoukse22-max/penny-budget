@@ -90,15 +90,19 @@ it used to turn every later purchase into a credit.
 Fixtures went 53 → 77, one per real issuer layout, plus the exact multi-table
 Chase document that failed. `tsc --noEmit` clean.
 
-**NOT yet verified against Gary's actual Chase PDF** — that is the only test
-that counts, and it is the one both previous fixes skipped. New tool for it:
+**Also added the same day:** when an export carries the issuer's own category
+column (Chase/Discover/Capital One/Apple Card CSVs do), the importer now uses
+it in preference to the smart categorizer, translated into the user's own
+categories by `lib/statement-categories.ts` (alias table: "Food & Drink" →
+Dining, "Gasoline" → Gas, …). No match → guesser, never a wrong category.
 
-```
-node scripts/check-statement-pdf.mjs ~/Downloads/statement.pdf --lines
-```
-
-Reads one local file, prints exactly what would be imported, masks amounts and
-merchant names by default. Nothing is uploaded.
+**NOT yet verified against a real statement** — that is the only test that
+counts, and it is the one both previous fixes skipped. Gary declined to provide
+the file, so the verification IS his next in-app import from the next build.
+When he reports back: if it still imports zero, get the exact dialog text — it
+now names which check failed and quotes a line. For local diagnosis if a PDF is
+ever available: `node scripts/check-statement-pdf.mjs <file> --lines` (runs
+entirely on the Mac, masks amounts/merchants by default).
 
 ### Fixed 2026-08-03: PDF statements imported ZERO rows
 Separate bug from the crash, and only visible once the crash was gone: Gary's
