@@ -9,6 +9,8 @@ import { DatePickerField } from '../../components/DatePickerField';
 import { confirmAction } from '../../lib/confirm';
 import { currencySymbol } from '../../lib/format';
 import { parseMoneyInput } from '../../lib/parse-number';
+import { getTransactionById } from '../../lib/queries';
+import type { Transaction } from '../../lib/models';
 
 // Matches the add-transaction screen so both screens' buttons are the same
 // size; 52 clears Apple's 44pt minimum tap target.
@@ -20,7 +22,31 @@ export default function EditTransactionScreen() {
   const router = useRouter();
   const { transactions, categories, cards, settings, editTransaction, removeTransaction } = useBudget();
 
-  const transaction = transactions.find((t) => t.id === id);
+  // The context only holds the SELECTED month. Search spans every month, so
+  // opening one of its results used to hit "Transaction not found" for a row
+  // that plainly existed and was listed a tap earlier. Fall back to reading it
+  // straight from the database by id.
+  const inSelectedMonth = transactions.find((t) => t.id === id) ?? null;
+  const [fetched, setFetched] = useState<Transaction | null>(null);
+  const [lookingUp, setLookingUp] = useState(false);
+
+  useEffect(() => {
+    if (inSelectedMonth || !id) return;
+    let alive = true;
+    setLookingUp(true);
+    getTransactionById(id)
+      .then((t) => {
+        if (alive) setFetched(t);
+      })
+      .finally(() => {
+        if (alive) setLookingUp(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id, inSelectedMonth]);
+
+  const transaction = inSelectedMonth ?? fetched;
 
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -43,7 +69,9 @@ export default function EditTransactionScreen() {
   if (!transaction) {
     return (
       <View style={[styles.content, { backgroundColor: theme.groupedBackground }]}>
-        <Text style={{ color: theme.tertiaryLabel }}>Transaction not found</Text>
+        <Text style={{ color: theme.tertiaryLabel }}>
+          {lookingUp ? 'Loading…' : 'This transaction no longer exists — it may have been deleted.'}
+        </Text>
       </View>
     );
   }

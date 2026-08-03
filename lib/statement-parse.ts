@@ -232,35 +232,95 @@ function toIso(year: number, month: number, day: number): string | null {
 }
 
 /**
- * Converts one date cell to YYYY-MM-DD. `order` and `fallbackYear` come from
- * whole-file analysis; `today` is injectable so the harness is deterministic.
+ * Converts one date cell to YYYY-MM-DD. `order` comes from whole-file analysis;
+ * `today` is injectable so the harness is deterministic.
+ *
+ * `anchor` is the statement's CLOSING date (ISO), and it is what decides the
+ * year for a row that didn't state one: the year that puts the charge on or
+ * before the close, which is the only thing a statement can contain. That is
+ * also what makes a December charge on a January statement land in December
+ * rather than eleven months into the future.
  */
 export function parseStatementDate(
   raw: string,
   order: 'month-first' | 'day-first' = 'month-first',
   fallbackYear: number | null = null,
-  today: Date = new Date()
+  today: Date = new Date(),
+  anchor: string | null = null
 ): string | null {
   const parts = splitDate(raw);
   if (!parts) return null;
   const month = order === 'day-first' && parts.b <= 12 ? parts.b : parts.a;
   const day = order === 'day-first' && parts.b <= 12 ? parts.a : parts.b;
-  const year = parts.year ?? fallbackYear ?? inferYear(month, day, today);
-  return toIso(year, month, day);
+
+  if (parts.year != null) return toIso(parts.year, month, day);
+
+  if (anchor) {
+    const anchorYear = parseInt(anchor.slice(0, 4), 10);
+    const sameYear = toIso(anchorYear, month, day);
+    // A charge can't be dated after the statement that lists it, so if this
+    // month/day falls past the closing date it belongs to the year before.
+    if (sameYear && sameYear <= anchor) return sameYear;
+    return toIso(anchorYear - 1, month, day);
+  }
+
+  return toIso(fallbackYear ?? inferYear(month, day, today), month, day);
 }
 
 /**
- * Pulls a four-digit year out of the statement's own text (period lines like
- * "Opening/Closing Date 06/01/26 - 06/30/26" or "Statement Period: June 2026"),
- * so year-less rows get the statement's year instead of a guess from today's
- * date. Returns the LATEST plausible year found.
+ * The statement's CLOSING date, as ISO, read from its own period line.
+ *
+ * This replaces taking the latest year that appears anywhere in the document,
+ * which was wrong in a way that hid the whole import: a statement's fine print
+ * carries forward-looking years — a promotional rate that ends 01/31/27, a
+ * transfer offer expiring next year — and the old rule took the largest one it
+ * found. A June 2026 statement then filed every charge under June 2027, where
+ * nothing in the app would ever show it. The rows imported, and the month they
+ * imported into was a year away.
+ *
+ * Only dates introduced by a period label count, and a due date is explicitly
+ * NOT one: "Payment Due Date 08/05/26" is in the future by design.
  */
-export function findStatementYear(text: string): number | null {
-  const thisYear = new Date().getFullYear();
+const PERIOD_LABEL =
+  /(opening\s*\/?\s*closing\s+date|statement\s+closing\s+date|closing\s+date|close\s+date|statement\s+period|billing\s+(?:cycle|period)|period\s+covered|statement\s+date)\s*:?\s*/gi;
+
+const ANY_DATE =
+  /\b(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s*\d{4})\b/gi;
+
+export function findStatementEndDate(text: string, today: Date = new Date()): string | null {
+  const horizon = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate()) ?? '9999-12-31';
+  const candidates: string[] = [];
+
+  PERIOD_LABEL.lastIndex = 0;
+  for (const label of text.matchAll(PERIOD_LABEL)) {
+    // A period prints as "06/09/26 - 07/08/26"; the closing date is the LAST
+    // date in the short window after the label, not the first.
+    const window = text.slice((label.index ?? 0) + label[0].length, (label.index ?? 0) + label[0].length + 60);
+    const dates = [...window.matchAll(ANY_DATE)].map((d) => d[1]);
+    for (const raw of dates) {
+      const iso = parseStatementDate(raw, 'month-first', null, today);
+      // A statement cannot close in the future — that is fine print, not a period.
+      if (iso && iso <= horizon) candidates.push(iso);
+    }
+  }
+  if (candidates.length === 0) return null;
+  return candidates.sort()[candidates.length - 1];
+}
+
+/**
+ * Back-compatible year accessor: the closing date's year when the statement
+ * states a period, else the latest year that isn't in the future. The old
+ * version allowed `thisYear + 1`, which is how a 2027 in the fine print won.
+ */
+export function findStatementYear(text: string, today: Date = new Date()): number | null {
+  const end = findStatementEndDate(text, today);
+  if (end) return parseInt(end.slice(0, 4), 10);
+
+  const thisYear = today.getFullYear();
   const years = new Set<number>();
   for (const m of text.matchAll(/\b(20\d{2})\b/g)) years.add(parseInt(m[1], 10));
   for (const m of text.matchAll(/\b\d{1,2}[/.-]\d{1,2}[/.-](\d{2})\b/g)) years.add(normalizeYear(m[1]));
-  const plausible = [...years].filter((y) => y >= 2000 && y <= thisYear + 1);
+  const plausible = [...years].filter((y) => y >= 2000 && y <= thisYear);
   if (plausible.length === 0) return null;
   return Math.max(...plausible);
 }
@@ -324,7 +384,7 @@ export function detectSignConvention(amounts: number[]): boolean {
  */
 export function parseStatementRecords(
   records: string[][],
-  opts: { statementYear?: number | null; today?: Date } = {}
+  opts: { statementYear?: number | null; statementEndDate?: string | null; today?: Date } = {}
 ): StatementParseResult | UnrecognizedFormat {
   const today = opts.today ?? new Date();
   const nonEmpty = records.filter((r) => r.some((f) => f.trim().length > 0));
@@ -344,7 +404,13 @@ export function parseStatementRecords(
   const drafts: Draft[] = body.map((fields, i) => {
     let note = (fields[descIdx] ?? '').trim();
     const category = categoryIdx !== -1 ? (fields[categoryIdx] ?? '').trim() : '';
-    const date = parseStatementDate(fields[dateIdx] ?? '', dateOrder, opts.statementYear ?? null, today);
+    const date = parseStatementDate(
+      fields[dateIdx] ?? '',
+      dateOrder,
+      opts.statementYear ?? null,
+      today,
+      opts.statementEndDate ?? null
+    );
 
     let amount: number | null = null;
     let fromDebitCredit = false;
@@ -418,19 +484,22 @@ export function parseStatementRecords(
     });
   }
 
-  if (opts.statementYear == null) {
-    usedInferredYear = body.some((f) => {
-      const parts = splitDate(f[dateIdx] ?? '');
-      return parts !== null && parts.year === null;
-    });
-  }
+  const anyYearless = body.some((f) => {
+    const parts = splitDate(f[dateIdx] ?? '');
+    return parts !== null && parts.year === null;
+  });
+  usedInferredYear = anyYearless && opts.statementYear == null && !opts.statementEndDate;
+
+  const anchorYear = opts.statementEndDate ? parseInt(opts.statementEndDate.slice(0, 4), 10) : null;
 
   return {
     rows,
     skipped,
     signFlipped,
     dateOrder,
-    inferredYear: opts.statementYear ?? (usedInferredYear ? today.getFullYear() : null),
+    inferredYear: anyYearless
+      ? (anchorYear ?? opts.statementYear ?? (usedInferredYear ? today.getFullYear() : null))
+      : null,
     headerLine: header.line + 1,
   };
 }

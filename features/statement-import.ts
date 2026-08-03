@@ -9,6 +9,7 @@ import { suggestCategory } from './smart-categorizer';
 import {
   parseStatementRecords,
   findStatementYear,
+  findStatementEndDate,
   type ParsedStatementRow,
   type StatementParseResult,
 } from '../lib/statement-parse';
@@ -90,6 +91,10 @@ export async function pickAndParseStatement(): Promise<StatementPickResult> {
 
   let records: string[][];
   let statementYear: number | null;
+  // The statement's closing date: what decides the year of every row that
+  // doesn't carry one, and what keeps a December charge on a January statement
+  // in December.
+  let statementEndDate: string | null = null;
   if (looksLikePdf(asset)) {
     // PDF path: positioned text runs -> row/column matrix (lib/pdf-layout),
     // then the SAME interpreter as CSV, so both formats share year inference,
@@ -99,6 +104,7 @@ export async function pickAndParseStatement(): Promise<StatementPickResult> {
     if ('pdfUnsupported' in extracted) return extracted;
     records = documentToRecords(extracted.pages);
     statementYear = findStatementYear(extracted.fullText);
+    statementEndDate = findStatementEndDate(extracted.fullText);
     if (records.length <= 1) {
       // Nothing in the document looked like a transaction. The user needs to
       // know which of the two very different causes it was, because only one of
@@ -114,8 +120,9 @@ export async function pickAndParseStatement(): Promise<StatementPickResult> {
     const content = await readPickedFileAsText(asset);
     records = parseCsv(content);
     statementYear = findStatementYear(content);
+    statementEndDate = findStatementEndDate(content);
   }
-  const parsed = parseStatementRecords(records, { statementYear });
+  const parsed = parseStatementRecords(records, { statementYear, statementEndDate });
 
   if ('unrecognizedFormat' in parsed) return { unrecognizedFormat: true };
 

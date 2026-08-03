@@ -570,6 +570,18 @@ export async function listTransactionsForMonth(yearMonth: string): Promise<Trans
   ]);
 }
 
+/**
+ * One transaction by id, from ANY month.
+ *
+ * The context only ever holds the selected month, so a screen that looked a
+ * transaction up there showed "Transaction not found" for every result Search
+ * returned from another month — the row was real, listed, and unopenable.
+ */
+export async function getTransactionById(id: string): Promise<Transaction | null> {
+  const db = await getDb();
+  return (await db.getFirstAsync<Transaction>('SELECT * FROM transactions WHERE id = ?', [id])) ?? null;
+}
+
 export async function listUncategorizedTransactions(): Promise<Transaction[]> {
   const db = await getDb();
   return db.getAllAsync<Transaction>('SELECT * FROM transactions WHERE categoryId IS NULL ORDER BY date DESC');

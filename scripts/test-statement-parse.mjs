@@ -19,7 +19,7 @@ const root = join(__dirname, '..');
 
 const { parseCsv } = await import(await transform(join(root, 'lib/csv.ts'), ['expo-document-picker', './queries', './particulars', './files', './models', './parse-number']));
 const parse = await import(await transform(join(root, 'lib/statement-parse.ts'), []));
-const { parseStatementRecords, parseStatementAmount, parseStatementDate, detectDateOrder, detectSignConvention, findStatementYear, extractTrailingAmount } = parse;
+const { parseStatementRecords, parseStatementAmount, parseStatementDate, detectDateOrder, detectSignConvention, findStatementYear, findStatementEndDate, extractTrailingAmount } = parse;
 const linesUrl = await transform(join(root, 'lib/statement-lines.ts'), []);
 const statementLines = await import(linesUrl);
 const { readStatementLine, linesToRecords, sectionSignFor, hasTrailingBalanceColumn } = statementLines;
@@ -614,6 +614,71 @@ eq(hasTrailingBalanceColumn([
   '06/05 TRANSFER 200.00',
   '06/08 SPOTIFY 11.99',
 ]), false, 'no balance column on a normal card statement');
+
+// ══ THE YEAR: read the closing date, never the biggest year on the page ══
+// A statement's fine print is full of forward-looking years — a promotional
+// APR that ends in 2027, a balance-transfer offer expiring next year. Taking
+// the LATEST year found anywhere filed a June 2026 statement's charges under
+// June 2027, a month no screen in the app would ever show. The rows imported
+// and vanished, which is indistinguishable from an import that did nothing.
+const CHASE_FINE_PRINT = [
+  'CHASE FREEDOM UNLIMITED',
+  'Opening/Closing Date 06/09/26 - 07/08/26',
+  'Payment Due Date 08/05/26',
+  'Minimum Payment Due $35.00',
+  'Your 0% introductory APR on balance transfers ends 01/31/27.',
+  'After that, your standard variable APR of 24.99% applies.',
+  'Offer expires 12/31/2027. See back for details.',
+  '2026 Totals Year-to-Date',
+].join('\n');
+
+eq(findStatementEndDate(CHASE_FINE_PRINT, TODAY), '2026-07-08',
+  'year: closing date comes from the period line');
+eq(findStatementYear(CHASE_FINE_PRINT, TODAY), 2026,
+  'year: 2027 in the fine print does NOT win over the closing date');
+eq(findStatementEndDate('Payment Due Date 08/05/26\nOffer ends 12/31/2027', TODAY), null,
+  'year: a due date is not a period, and neither is an offer expiry');
+eq(findStatementYear('Payment Due Date 08/05/26\nOffer ends 12/31/2027', TODAY), 2026,
+  'year: with no period line, a future year is still refused');
+eq(findStatementEndDate('Statement Period 06/01/2026 to 06/30/2026', TODAY), '2026-06-30',
+  'year: "Statement Period ... to ..." takes the end, not the start');
+eq(findStatementEndDate('Open Date: Jun 9, 2026 Close Date: Jul 8, 2026', TODAY), '2026-07-08',
+  'year: month-name close date');
+eq(findStatementEndDate('Billing Cycle 12/09/25 - 01/08/26', TODAY), '2026-01-08',
+  'year: cycle spanning a year boundary ends in the new year');
+
+// The whole document, end to end: charges land in 2026 despite the 2027s.
+runLines('year: a June statement with 2027 in the fine print imports into June 2026', [
+  ...CHASE_FINE_PRINT.split('\n'),
+  'PURCHASE',
+  '06/14 AMAZON.COM*RT4G61OI3 AMZN.COM/BILL WA 42.19',
+  '07/01 PUBLIX SUPER MAR HUNTSVILLE AL 132.44',
+], [
+  { date: '2026-06-14', note: 'AMAZON.COM*RT4G61OI3 AMZN.COM/BILL WA', amount: 42.19 },
+  { date: '2026-07-01', note: 'PUBLIX SUPER MAR HUNTSVILLE AL', amount: 132.44 },
+], { statementEndDate: findStatementEndDate(CHASE_FINE_PRINT, TODAY) });
+
+// A cycle that crosses New Year: each row gets the year that puts it on or
+// before the close, so December stays in December instead of jumping forward.
+runLines('year: December charges on a January statement stay in December', [
+  'Billing Cycle 12/09/25 - 01/08/26',
+  'PURCHASE',
+  '12/11 AMAZON.COM AMZN.COM/BILL WA 61.20',
+  '12/24 TARGET.COM * HUNTSVILLE AL 148.03',
+  '01/03 KROGER #0442 HUNTSVILLE AL 84.55',
+], [
+  { date: '2025-12-11', note: 'AMAZON.COM AMZN.COM/BILL WA', amount: 61.2 },
+  { date: '2025-12-24', note: 'TARGET.COM * HUNTSVILLE AL', amount: 148.03 },
+  { date: '2026-01-03', note: 'KROGER #0442 HUNTSVILLE AL', amount: 84.55 },
+], { statementEndDate: '2026-01-08' });
+
+// A row that states its own year is never second-guessed by the anchor.
+eq(parseStatementDate('06/14/2024', 'month-first', null, TODAY, '2026-07-08'), '2024-06-14',
+  'year: an explicit year on the row wins over the closing date');
+eq(parseStatementDate('06/14', 'month-first', null, TODAY, '2026-07-08'), '2026-06-14',
+  'year: year-less row takes the closing date’s year');
+eq(parseStatementDate('12/28', 'month-first', null, TODAY, '2026-01-08'), '2025-12-28',
+  'year: year-less row past the close belongs to the year before');
 
 // ══ Issuer CSV exports: the statement's own category comes through ═══
 // These are the real header layouts each bank's "Download CSV" produces. When

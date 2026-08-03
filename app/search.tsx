@@ -100,20 +100,39 @@ export default function SearchScreen() {
           </Pressable>
         )}
         {picking && (
-          <DateTimePicker
-            value={new Date((picking === 'start' ? startDate : endDate) ? `${picking === 'start' ? startDate : endDate}T00:00:00` : Date.now())}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'inline' : 'default'}
-            onChange={(_, selected) => {
-              const which = picking;
-              setPicking(Platform.OS === 'ios' ? picking : null);
-              if (selected) {
-                if (which === 'start') setStartDate(isoOf(selected));
-                else setEndDate(isoOf(selected));
-              }
-              if (Platform.OS === 'ios') setPicking(null);
-            }}
-          />
+          <View>
+            <DateTimePicker
+              value={new Date((picking === 'start' ? startDate : endDate) ? `${picking === 'start' ? startDate : endDate}T00:00:00` : Date.now())}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              onChange={(event, selected) => {
+                if (Platform.OS === 'android') {
+                  // Android's picker is a modal dialog that reports one
+                  // outcome — set or dismissed — so it closes either way.
+                  const which = picking;
+                  setPicking(null);
+                  if (event.type === 'set' && selected) {
+                    if (which === 'start') setStartDate(isoOf(selected));
+                    else setEndDate(isoOf(selected));
+                  }
+                  return;
+                }
+                // iOS's inline calendar fires onChange for every interaction,
+                // paging between months included. Closing the picker here — as
+                // this did — meant it vanished the moment you changed month and
+                // there was no way to reach a day. It now stays open until Done.
+                if (selected) {
+                  if (picking === 'start') setStartDate(isoOf(selected));
+                  else setEndDate(isoOf(selected));
+                }
+              }}
+            />
+            {Platform.OS === 'ios' && (
+              <Pressable style={styles.pickerDone} onPress={() => setPicking(null)} hitSlop={8}>
+                <Text style={{ color: theme.accent, fontWeight: '600' }}>Done</Text>
+              </Pressable>
+            )}
+          </View>
         )}
 
         <Text style={[styles.fieldLabel, { color: theme.secondaryLabel }]}>Category</Text>
@@ -184,6 +203,7 @@ const styles = StyleSheet.create({
   inlineRow: { flexDirection: 'row', gap: 10 },
   flex1: { flex: 1 },
   dateBox: { padding: 12, borderRadius: radius.sm, marginBottom: 10 },
+  pickerDone: { alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 4, marginBottom: 6 },
   fieldLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4, marginBottom: 8 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 6 },
   chip: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.md },
