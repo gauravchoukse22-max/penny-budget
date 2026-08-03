@@ -56,11 +56,20 @@ export default function InsightsScreen() {
   const categoryById = new Map(categories.map((c) => [c.id, c]));
 
   // ── Cash flow + savings rate (the headline numbers) ──────────────────────
+  // `net` must be the SAME number Home calls "Left to spend", which is
+  // salary − spend − savings you have ticked as transferred. This screen used
+  // to compute income − spend and ignore the transfers entirely, so the two
+  // tabs disagreed about the same month and neither said why.
   const income = surplus.salary;
   const spent = surplus.spend;
-  const net = income - spent;
+  const saved = surplus.savings;
+  const net = surplus.surplus;
   const hasIncome = income > 0;
-  const savingsRate = hasIncome ? Math.round((net / income) * 100) : null;
+  // A savings rate is the share of income you actually put away — the goals
+  // ticked off on Budget. It was previously (income − spend) / income, which
+  // is the leftover rate: it called money still sitting in the account
+  // "saved", and it moved when a transfer was ticked in the wrong direction.
+  const savingsRate = hasIncome ? Math.round((saved / income) * 100) : null;
   const netColor = !hasIncome ? theme.label : net >= 0 ? theme.positiveMuted : theme.negativeMuted;
 
   // ── Spend trend delta vs 6-month average ─────────────────────────────────
@@ -136,7 +145,9 @@ export default function InsightsScreen() {
                 on the screen the caption is read as a claim about which month
                 the number covers, and on any past month that claim was wrong. */}
             {hasIncome
-              ? `Income minus spending in ${formatMonthLabel(selectedMonth)}`
+              ? saved > 0
+                ? `Income minus spending and savings transferred in ${formatMonthLabel(selectedMonth)}`
+                : `Income minus spending in ${formatMonthLabel(selectedMonth)}`
               : `Spending in ${formatMonthLabel(selectedMonth)} — set income to see net cash flow`}
           </Text>
 
@@ -149,6 +160,10 @@ export default function InsightsScreen() {
             <View style={[styles.trioSep, { backgroundColor: theme.separator }]} />
             <StatCell label="Spent">
               <AmountText amount={spent} currency={settings.currency} size={16} weight="semibold" color={theme.label} />
+            </StatCell>
+            <View style={[styles.trioSep, { backgroundColor: theme.separator }]} />
+            <StatCell label="Saved">
+              <AmountText amount={saved} currency={settings.currency} size={16} weight="semibold" color={theme.label} />
             </StatCell>
             <View style={[styles.trioSep, { backgroundColor: theme.separator }]} />
             <StatCell label="Savings Rate">
@@ -392,7 +407,9 @@ const styles = StyleSheet.create({
   divider: { height: StyleSheet.hairlineWidth, marginVertical: spacing.lg },
   statTrio: { flexDirection: 'row', alignItems: 'center' },
   statCell: { flex: 1 },
-  trioSep: { width: StyleSheet.hairlineWidth, height: 30, marginHorizontal: spacing.md },
+  // Four cells now instead of three (Saved joined Income/Spent/Savings Rate),
+  // so the gap between them tightens to keep the row on one line on a small phone.
+  trioSep: { width: StyleSheet.hairlineWidth, height: 30, marginHorizontal: spacing.sm },
   trioValue: { fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums'] },
 
   trendFooter: {
