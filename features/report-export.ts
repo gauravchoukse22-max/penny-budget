@@ -209,6 +209,27 @@ async function loadMonthlyReportData(yearMonth: string): Promise<MonthlyReportDa
  * it throws. Everything below is wrapped so an unlinked module produces a
  * friendly "after the next update" notice instead of a red-screen crash.
  */
+/**
+ * Copy a generated temp file next to itself under a human-readable name, and
+ * return the new uri. Purely cosmetic — if anything about the copy fails we
+ * hand back the original uri so the export still happens, just ugly-named.
+ */
+async function renameForSharing(uri: string, filename: string): Promise<string> {
+  try {
+    const FileSystem = require('expo-file-system/legacy');
+    const dir = FileSystem.cacheDirectory;
+    if (!dir) return uri;
+    // Slashes and colons would break the path (and Files' display name).
+    const safe = filename.replace(/[/\\:]/g, '-');
+    const target = dir + encodeURIComponent(safe);
+    await FileSystem.deleteAsync(target, { idempotent: true });
+    await FileSystem.copyAsync({ from: uri, to: target });
+    return target;
+  } catch {
+    return uri;
+  }
+}
+
 export async function exportMonthlyReportPdf(yearMonth: string): Promise<void> {
   const html = generateMonthlyReportHtml(yearMonth, await loadMonthlyReportData(yearMonth));
 
@@ -233,8 +254,12 @@ export async function exportMonthlyReportPdf(yearMonth: string): Promise<void> {
 
   try {
     const { uri } = await printToFileAsync({ html });
+    // printToFileAsync names the file with a bare UUID, which is what the share
+    // sheet shows and what "Save to Files" writes to disk. Rename it to
+    // something a person can find later ("Penny Budget - August 2026.pdf").
+    const shareUri = await renameForSharing(uri, `Penny Budget - ${formatMonthLabel(yearMonth)}.pdf`);
     if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(uri, {
+      await Sharing.shareAsync(shareUri, {
         mimeType: 'application/pdf',
         dialogTitle: 'Monthly Report',
         UTI: 'com.adobe.pdf',

@@ -11,13 +11,16 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 
 ## Gary only
 
-- [ ] **Upload a build to TestFlight.** Xcode Organizer → Distribute App →
+- [ ] **Upload build 19 to TestFlight.** Xcode Organizer → Distribute App →
       App Store Connect → Upload. Needs his Apple ID, so it can never be
       automated. **Pick the archive by its explicit name**, never by the version
-      string: Organizer shows 13, 14, 15, 16, 17 and 18 all as plain "1.2.0 (n)".
-      **1.2.0 (18)** is the newest built and carries the statement-importer fix
-      Disha is waiting on; **19 will supersede it** once the batch above is
-      verified, so if 19 exists, upload 19 instead.
+      string: Organizer shows 13–19 all as plain "1.2.0 (n)". The one to upload
+      is named **"PennyBudget 1.2.0 (19)"** (archived 2026-08-04). It supersedes
+      18 — it has the statement-importer fix Disha is waiting on PLUS the whole
+      2026-08-03/04 batch, and it is the first build where PDF export and bill
+      reminders actually work (their native modules were missing from 18).
+      Local signing only has an Apple Development cert; Organizer will create
+      the distribution cert on first upload — that is expected, not an error.
 - [ ] **Delete the stale June 2027 transactions**, then re-import the Chase
       statement. The first import filed them a year ahead (the year bug, fixed in
       18). On the new build: tap the month name → year arrow to 2027 → June will
@@ -36,19 +39,37 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 ## Claude
 
 ### Next — START HERE in a fresh session
-- [ ] **Verify the 2026-08-03/04 batch on the simulator, then cut iOS 19 /
-      Android vc13.** SEVEN screens changed and NONE has rendered anywhere:
-      Home (A+ hero), Add Transaction (chips), Cards (rows), Budget (ledger),
-      Insights (Review Night + Edit sheet), Settings (hub, currency picker,
-      three new links), Card detail (Edit/Save mode) — plus two brand-new
-      screens, Net Worth and Bill Calendar. Every item is detailed in "Verified
-      only by typecheck" below. Order: build for simulator → walk each screen →
-      fix what looks wrong → bump to 19/vc13 in app.json + build.gradle +
-      ios/PennyBudget/Info.plist → archive + gradle → verify signing and that
-      the compiled bundle contains the new code → hand Gary the archive name.
-      **The native build is also what finally links expo-print,
-      expo-notifications and expo-system-ui**, so PDF export, bill reminders and
-      Android dark mode only start working from this build onward.
+- [ ] **Cut Android vc13.** iOS 19 is done (archived 2026-08-04, see Gary's
+      list); Android is still on vc12 and has none of the 2026-08-03/04 batch.
+      Bump `versionCode` in BOTH `app.json` and `android/app/build.gradle`, then
+      build from `android/` WITHOUT prebuild (it wipes the signing config) —
+      recipe is in the android memory note. Verify the AAB's SHA-1 and
+      versionCode before handing it over.
+
+### Done 2026-08-04: the 2026-08-03/04 batch is verified and iOS 19 is archived
+Walked on the iPhone 17 Pro Max simulator against a Release build (embedded
+bundle, not Metro): onboarding all 5 steps, Home (A+ hero), Budget (allocation
+ledger), Settings (hub + three new links), Insights, Net Worth and Bill
+Calendar all render correctly with sane empty states.
+
+**The batch would have shipped half-dead.** `expo-print`, `expo-notifications`
+and `expo-system-ui` were in `package.json` but had **never been `pod install`ed**
+— absent from `ios/Podfile.lock` and from the compiled binary. Build 18 and any
+19 cut without this fix would have had PDF export and bill reminders silently
+unavailable, exactly the failure their own fallback copy describes. Fixed with
+`pod install` (needs `LANG=en_US.UTF-8` or CocoaPods 1.17 throws an ASCII-8BIT
+Unicode error). Both features then verified live: the notification permission
+prompt appears and the reminders switch sticks ON; the PDF exports at 23 KB and
+opens the share sheet.
+
+**Also fixed:** the exported PDF was named with a bare UUID, so "Save to Files"
+wrote an unfindable file. `features/report-export.ts` now copies it to
+"Penny Budget - August 2026.pdf" before sharing (cosmetic-only, falls back to
+the original uri on any failure). Verified in the share sheet.
+
+Still unwalked, no evidence either way: Add Transaction chips, Cards rows,
+Card detail Edit/Save, Insights "Review Night" (its string isn't in the bundle —
+check whether that feature actually landed).
 - [ ] **Disha rejoins with Replace** — the flow exists now; walk them through it.
       That is what clears her duplicate categories and cards in one action. She
       should back up first (Settings → Backup), since Replace discards whatever
