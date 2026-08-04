@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.gary.pennybudget",
-      "buildNumber": "21",
+      "buildNumber": "22",
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -26,7 +26,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 13,
+      "versionCode": 14,
       "blockedPermissions": [
         "android.permission.READ_MEDIA_IMAGES"
       ]

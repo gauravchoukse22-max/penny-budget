@@ -11,12 +11,13 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 
 ## Gary only
 
-- [ ] **Upload build 21 to TestFlight.** Xcode Organizer → Distribute App →
+- [ ] **Upload build 22 to TestFlight.** Xcode Organizer → Distribute App →
       App Store Connect → Upload. Needs his Apple ID, so it can never be
       automated. **Pick the archive by its explicit name**, never by the version
-      string: Organizer shows 13–21 all as plain "1.2.0 (n)". The one to upload
-      is named **"PennyBudget 1.2.0 (21)"** (archived 2026-08-04). It supersedes
-      19 and 20, neither of which was uploaded.
+      string: Organizer shows 13–22 all as plain "1.2.0 (n)". The one to upload
+      is named **"PennyBudget 1.2.0 (22)"** (archived 2026-08-04). It supersedes
+      19–21, none of which was uploaded; 22 adds the per-order-code fix so
+      learned Amazon rules actually fire on the next import.
       Local signing only has an Apple Development cert; Organizer creates the
       distribution cert on first upload — expected, not an error.
 - [ ] **Delete the stale June 2027 transactions**, then re-import the Chase
@@ -41,13 +42,13 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 Everything on the competitive-gap list is now BUILT. What remains is
 verification and Android.
 
-- [ ] **Walk the screens that have never been run.** Built, typechecked and
-      unit-tested, but never seen working: the import preview (bulk assign +
-      suggestion confirming + rule learning), receipts (see the blocker below),
-      the household Currency section, and the ~75 swept button call sites. The
-      two bugs found in build 21 (tags not persisting on picker close; a null
-      goal target rendering as "funded") were BOTH invisible to types and tests
-      and only turned up by tapping. Assume more of these exist.
+- [ ] **Walk what remains unwalked.** The import preview is now VERIFIED on the
+      simulator (PDF parse → bulk edit → 'remembered 2 merchants' → rules in
+      category_rules), and it caught the per-order-code bug the same day. Still
+      never run: receipts (see the blocker below), the household Currency
+      section (needs two phones), and most of the swept button call sites
+      (Search, Recurring, Funds and the Data section were spot-checked; the
+      account screens and sheets were not).
 - [ ] **expo-image-picker is NOT installed**, so receipts fall back to
       expo-document-picker — on iOS that opens Files, not Photos, and a
       camera-roll photo cannot be attached at all. Adding it is a native module
@@ -56,7 +57,10 @@ verification and Android.
       confined to `pickReceiptAsset()`.
 - [ ] **Two-phone walk for the shared-currency change.** Create → join → change
       currency in both directions. The storage path is typechecked only.
-- [ ] **Cut Android vc13.** Still on vc12 with none of this.
+- [ ] **Gary: upload Android vc14 to Play** once the iOS build is up —
+      `~/Developer/penny-budget-builds/PennyBudget-1.2.0-vc14.aab`, signer and
+      versionCode verified. vc13 was cut and superseded before upload, so it was
+      deleted (same rule as vc7: never leave an ambiguous number lying around).
 
 ### Watch out: columns that exist and do nothing
 FOUR features looked shipped because their column was already in the schema and
