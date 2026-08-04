@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useBudget } from '../context/BudgetContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, CATEGORY_PALETTE, spacing, radius } from '../theme/colors';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { KeyboardAwareScreen } from '../components/KeyboardAwareScreen';
+import { Button, Chip } from '../components/Button';
 import { parseMoneyInput } from '../lib/parse-number';
 import { formatCurrency } from '../lib/format';
 
@@ -139,13 +140,7 @@ export default function SetupWizard() {
             <Text style={[styles.helper, { color: theme.secondaryLabel }]}>Pick your currency. You can change this later in Settings.</Text>
             <View style={styles.row}>
               {CURRENCIES.map((cur) => (
-                <Pressable
-                  key={cur}
-                  onPress={() => setCurrency(cur)}
-                  style={[styles.chip, { backgroundColor: currency === cur ? theme.accent : theme.fieldBackground }]}
-                >
-                  <Text style={{ color: currency === cur ? '#FFFFFF' : theme.secondaryLabel, fontWeight: '700' }}>{cur}</Text>
-                </Pressable>
+                <Chip key={cur} label={cur} selected={currency === cur} onPress={() => setCurrency(cur)} />
               ))}
             </View>
           </View>
@@ -171,16 +166,23 @@ export default function SetupWizard() {
                   color={theme.label}
                   onCommit={(value) => editCategory(c.id, { monthlyLimit: value })}
                 />
-                <Pressable onPress={() => removeCategory(c.id)}>
-                  <Text style={{ color: theme.systemRed }}>Remove</Text>
-                </Pressable>
+                <Button
+                  label="Remove"
+                  onPress={() => removeCategory(c.id)}
+                  variant="destructive"
+                  size="sm"
+                  accessibilityLabel={`Remove category ${c.name}`}
+                />
               </View>
             ))}
-            <Pressable
+            <Button
+              label="Add Category"
+              icon="add"
+              variant="ghost"
+              size="sm"
+              style={styles.inlineAction}
               onPress={() => addCategory({ name: 'New Category', icon: 'ellipsis-horizontal-circle', color: CATEGORY_PALETTE[categories.length % CATEGORY_PALETTE.length], monthlyLimit: 100 })}
-            >
-              <Text style={{ color: theme.accent, marginTop: 8 }}>+ Add Category</Text>
-            </Pressable>
+            />
           </View>
         )}
 
@@ -188,12 +190,8 @@ export default function SetupWizard() {
           <View style={styles.section}>
             <Text style={[styles.helper, { color: theme.secondaryLabel }]}>Is your salary the same every month, or does it vary?</Text>
             <View style={styles.row}>
-              <Pressable style={[styles.chip, { backgroundColor: salaryMode === 'fixed' ? theme.accent : theme.fieldBackground }]} onPress={() => setSalaryMode('fixed')}>
-                <Text style={{ color: salaryMode === 'fixed' ? '#FFFFFF' : theme.secondaryLabel, fontWeight: '700' }}>Fixed amount</Text>
-              </Pressable>
-              <Pressable style={[styles.chip, { backgroundColor: salaryMode === 'variable' ? theme.accent : theme.fieldBackground }]} onPress={() => setSalaryMode('variable')}>
-                <Text style={{ color: salaryMode === 'variable' ? '#FFFFFF' : theme.secondaryLabel, fontWeight: '700' }}>Enter each month</Text>
-              </Pressable>
+              <Chip label="Fixed amount" selected={salaryMode === 'fixed'} onPress={() => setSalaryMode('fixed')} />
+              <Chip label="Enter each month" selected={salaryMode === 'variable'} onPress={() => setSalaryMode('variable')} />
             </View>
             {salaryMode === 'fixed' && (
               <TextInput
@@ -237,9 +235,7 @@ export default function SetupWizard() {
                 value={goalAmount}
                 onChangeText={setGoalAmount}
               />
-              <Pressable onPress={addGoal}>
-                <Text style={{ color: theme.accent, fontWeight: '600' }}>Add</Text>
-              </Pressable>
+              <Button label="Add" onPress={addGoal} variant="tonal" size="sm" accessibilityLabel="Add savings goal" />
             </View>
             {goalError && <Text style={{ color: theme.systemRed, marginTop: 8 }}>{goalError}</Text>}
             {addedGoalCount > 0 && <Text style={{ color: theme.secondaryLabel, marginTop: 8 }}>{addedGoalCount} goal(s) added</Text>}
@@ -266,9 +262,14 @@ export default function SetupWizard() {
               value={cardLastFour}
               onChangeText={(text) => setCardLastFour(text.replace(/\D/g, ''))}
             />
-            <Pressable onPress={addNewCard}>
-              <Text style={{ color: theme.accent, fontWeight: '600', marginTop: 4 }}>+ Add Card</Text>
-            </Pressable>
+            <Button
+              label="Add Card"
+              icon="add"
+              onPress={addNewCard}
+              variant="tonal"
+              size="sm"
+              style={styles.inlineAction}
+            />
             {cardError && <Text style={{ color: theme.systemRed, marginTop: 8 }}>{cardError}</Text>}
             {addedCardCount > 0 && <Text style={{ color: theme.secondaryLabel, marginTop: 8 }}>{addedCardCount} card(s) added</Text>}
           </View>
@@ -276,14 +277,14 @@ export default function SetupWizard() {
       </KeyboardAwareScreen>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.xl }]}>
-        {step > 0 && (
-          <Pressable style={[styles.button, styles.secondaryButton, { borderColor: theme.accent }]} onPress={back}>
-            <Text style={{ color: theme.accent, fontWeight: '600' }}>Back</Text>
-          </Pressable>
-        )}
-        <Pressable style={[styles.button, { backgroundColor: theme.accent }]} onPress={step === STEPS.length - 1 ? finish : next}>
-          <Text style={{ color: '#FFF', fontWeight: '600' }}>{step === STEPS.length - 1 ? 'Finish' : 'Next'}</Text>
-        </Pressable>
+        {step > 0 && <Button label="Back" onPress={back} variant="glass" size="lg" style={styles.footerButton} />}
+        <Button
+          label={step === STEPS.length - 1 ? 'Finish' : 'Next'}
+          onPress={step === STEPS.length - 1 ? finish : next}
+          variant="primary"
+          size="lg"
+          style={styles.footerButton}
+        />
       </View>
     </View>
   );
@@ -302,7 +303,6 @@ const styles = StyleSheet.create({
   section: { gap: 12 },
   helper: { fontSize: 14, lineHeight: 20 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.md },
   categoryRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
   categoryNameInput: { flex: 1, fontSize: 14 },
   limitInput: { width: 70, padding: 6, borderRadius: radius.sm, textAlign: 'right' },
@@ -311,6 +311,8 @@ const styles = StyleSheet.create({
   goalInput: { flex: 1, padding: 10, borderRadius: radius.sm },
   goalAmountInput: { width: 80, padding: 10, borderRadius: radius.sm },
   footer: { flexDirection: 'row', gap: 12, padding: spacing.xl },
-  button: { flex: 1, paddingVertical: 14, borderRadius: radius.md, alignItems: 'center' },
-  secondaryButton: { borderWidth: 1.5 },
+  footerButton: { flex: 1 },
+  // Inline "add" actions sit left, like the link they replace, instead of
+  // stretching the full width of the column.
+  inlineAction: { alignSelf: 'flex-start' },
 });

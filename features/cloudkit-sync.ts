@@ -124,6 +124,36 @@ export const SYNCABLE_TABLES = new Set([
   // same imported row converge on one set of parts instead of doubling every
   // category total on the second device.
   'transaction_splits',
+  // Settings that describe the shared budget rather than the phone, currency
+  // first (features/shared-settings.ts). Same safety story as assets/liabilities
+  // above, and it is the reason this may ship before both phones update: a
+  // member on a build without this entry has neither the table nor the entry, so
+  // their pull skips these records outright instead of throwing on a table they
+  // do not have. They keep using their own currency until they update, which is
+  // exactly the behaviour they have today.
+  //
+  // Its id is derived from the household id and the setting key, so both members
+  // upsert the SAME row rather than each planting their own and the winner being
+  // whoever pushed last.
+  'shared_settings',
+  // Tags and the transaction↔tag join (features/tags.ts). Same safety story as
+  // the entries above: a member on a build without these skips the records on
+  // pull instead of throwing on tables they do not have.
+  //
+  // Both ids are derived — the tag's from its own name, the join row's from
+  // (transactionId, tagId) — which is what makes the join table safe to sync at
+  // all. With random ids, two phones tagging the same purchase "vacation" would
+  // produce two join rows, and the tag total would silently count that
+  // transaction twice (lib/tags.ts explains the full reasoning).
+  'tags',
+  'transaction_tags',
+  // Refund claims (features/refunds.ts) — the "waiting on $60 back" tracker.
+  // Its own table rather than columns on `transactions` precisely so that a
+  // member on an older build skips it rather than throwing mid-pull on an
+  // unknown column; see the note in features/db-migrations.ts. id is
+  // 'refund-<transactionId>', so both phones marking the same purchase converge
+  // on one claim instead of each adding to the outstanding total.
+  'refund_claims',
 ]);
 
 /**

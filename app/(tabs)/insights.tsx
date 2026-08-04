@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius, type as typeScale } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
-import { Button } from '../../components/Button';
+import { Button, IconButton } from '../../components/Button';
 import { MonthSwitcher } from '../../components/MonthSwitcher';
 import { formatMonthLabel } from '../../lib/format';
 import { exportMonthlyReportPdf } from '../../features/report-export';
@@ -104,16 +104,14 @@ export default function InsightsScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.titleRow}>
           <Text style={[typeScale.title1, { color: theme.label }]}>Insights</Text>
-          <Pressable
+          <Button
+            label="Edit"
+            icon="options-outline"
             onPress={() => setEditOpen(true)}
-            hitSlop={8}
-            style={[styles.editButton, { backgroundColor: theme.fieldBackground }]}
-            accessibilityRole="button"
+            variant="glass"
+            size="sm"
             accessibilityLabel="Customize which insight cards show"
-          >
-            <Ionicons name="options-outline" size={15} color={theme.secondaryLabel} />
-            <Text style={[styles.editText, { color: theme.secondaryLabel }]}>Edit</Text>
-          </Pressable>
+          />
         </View>
         <MonthSwitcher />
 
@@ -188,9 +186,7 @@ function NoticeRow({ text, critical, onDismiss }: { text: string; critical: bool
       <Text style={[styles.noticeText, { color: theme.secondaryLabel }]} numberOfLines={3}>
         {text}
       </Text>
-      <Pressable onPress={onDismiss} hitSlop={10}>
-        <Ionicons name="close" size={16} color={theme.tertiaryLabel} />
-      </Pressable>
+      <IconButton icon="close" onPress={onDismiss} variant="glass" accessibilityLabel="Dismiss this notice" />
     </View>
   );
 }
@@ -200,16 +196,6 @@ const styles = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 60 },
 
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 7,
-    borderRadius: radius.pill,
-  },
-  editText: { fontSize: 13, fontWeight: '600' },
-
   notice: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -665,16 +665,32 @@ function SpendHint({ summary }: { summary: CategorySpendSummary }) {
   const statusColor = summary.status === 'red' ? theme.systemRed : summary.status === 'amber' ? theme.systemAmber : theme.systemGreen;
   const value = settings.hideAmounts ? maskedAmount(settings.currency) : formatCurrency(Math.abs(summary.remaining), settings.currency);
   // No limit yet: there is nothing to be "left" of, so show the spend plainly.
-  if (summary.category.monthlyLimit <= 0) {
+  // A carried balance counts as something to be left of, though — a category
+  // assigned nothing this month but sitting on last month's surplus genuinely
+  // does have money, and calling that "$0 spent" hides it.
+  if (summary.category.monthlyLimit <= 0 && Math.round((summary.carriedOver ?? 0) * 100) === 0) {
     return (
       <Text style={{ color: theme.tertiaryLabel, fontSize: 11 }} numberOfLines={1}>
         {settings.hideAmounts ? maskedAmount(settings.currency) : formatCurrency(summary.spend, settings.currency)} spent
       </Text>
     );
   }
+  // Carry gets its own clause rather than being folded silently into "left":
+  // a category showing more left than it was assigned looks like a bug unless
+  // the row says where the extra came from. Null means rollover is off for this
+  // category, which is different from a zero balance.
+  const carry = summary.carriedOver;
+  const carryText =
+    carry == null || Math.round(carry * 100) === 0
+      ? null
+      : carry > 0
+      ? ` · ${settings.hideAmounts ? maskedAmount(settings.currency) : formatCurrency(carry, settings.currency)} carried in`
+      : ` · ${settings.hideAmounts ? maskedAmount(settings.currency) : formatCurrency(-carry, settings.currency)} carried over from overspend`;
+
   return (
     <Text style={{ color: statusColor, fontSize: 11, fontWeight: '600' }} numberOfLines={1}>
       {summary.remaining < 0 ? `${value} over` : `${value} left`}
+      {carryText ? <Text style={{ color: theme.tertiaryLabel, fontWeight: '500' }}>{carryText}</Text> : null}
     </Text>
   );
 }

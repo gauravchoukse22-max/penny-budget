@@ -161,6 +161,19 @@ export type CategorySpendSummary = {
   remaining: number;
   status: BudgetStatus;
   percent: number; // 0-100+
+  /**
+   * Balance carried in from earlier months, for categories with rollover on.
+   * Null means the category does not roll over at all — distinct from 0, which
+   * means it rolls over and last month came out even. The two are worded
+   * differently on screen.
+   *
+   * Deliberately NOT added to category.monthlyLimit: assigned money comes out
+   * of THIS month's income and the income ledger checks it fits. Folding carry
+   * in would make any month following an underspend read as over-assigned.
+   */
+  carriedOver: number | null;
+  /** monthlyLimit + carriedOver — what is actually spendable this month. */
+  available: number;
 };
 
 export type TrendPoint = {

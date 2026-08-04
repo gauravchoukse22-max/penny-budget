@@ -11,6 +11,7 @@ import {
   CASH_CARD_SORT_ORDER,
 } from './models';
 import { categoryAmounts, splitId, type SplitPart } from './transaction-splits';
+import { rolloversInto, type MonthLedger, type RolloverInput } from './rollover';
 import type {
   AppSettings,
   BudgetStatus,
@@ -821,19 +822,100 @@ export function computeSurplusFrom(
 /** 5.2 + 5.3 Category spend + budget health, sorted worst-to-best. Each
  * category's limit is resolved as of `yearMonth` (see resolveCategoryLimits)
  * so past months keep the budget they actually had, not today's numbers. */
+/**
+ * Carry per category for `yearMonth`, for the categories that roll over.
+ *
+ * Reads the WHOLE transaction history once rather than querying per month.
+ * Rollover is a running sum from the category's first month, so a per-month
+ * query would be one round trip per month per category — a two-year-old budget
+ * with a dozen categories is nearly three hundred queries every time the month
+ * changes.
+ *
+ * Spend is attributed through categoryAmounts(), NOT by grouping
+ * transactions.categoryId in SQL. A split transaction keeps its parent
+ * categoryId for older builds, so the SQL version counts a split under both its
+ * parts and its parent — which is exactly what the previous rollover
+ * implementation did.
+ */
+export async function resolveRollovers(yearMonth: string): Promise<Map<string, number>> {
+  const db = await getDb();
+  const rolloverCategories = await db.getAllAsync<{ id: string }>(
+    'SELECT id FROM categories WHERE rolloverEnabled = 1'
+  );
+  if (rolloverCategories.length === 0) return new Map();
+  const enabled = new Set(rolloverCategories.map((c) => c.id));
+
+  // Every month that has any history at all, earliest first. A category with
+  // no transactions and no budget snapshot has nothing to carry.
+  const monthRows = await db.getAllAsync<{ ym: string }>(
+    `SELECT DISTINCT substr(date, 1, 7) AS ym FROM transactions
+     UNION SELECT DISTINCT yearMonth AS ym FROM category_budgets
+     ORDER BY ym ASC`
+  );
+  const months = monthRows.map((r) => r.ym).filter((ym) => ym < yearMonth);
+  if (months.length === 0) return new Map();
+
+  const [categories, allTransactions] = await Promise.all([listCategories(), listAllTransactions()]);
+
+  // month -> categoryId -> spend
+  const spendByMonth = new Map<string, Map<string, number>>();
+  for (const t of allTransactions) {
+    const ym = t.date.slice(0, 7);
+    if (ym >= yearMonth) continue;
+    let bucket = spendByMonth.get(ym);
+    if (!bucket) {
+      bucket = new Map();
+      spendByMonth.set(ym, bucket);
+    }
+    for (const [categoryId, amount] of categoryAmounts(t)) {
+      if (!categoryId || !enabled.has(categoryId)) continue;
+      bucket.set(categoryId, (bucket.get(categoryId) ?? 0) + amount);
+    }
+  }
+
+  // Assigned per month uses the same carry-forward rule as resolveCategoryLimits:
+  // a snapshot applies from its month until a newer one replaces it.
+  const snapshots = await db.getAllAsync<{ categoryId: string; yearMonth: string; monthlyLimit: number }>(
+    'SELECT categoryId, yearMonth, monthlyLimit FROM category_budgets WHERE yearMonth < ? ORDER BY yearMonth ASC',
+    [yearMonth]
+  );
+  const baseLimit = new Map(categories.map((c) => [c.id, c.monthlyLimit]));
+  const inputs: RolloverInput[] = [];
+  for (const category of categories) {
+    if (!enabled.has(category.id)) continue;
+    const running = new Map<string, number>();
+    let current = baseLimit.get(category.id) ?? 0;
+    const history: MonthLedger[] = [];
+    for (const ym of months) {
+      for (const snap of snapshots) {
+        if (snap.categoryId === category.id && snap.yearMonth === ym) current = snap.monthlyLimit;
+      }
+      running.set(ym, current);
+      history.push({ yearMonth: ym, assigned: current, spent: spendByMonth.get(ym)?.get(category.id) ?? 0 });
+    }
+    inputs.push({ categoryId: category.id, rolloverEnabled: true, history });
+  }
+
+  return rolloversInto(inputs, yearMonth);
+}
+
 export async function computeCategorySummaries(yearMonth: string): Promise<CategorySpendSummary[]> {
-  const [categories, transactions, limitOverrides] = await Promise.all([
+  const [categories, transactions, limitOverrides, rollovers] = await Promise.all([
     listCategories(),
     listTransactionsForMonth(yearMonth),
     resolveCategoryLimits(yearMonth),
+    resolveRollovers(yearMonth),
   ]);
-  return computeCategorySummariesFrom(categories, transactions, limitOverrides);
+  return computeCategorySummariesFrom(categories, transactions, limitOverrides, rollovers);
 }
 
 export function computeCategorySummariesFrom(
   categories: Category[],
   transactions: Transaction[],
-  limitOverrides: Map<string, number>
+  limitOverrides: Map<string, number>,
+  /** Carry per category, from resolveRollovers. Absent = no rollover anywhere,
+   * which is the correct reading for every caller that predates the feature. */
+  rollovers?: Map<string, number>
 ): CategorySpendSummary[] {
   // Attribution goes through categoryAmounts(), never t.categoryId directly:
   // a split transaction keeps its own categoryId populated for older builds,
@@ -849,12 +931,21 @@ export function computeCategorySummariesFrom(
   const summaries: CategorySpendSummary[] = categories.map((category) => {
     const monthlyLimit = limitOverrides.get(category.id) ?? category.monthlyLimit;
     const spend = spendByCategory.get(category.id) ?? 0;
-    const remaining = monthlyLimit - spend;
-    const percent = monthlyLimit > 0 ? (spend / monthlyLimit) * 100 : 0;
+    // Missing from the map means rollover is OFF for this category, which is a
+    // different statement from a zero balance — see CategorySpendSummary.
+    const carriedOver = rollovers?.has(category.id) ? rollovers.get(category.id)! : null;
+    // Rounded in cents: available feeds `remaining`, which is the headline
+    // number on every category row, and a float sum renders "-$0.00".
+    const available = (Math.round(monthlyLimit * 100) + Math.round((carriedOver ?? 0) * 100)) / 100;
+    const remaining = available - spend;
+    // Status and percent measure spend against what is actually SPENDABLE, not
+    // against the assignment. A category sitting on three months of carry is
+    // not 'red' the moment it passes this month's limit — it still has money.
+    const percent = available > 0 ? (spend / available) * 100 : 0;
     let status: BudgetStatus = 'green';
     if (percent > 100) status = 'red';
     else if (percent >= 80) status = 'amber';
-    return { category: { ...category, monthlyLimit }, spend, remaining, status, percent };
+    return { category: { ...category, monthlyLimit }, spend, remaining, status, percent, carriedOver, available };
   });
   return summaries.sort((a, b) => b.percent - a.percent);
 }

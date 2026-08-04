@@ -10,6 +10,7 @@ import { AmountText } from '../../components/AmountText';
 import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { MonthSwitcher } from '../../components/MonthSwitcher';
+import { Button, IconButton } from '../../components/Button';
 import { formatMonthLabel, formatCurrency } from '../../lib/format';
 import { notify } from '../../lib/confirm';
 import { daysUntilDue, countTransactionsForCard } from '../../lib/queries';
@@ -44,13 +45,7 @@ export default function CardsScreen() {
             </View>
           )}
         </View>
-        <Pressable
-          onPress={() => setShowAdd(true)}
-          hitSlop={8}
-          style={[styles.addButton, { borderColor: theme.separator }]}
-        >
-          <Ionicons name="add" size={22} color={theme.accent} />
-        </Pressable>
+        <IconButton icon="add" onPress={() => setShowAdd(true)} variant="tonal" accessibilityLabel="Add card" />
       </View>
       <MonthSwitcher style={styles.monthSwitcher} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -218,12 +213,8 @@ function AddCardModal({
           onChangeText={(text) => setLastFour(text.replace(/\D/g, ''))}
         />
         <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.xxl }}>
-          <Pressable style={[styles.button, { borderColor: theme.separator, borderWidth: 1 }]} onPress={onClose}>
-            <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
-          </Pressable>
-          <Pressable style={[styles.button, { backgroundColor: theme.accent }]} onPress={save}>
-            <Text style={{ color: theme.onAccent, fontWeight: '600' }}>Add Card</Text>
-          </Pressable>
+          <Button label="Cancel" onPress={onClose} variant="glass" size="lg" style={styles.button} />
+          <Button label="Add Card" onPress={save} variant="primary" size="lg" style={styles.button} />
         </View>
       </KeyboardAwareScreen>
     </Modal>
@@ -241,14 +232,6 @@ const styles = StyleSheet.create({
   },
   summaryRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   summaryText: { fontSize: 13 },
-  addButton: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   monthSwitcher: { marginTop: spacing.xs, marginHorizontal: spacing.lg },
   content: { padding: spacing.lg, paddingBottom: 60 },
   list: { padding: 0, overflow: 'hidden' },
@@ -288,5 +271,5 @@ const styles = StyleSheet.create({
   modalContent: { padding: spacing.xl, paddingTop: spacing.xxxl, paddingBottom: spacing.xxxl },
   fieldLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: spacing.sm },
   input: { padding: spacing.md, borderRadius: radius.sm, fontSize: 16 },
-  button: { flex: 1, paddingVertical: 14, borderRadius: radius.md, alignItems: 'center' },
+  button: { flex: 1 },
 });

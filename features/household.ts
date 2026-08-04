@@ -15,6 +15,7 @@ import {
   setSyncEnabled,
   mockCloudKitAdapter,
 } from './cloudkit-sync';
+import { seedSharedSettingsForNewHousehold } from './shared-settings';
 
 export type Household = { id: string; name: string; role: 'owner' | 'member'; memberCount: number };
 export type HouseholdMember = { userId: string; email: string | null; role: 'owner' | 'member' };
@@ -116,6 +117,18 @@ export function getActiveHouseholdId(): string | null {
  * creating a household, so the creator's budget becomes the shared one). */
 export async function seedHouseholdFromLocal(householdId: string): Promise<void> {
   const adapter = new SupabaseHouseholdAdapter(householdId);
+  // The currency belongs to the budget, not to the phone, so it has to become
+  // shared along with the rows it labels — a household whose transactions all
+  // arrived from this device but whose currency did not is the same mismatch in
+  // a new place. Written FIRST so the loop below picks the row up like any
+  // other; nothing about the push needs to know it exists.
+  //
+  // This is the ONLY path that sets a household's currency without the user
+  // choosing it in a picker, and it is honest here: creating already means "the
+  // budget on this device becomes the shared one", which the confirmation
+  // dialog in app/household/index.tsx says in those words. Joining does not get
+  // this call — see the decision recorded in features/shared-settings.ts.
+  await seedSharedSettingsForNewHousehold(householdId);
   const db = await getDb();
   for (const table of SYNCABLE_TABLES) {
     const rows = await db.getAllAsync<Record<string, unknown>>(`SELECT * FROM ${table}`);

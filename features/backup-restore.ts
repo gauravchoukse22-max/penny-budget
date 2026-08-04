@@ -17,7 +17,11 @@ import { readPickedFileAsText, downloadOrShareFile } from '../lib/files';
 //   4 — adds assets and liabilities (Net Worth).
 //   5 — adds transaction_splits (one transaction across several categories)
 //       and net_worth_snapshots (the net worth trend).
-export const BACKUP_VERSION = 5;
+//   6 — adds shared_settings (settings that belong to the shared budget rather
+//       than to the phone — currency first).
+//   7 — adds tags + transaction_tags (cross-category labels) and refund_claims
+//       (money the user is still owed).
+export const BACKUP_VERSION = 7;
 
 // Parent tables first so a restore inserts them before the rows that reference
 // them. (Deletes run in reverse.) Transient sync state (outbox, sync_meta) is
@@ -57,6 +61,29 @@ export const BACKUP_TABLES = [
   'savings_goal_transfers',
   'monthly_settings',
   'app_settings',
+  // Settings that belong to the shared budget rather than the phone
+  // (features/shared-settings.ts). Standalone rows keyed by household id, so
+  // like assets/liabilities their position here carries no dependency weight —
+  // appended at the end rather than filed next to app_settings, which they are
+  // deliberately NOT part of.
+  'shared_settings',
+  // Tags (features/tags.ts). `tags` before `transaction_tags` because the join
+  // rows point at them, and both are after `transactions` above for the same
+  // reason transaction_splits is: a join row restored before its transaction
+  // would be an orphan that still counts toward the tag's total.
+  'tags',
+  'transaction_tags',
+  // Refund claims (features/refunds.ts). Also after `transactions` — a claim
+  // whose transaction is not in yet is an orphan that inflates the outstanding
+  // total with nothing to open.
+  //
+  // NOTE: receipt PHOTOS are deliberately not here and cannot be. They are
+  // files on disk, not rows; features/receipts.ts explains why inlining them
+  // would make the backup — the user's only recovery path — large enough to
+  // fail on the devices that need it most. The `transactions.receiptUri` column
+  // does travel, so a restore knows a receipt was attached and can say the file
+  // is missing rather than pretend there never was one.
+  'refund_claims',
 ] as const;
 
 export type Row = Record<string, unknown>;
@@ -88,6 +115,28 @@ const SPLITS_BACKUP_VERSION = 5;
 // fallback category and quietly move money between categories.
 const SPLITS_TABLES: ReadonlySet<string> = new Set(['transaction_splits', 'net_worth_snapshots']);
 
+/** The first BACKUP_VERSION whose files carry the shared budget settings. */
+const SHARED_SETTINGS_BACKUP_VERSION = 6;
+
+// Same rule again, and it bites harder here than anywhere else: the row is one
+// value per household, so wiping it on a v5 restore would leave the household
+// with NO shared currency at all, silently dropping both phones back to their
+// own local settings — which is precisely the mismatch this table was added to
+// end. A v5 file predates the table; it does not say the household has none.
+const SHARED_SETTINGS_TABLES: ReadonlySet<string> = new Set(['shared_settings']);
+
+/** The first BACKUP_VERSION whose files carry tags and refund claims. */
+const TAGS_REFUNDS_BACKUP_VERSION = 7;
+
+// Same rule as every gate above. Worth stating for tags specifically: the
+// tables are a many-to-many, so wiping them on a v6 restore would not lose a
+// display preference, it would lose the ONLY record of which transactions
+// belonged to which trip — unreconstructable from anything else in the file,
+// because a tag leaves no trace on the transaction row itself. Refund claims
+// are the same shape of loss: the outstanding total would silently drop to
+// zero and read as "nothing is owed".
+const TAGS_REFUNDS_TABLES: ReadonlySet<string> = new Set(['tags', 'transaction_tags', 'refund_claims']);
+
 /**
  * The tables a backup of this version is authoritative for — the only ones a
  * restore may wipe.
@@ -112,6 +161,8 @@ export function restorableTables(version: number): readonly string[] {
     // rather than wiping them.
     if (version < NET_WORTH_BACKUP_VERSION && NET_WORTH_TABLES.has(table)) return false;
     if (version < SPLITS_BACKUP_VERSION && SPLITS_TABLES.has(table)) return false;
+    if (version < SHARED_SETTINGS_BACKUP_VERSION && SHARED_SETTINGS_TABLES.has(table)) return false;
+    if (version < TAGS_REFUNDS_BACKUP_VERSION && TAGS_REFUNDS_TABLES.has(table)) return false;
     return true;
   });
 }
@@ -178,6 +229,12 @@ export async function restoreAllTables(backup: BackupData): Promise<void> {
  * which contradicts the "this replaces ALL current data" warning they just
  * accepted. Saying it out loud is the difference between trusting the balances
  * still on screen and wondering whether the restore quietly missed them.
+ *
+ * Deliberately unchanged for v5 and v6, matching what splits did: the two
+ * additions since v4 (splits, shared settings) are left alone by an older file
+ * and stay exactly as they are on screen, so there is nothing the user would
+ * otherwise misread. Naming every table this sentence does not touch would turn
+ * a reassurance into a changelog.
  */
 export function restoreCompletionMessage(version: number): string {
   if (version >= NET_WORTH_BACKUP_VERSION) return 'Data restored. Please close and reopen the app.';

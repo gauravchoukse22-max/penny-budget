@@ -9,6 +9,7 @@ import { TransactionRow } from '../../components/TransactionRow';
 import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { MonthSwitcher } from '../../components/MonthSwitcher';
+import { Button, IconButton } from '../../components/Button';
 import { formatDayLabel, formatMonthLabel } from '../../lib/format';
 import { bulkUpdateCategory, bulkUpdateCard, bulkDeleteTransactions } from '../../features/bulk-actions';
 import { confirmAction } from '../../lib/confirm';
@@ -138,28 +139,41 @@ export default function TransactionsScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.groupedBackground }]} edges={['top']}>
       {selectMode ? (
         <View style={styles.headerRow}>
-          <Pressable onPress={exitSelect} hitSlop={8}>
-            <Text style={{ color: theme.accent, fontSize: 16 }}>Cancel</Text>
-          </Pressable>
+          <Button label="Cancel" onPress={exitSelect} variant="ghost" size="sm" />
           <Text style={[type.headline, { color: theme.label }]}>{selectedIds.size} selected</Text>
           <View style={styles.selectActions}>
-            <Pressable onPress={() => selectedIds.size > 0 && setPicker('category')} hitSlop={8}>
-              <Ionicons name="pricetag-outline" size={24} color={selectedIds.size > 0 ? theme.accent : theme.tertiaryLabel} />
-            </Pressable>
-            <Pressable onPress={() => selectedIds.size > 0 && setPicker('card')} hitSlop={8}>
-              <Ionicons name="card-outline" size={24} color={selectedIds.size > 0 ? theme.accent : theme.tertiaryLabel} />
-            </Pressable>
-            <Pressable onPress={doBulkDelete} hitSlop={8}>
-              <Ionicons name="trash-outline" size={24} color={selectedIds.size > 0 ? theme.systemRed : theme.tertiaryLabel} />
-            </Pressable>
+            <IconButton
+              icon="pricetag-outline"
+              onPress={() => setPicker('category')}
+              disabled={selectedIds.size === 0}
+              variant="tonal"
+              accessibilityLabel="Change category of selected transactions"
+            />
+            <IconButton
+              icon="card-outline"
+              onPress={() => setPicker('card')}
+              disabled={selectedIds.size === 0}
+              variant="tonal"
+              accessibilityLabel="Move selected transactions to another card"
+            />
+            <IconButton
+              icon="trash-outline"
+              onPress={doBulkDelete}
+              disabled={selectedIds.size === 0}
+              variant="destructive"
+              accessibilityLabel="Delete selected transactions"
+            />
           </View>
         </View>
       ) : (
         <View style={styles.headerRow}>
           <Text style={[type.title1, { color: theme.label }]}>Transactions</Text>
-          <Pressable onPress={() => router.push('/transaction/add')} hitSlop={8}>
-            <Ionicons name="add-circle" size={30} color={theme.accent} />
-          </Pressable>
+          <IconButton
+            icon="add"
+            onPress={() => router.push('/transaction/add')}
+            variant="tonal"
+            accessibilityLabel="Add transaction"
+          />
         </View>
       )}
 
@@ -183,43 +197,20 @@ export default function TransactionsScreen() {
           12 categories those rows ran ~7 lines deep and pushed the list most of
           the way down the screen — the user saw filters, not transactions. */}
       <View style={styles.filterBarRow}>
-        <Pressable
+        <Button
+          label={`${cardFilterLabel} · ${categoryFilterLabel}`}
           onPress={() => setShowFilters(true)}
-          accessibilityRole="button"
+          variant={filtersActive ? 'tonal' : 'glass'}
+          size="sm"
+          icon="funnel"
+          iconAfter="chevron-down"
+          style={styles.filterBar}
           accessibilityLabel={`Filters: ${cardFilterLabel}, ${categoryFilterLabel}. Tap to change.`}
-          style={[
-            styles.filterBar,
-            {
-              backgroundColor: filtersActive ? theme.accentTint : theme.fieldBackground,
-              borderColor: filtersActive ? theme.accent : 'transparent',
-            },
-          ]}
-        >
-          <Ionicons
-            name="funnel"
-            size={13}
-            color={filtersActive ? theme.accent : theme.secondaryLabel}
-          />
-          <Text
-            style={[styles.filterBarText, { color: filtersActive ? theme.accent : theme.secondaryLabel }]}
-            numberOfLines={1}
-          >
-            {cardFilterLabel} · {categoryFilterLabel}
-          </Text>
-          <Ionicons
-            name="chevron-down"
-            size={14}
-            color={filtersActive ? theme.accent : theme.tertiaryLabel}
-          />
-        </Pressable>
+        />
         {/* Only rendered while something is actually filtered, so "Clear" is
             never a dead control — and when it IS there it sits outside the
             sheet, one tap from the list. */}
-        {filtersActive && (
-          <Pressable onPress={clearFilters} hitSlop={8} accessibilityRole="button" style={styles.clearButton}>
-            <Text style={[styles.clearText, { color: theme.accent }]}>Clear</Text>
-          </Pressable>
-        )}
+        {filtersActive && <Button label="Clear" onPress={clearFilters} variant="ghost" size="sm" />}
       </View>
 
       <SectionList
@@ -273,11 +264,7 @@ export default function TransactionsScreen() {
                 ? `No transactions match these filters in ${formatMonthLabel(selectedMonth)}`
                 : `No transactions in ${formatMonthLabel(selectedMonth)}`}
             </Text>
-            {filtersActive && (
-              <Pressable onPress={clearFilters} hitSlop={8} accessibilityRole="button">
-                <Text style={[styles.clearText, { color: theme.accent }]}>Clear filters</Text>
-              </Pressable>
-            )}
+            {filtersActive && <Button label="Clear filters" onPress={clearFilters} variant="ghost" size="sm" />}
           </View>
         }
       />
@@ -310,9 +297,7 @@ export default function TransactionsScreen() {
                 </Pressable>
               ))}
           </ScrollView>
-          <Pressable style={[styles.modalCancel, { borderColor: theme.separator }]} onPress={() => setPicker(null)}>
-            <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
-          </Pressable>
+          <Button label="Cancel" onPress={() => setPicker(null)} variant="glass" full style={styles.modalFooterButton} />
         </View>
       </Modal>
 
@@ -330,11 +315,7 @@ export default function TransactionsScreen() {
         <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
           <View style={styles.sheetHeader}>
             <Text style={[type.title2, { color: theme.label }]}>Filter</Text>
-            {filtersActive && (
-              <Pressable onPress={clearFilters} hitSlop={8} accessibilityRole="button">
-                <Text style={[styles.clearText, { color: theme.accent }]}>Clear all</Text>
-              </Pressable>
-            )}
+            {filtersActive && <Button label="Clear all" onPress={clearFilters} variant="ghost" size="sm" />}
           </View>
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={[styles.sheetSection, { color: theme.secondaryLabel }]}>CARD</Text>
@@ -377,14 +358,13 @@ export default function TransactionsScreen() {
               />
             ))}
           </ScrollView>
-          <Pressable
-            style={[styles.modalCancel, { backgroundColor: theme.accent, borderColor: 'transparent' }]}
+          <Button
+            label={`Show ${filtered.length} transaction${filtered.length === 1 ? '' : 's'}`}
             onPress={() => setShowFilters(false)}
-          >
-            <Text style={{ color: theme.onAccent, fontWeight: '600' }}>
-              Show {filtered.length} transaction{filtered.length === 1 ? '' : 's'}
-            </Text>
-          </Pressable>
+            variant="primary"
+            full
+            style={styles.modalFooterButton}
+          />
         </View>
       </Modal>
     </SafeAreaView>
@@ -453,26 +433,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginTop: spacing.sm,
   },
-  // Sized so the whole filter control is one ~32pt line. The two wrapping chip
-  // rows it replaces ran roughly 200pt on this user's data.
-  filterBar: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 7,
-    borderRadius: radius.md,
-    borderWidth: 1,
-  },
-  filterBarText: { flex: 1, fontSize: 13, fontWeight: '600' },
-  clearButton: { paddingVertical: 4 },
-  clearText: { fontSize: 13, fontWeight: '600' },
+  // Kept short (Button `sm`) so the whole filter control is one line. The two
+  // wrapping chip rows it replaces ran roughly 200pt on this user's data.
+  filterBar: { flex: 1 },
   listContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 40 },
   sectionHeader: { fontSize: 13, fontWeight: '600', paddingVertical: 6 },
   deleteAction: { marginVertical: 4 },
   emptyState: { alignItems: 'center', gap: spacing.md, marginTop: 40 },
-  selectActions: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center' },
+  selectActions: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   modalContent: { flex: 1, padding: spacing.xl, paddingTop: 40 },
   sheetHeader: {
     flexDirection: 'row',
@@ -488,5 +456,5 @@ const styles = StyleSheet.create({
   optionLabel: { flex: 1, fontSize: 16 },
   pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
   cardDot: { width: 18, height: 18, borderRadius: 9 },
-  modalCancel: { paddingVertical: 14, borderRadius: radius.md, alignItems: 'center', borderWidth: 1, marginTop: spacing.md },
+  modalFooterButton: { marginTop: spacing.md },
 });

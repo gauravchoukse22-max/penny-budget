@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View, Text, Pressable, ActivityIndicator, Platform, Share } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +14,15 @@ import {
   OrDivider,
 } from '../../components/AuthUI';
 import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
+import { Button } from '../../components/Button';
 import { createInvite, removeMember, type Household, type HouseholdMember } from '../../features/household';
+import {
+  describeSharedCurrency,
+  getCurrencyState,
+  setSharedCurrency,
+  type CurrencyState,
+} from '../../features/shared-settings';
+import { currencySymbol } from '../../lib/format';
 import { useHouseholdStatus, type HouseholdStatus } from '../../lib/useHouseholdStatus';
 import { confirmAction } from '../../lib/confirm';
 
@@ -27,7 +35,7 @@ import { confirmAction } from '../../lib/confirm';
 // success. Settings now only links here, and every path below states what it
 // will do before it does it.
 
-type BusyAction = 'device' | 'join' | 'create' | 'connect' | 'invite' | 'sync' | 'pause' | 'leave' | 'remove';
+type BusyAction = 'device' | 'join' | 'create' | 'connect' | 'invite' | 'sync' | 'pause' | 'leave' | 'remove' | 'currency';
 
 // Membership controls WHO RECEIVES CHANGES. It does not control who holds a
 // copy — every member's device carries a complete offline copy of the budget,
@@ -45,6 +53,7 @@ export default function SharingScreen() {
   const { isConfigured, user } = useAuth();
   const {
     settings,
+    refresh,
     createHousehold,
     joinHousehold,
     connectToHousehold,
@@ -54,6 +63,23 @@ export default function SharingScreen() {
     syncNow,
   } = useBudget();
   const status = useHouseholdStatus();
+
+  // Which currency this budget is actually shown in, and where that came from.
+  //
+  // Read here rather than taken from `settings.currency`, because the whole
+  // point is the DIFFERENCE between the two: settings.currency is what is on
+  // screen, and this also carries what this device's own preference is and
+  // whether the shared budget is overriding it. Without that, a joiner watches
+  // every amount change symbol with nothing anywhere saying why.
+  const [currencyState, setCurrencyState] = useState<CurrencyState | null>(null);
+  const loadCurrency = useCallback(async () => {
+    setCurrencyState(await getCurrencyState());
+  }, []);
+  // settings.currency is in the deps so this re-reads after the Settings picker
+  // changes it, and settings.householdId so joining or pausing re-resolves.
+  useEffect(() => {
+    loadCurrency();
+  }, [loadCurrency, settings.currency, settings.householdId]);
 
   const [busy, setBusy] = useState<BusyAction | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +101,11 @@ export default function SharingScreen() {
       if (res && !res.success) setError(res.message);
       else if (res) setInfo(res.message);
       await status.reload();
+      // Joining pulls the household's shared settings, so the currency answer
+      // can be different the instant this returns. Re-read it here rather than
+      // waiting for the next screen visit — the symbol on the amounts has
+      // already changed by then.
+      await loadCurrency();
     } finally {
       setBusy(null);
     }
@@ -188,6 +219,39 @@ export default function SharingScreen() {
       await Share.share({ message: `Join my Penny Budget with this code: ${invite}` });
     } catch {
       // Sharing was dismissed or is unavailable — the code stays on screen.
+    }
+  };
+
+  // ── Make this device's own currency the shared one ───────────────────────
+  //
+  // The escape hatch for the join rule. Joining deliberately never changes the
+  // household's currency — an invite code must not restate everyone else's
+  // money in a new symbol — so this is how a joiner who genuinely wants the
+  // change gets it: deliberately, from a button that says whom it affects, with
+  // a confirmation that says it again. That is the whole difference between
+  // this and the silent rewrite the join path refuses to do.
+  const doAdoptLocalCurrency = async () => {
+    const hid = settings.householdId;
+    if (!hid || !currencyState) return;
+    const target = currencyState.local;
+    const ok = await confirmAction({
+      title: `Show this budget in ${target}?`,
+      message: `Everyone in ${currentName} sees amounts in ${target} from now on, not just this device. Nothing is converted — the numbers stay exactly as they are and only the symbol changes.`,
+      confirmLabel: `Use ${target}`,
+    });
+    if (!ok) return;
+    setBusy('currency');
+    setError(null);
+    setInfo(null);
+    try {
+      await setSharedCurrency(hid, target);
+      await loadCurrency();
+      // The amounts on every other screen come from the budget context, so it
+      // has to re-read for the change to be visible anywhere but here.
+      await refresh();
+      setInfo(`This shared budget now shows amounts in ${target}.`);
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -320,6 +384,41 @@ export default function SharingScreen() {
             <InlineError message="This device points at a shared budget this account is no longer in, so nothing is syncing. Join again with an invite code, or turn sync off." />
           )}
         </GroupedSection>
+
+        {/* Stated on every visit, not only right after a join: whichever member
+            is looking, "why does my phone say £ when I chose $" has to have an
+            answer somewhere they can find it later, not just in a message that
+            has already scrolled away. */}
+        {currencyState && (
+          <GroupedSection
+            header="Currency"
+            footnote="Currency is part of the shared budget, so both phones show the same symbol on the same numbers. Changing it never converts anything — the amounts stay as they are."
+          >
+            <View style={styles.currencyRow}>
+              <Text style={{ color: theme.label, fontSize: 17, fontWeight: '700' }}>
+                {currencySymbol(currencyState.currency)}  {currencyState.currency}
+              </Text>
+              {currencyState.source === 'shared' && (
+                <Text style={{ color: theme.tertiaryLabel, fontSize: 12, fontWeight: '600' }}>SHARED</Text>
+              )}
+            </View>
+            <Text style={{ color: theme.secondaryLabel, fontSize: 14, lineHeight: 20 }}>
+              {describeSharedCurrency(currencyState)}
+            </Text>
+            {/* Offered only when this device's own preference is not already the
+                one in force — otherwise it is a button that does nothing. */}
+            {currencyState.local !== currencyState.currency && (
+              <Button
+                label={`Use ${currencyState.local} for everyone`}
+                onPress={doAdoptLocalCurrency}
+                variant="tonal"
+                loading={busy === 'currency'}
+                disabled={!!busy && busy !== 'currency'}
+                accessibilityLabel={`Use ${currencyState.local} for everyone in this shared budget, instead of ${currencyState.currency}`}
+              />
+            )}
+          </GroupedSection>
+        )}
 
         <GroupedSection
           header="Invite someone"
@@ -648,6 +747,7 @@ const styles = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 60 },
   memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   membershipRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 6 },
+  currencyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   actionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11 },
   choiceRow: {
     flexDirection: 'row',

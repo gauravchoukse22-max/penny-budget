@@ -1,12 +1,11 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { notify } from '../../lib/confirm';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius, type as typeScale } from '../../theme/colors';
 import { AmountText } from '../../components/AmountText';
-import { PressableScale } from '../../components/PressableScale';
+import { Button } from '../../components/Button';
 import { FundCellSheet, type FundCellSubmission } from '../../components/FundCellSheet';
 import {
   adjustFundCell,
@@ -131,8 +130,8 @@ export default function FundsScreen() {
           <AmountText amount={grid.grandTotal} currency={settings.currency} size={30} weight="bold" />
         </View>
         <View style={styles.headerActions}>
-          <HeaderButton label="Fund" onPress={() => openPrompt('fund')} />
-          <HeaderButton label="Account" onPress={() => openPrompt('account')} />
+          <Button label="Fund" icon="add" onPress={() => openPrompt('fund')} variant="tonal" size="sm" accessibilityLabel="Add fund" />
+          <Button label="Account" icon="add" onPress={() => openPrompt('account')} variant="tonal" size="sm" accessibilityLabel="Add account" />
         </View>
       </View>
 
@@ -167,14 +166,14 @@ export default function FundsScreen() {
             ))}
           </View>
 
-          <PressableScale
-            haptic
+          <Button
+            label="Add your first fund"
+            icon="add"
             onPress={() => openPrompt('fund')}
-            style={[styles.emptyCta, { backgroundColor: theme.accent }]}
-          >
-            <Ionicons name="add" size={18} color="#FFFFFF" />
-            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Add your first fund</Text>
-          </PressableScale>
+            variant="primary"
+            size="lg"
+            style={styles.emptyCta}
+          />
           <Text style={[styles.emptyBody, { color: theme.tertiaryLabel, fontSize: 12 }]}>
             Nothing is added until you do it — name things whatever makes sense to you.
           </Text>
@@ -308,14 +307,13 @@ export default function FundsScreen() {
             what went in month by month. Swipe the columns sideways to reach the rest of your accounts.
           </Text>
 
-          <PressableScale
-            haptic
+          <Button
+            label="Rename, reorder or remove"
+            icon="options-outline"
             onPress={() => router.push('/funds/manage')}
-            style={[styles.manageButton, { backgroundColor: theme.card }]}
-          >
-            <Ionicons name="options-outline" size={18} color={theme.accent} />
-            <Text style={{ color: theme.accent, fontWeight: '700' }}>Rename, reorder or remove</Text>
-          </PressableScale>
+            variant="tonal"
+            style={styles.manageButton}
+          />
         </ScrollView>
       )}
 
@@ -353,27 +351,13 @@ export default function FundsScreen() {
               onSubmitEditing={submitPrompt}
             />
             <View style={styles.promptActions}>
-              <Pressable onPress={() => setPrompt(null)} hitSlop={8} style={styles.promptAction}>
-                <Text style={{ color: theme.secondaryLabel, fontWeight: '600' }}>Cancel</Text>
-              </Pressable>
-              <Pressable onPress={submitPrompt} hitSlop={8} disabled={!promptDraft.trim()} style={styles.promptAction}>
-                <Text style={{ color: promptDraft.trim() ? theme.accent : theme.tertiaryLabel, fontWeight: '700' }}>Add</Text>
-              </Pressable>
+              <Button label="Cancel" onPress={() => setPrompt(null)} variant="glass" />
+              <Button label="Add" onPress={submitPrompt} variant="primary" disabled={!promptDraft.trim()} />
             </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
     </View>
-  );
-}
-
-function HeaderButton({ label, onPress }: { label: string; onPress: () => void }) {
-  const theme = useTheme();
-  return (
-    <PressableScale haptic onPress={onPress} style={[styles.headerButton, { backgroundColor: theme.accentTint }]}>
-      <Ionicons name="add" size={15} color={theme.accent} />
-      <Text style={{ color: theme.accent, fontWeight: '700', fontSize: 13 }}>{label}</Text>
-    </PressableScale>
   );
 }
 
@@ -389,14 +373,6 @@ const styles = StyleSheet.create({
   },
   headerTotal: { flexShrink: 1, gap: 2 },
   headerActions: { flexDirection: 'row', gap: spacing.sm },
-  headerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-  },
   scrollBody: { paddingBottom: 48 },
   table: { flexDirection: 'row' },
   pinned: { borderRightWidth: StyleSheet.hairlineWidth },
@@ -409,16 +385,7 @@ const styles = StyleSheet.create({
   nameText: { fontSize: 12, fontWeight: '500', lineHeight: 15 },
   totalLabel: { fontSize: 13, fontWeight: '700' },
   hint: { fontSize: 12, lineHeight: 17, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
-  manageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
-  },
+  manageButton: { marginHorizontal: spacing.lg, marginTop: spacing.lg },
   empty: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.md },
   emptyTitle: { fontSize: 20, fontWeight: '700', marginTop: spacing.md },
   emptyBody: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
@@ -435,18 +402,9 @@ const styles = StyleSheet.create({
   sampleRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9 },
   sampleHead: { flex: 1, fontSize: 11, fontWeight: '700', textAlign: 'right' },
   sampleCell: { flex: 1, fontSize: 13, textAlign: 'right' },
-  emptyCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    borderRadius: radius.pill,
-    marginTop: spacing.sm,
-  },
+  emptyCta: { marginTop: spacing.sm },
   promptBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   promptCard: { width: '100%', maxWidth: 380, borderRadius: radius.lg, padding: spacing.xl, gap: spacing.sm },
   promptInput: { padding: spacing.md, borderRadius: radius.sm, fontSize: 15, marginTop: spacing.sm },
-  promptActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.xl, marginTop: spacing.sm },
-  promptAction: { paddingVertical: spacing.sm, paddingHorizontal: spacing.sm },
+  promptActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.sm },
 });

@@ -1,6 +1,7 @@
 import { getDb } from '../lib/db';
 import { uuid } from '../lib/uuid';
-import { resolveCategoryLimits } from '../lib/queries';
+import { resolveCategoryLimits, resolveRollovers } from '../lib/queries';
+import { queueSyncMutation } from './cloudkit-sync';
 import type { Streak, CalendarEvent, MonthlySummary } from './models';
 
 // ---------- Streaks ----------
@@ -94,6 +95,13 @@ export async function getStreaks(): Promise<{ logging: Streak | null; budget: St
 export async function setCategoryRolloverEnabled(categoryId: string, enabled: boolean): Promise<void> {
   const db = await getDb();
   await db.runAsync('UPDATE categories SET rolloverEnabled = ? WHERE id = ?', [enabled ? 1 : 0, categoryId]);
+  // AGENTS.md rule 2. This write had NO journal, so flipping the toggle never
+  // reached the other household member — one phone carried a balance forward
+  // and the other did not, and the same category showed two different amounts
+  // left with nothing on either screen to explain it. The row is re-read rather
+  // than assembled so the payload is what actually landed.
+  const row = await db.getFirstAsync<Record<string, unknown>>('SELECT * FROM categories WHERE id = ?', [categoryId]);
+  if (row) await queueSyncMutation('UPDATE', 'categories', categoryId, row);
 }
 
 export async function getCategoryRolloverEnabled(categoryId: string): Promise<boolean> {
@@ -105,40 +113,27 @@ export async function getCategoryRolloverEnabled(categoryId: string): Promise<bo
   return !!row?.rolloverEnabled;
 }
 
+/**
+ * A category's assigned amount, its carried balance, and what that adds up to.
+ *
+ * Delegates to resolveRollovers in lib/queries.ts. The version that used to
+ * live here computed its own answer and got it wrong four ways: it looked back
+ * exactly one month, clamped overspend away with Math.max(0, …), summed
+ * transactions by categoryId in SQL (double-counting splits), and was wired to
+ * this one screen while every other screen ignored it. Keeping a second
+ * implementation is how those disagreements happen, so there is now one.
+ */
 export async function getCategoryBudgetWithRollover(
-  categoryId: string, 
+  categoryId: string,
   yearMonth: string
 ): Promise<{ budget: number; rollover: number; effectiveBudget: number }> {
-  const db = await getDb();
-  const category = await db.getFirstAsync<{ rolloverEnabled: number }>("SELECT rolloverEnabled FROM categories WHERE id = ?", [categoryId]);
-  
-  const limits = await resolveCategoryLimits(yearMonth);
-  const baseBudget = limits.get(categoryId) || 0;
-  
-  if (!category || !category.rolloverEnabled) {
-    return { budget: baseBudget, rollover: 0, effectiveBudget: baseBudget };
-  }
-  
-  // Get prev month
-  const [y, m] = yearMonth.split('-').map(Number);
-  const d = new Date(y, m - 2, 1);
-  const prevMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  
-  const prevLimits = await resolveCategoryLimits(prevMonth);
-  const prevBudget = prevLimits.get(categoryId) || 0;
-  
-  const prevSpend = await db.getFirstAsync<{ total: number }>(`
-    SELECT COALESCE(SUM(amount), 0) as total FROM transactions
-    WHERE categoryId = ? AND strftime('%Y-%m', date) = ?
-  `, [categoryId, prevMonth]);
-  
-  const rollover = Math.max(0, prevBudget - (prevSpend?.total || 0));
-  
-  return {
-    budget: baseBudget,
-    rollover,
-    effectiveBudget: baseBudget + rollover
-  };
+  const [limits, rollovers] = await Promise.all([
+    resolveCategoryLimits(yearMonth),
+    resolveRollovers(yearMonth),
+  ]);
+  const budget = limits.get(categoryId) ?? 0;
+  const rollover = rollovers.get(categoryId) ?? 0;
+  return { budget, rollover, effectiveBudget: budget + rollover };
 }
 
 // ---------- Bill Calendar ----------

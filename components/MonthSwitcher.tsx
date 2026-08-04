@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, type StyleProp, type ViewStyle } from 'react-native';
+import { View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { MonthPickerSheet } from './MonthPickerSheet';
-import { Ionicons } from '@expo/vector-icons';
+import { Button, IconButton } from './Button';
 import { useBudget } from '../context/BudgetContext';
-import { useTheme, spacing, radius, type } from '../theme/colors';
+import { useTheme, spacing, type } from '../theme/colors';
 import { formatMonthLabel, formatShortMonth } from '../lib/format';
 import { currentYearMonth } from '../lib/db';
 import { addMonths } from '../lib/queries';
@@ -75,57 +75,49 @@ export function MonthSwitcher({ onChange, style }: Props) {
 
   return (
     <View style={[styles.row, style]}>
-      <Pressable
+      <IconButton
+        icon="chevron-back"
         onPress={goPrev}
-        hitSlop={8}
-        accessibilityRole="button"
         accessibilityLabel={`Previous month, ${formatMonthLabel(addMonths(selectedMonth, -1))}`}
-        style={styles.arrow}
-      >
-        <Ionicons name="chevron-back" size={20} color={theme.secondaryLabel} />
-      </Pressable>
+      />
 
       {/* Tapping the month opens a grid to jump straight to one. The arrows
           only ever move a month at a time, which makes anything further than
           last month tedious and another YEAR effectively unreachable. */}
-      <Pressable
+      <Button
+        label={formatMonthLabel(selectedMonth)}
         onPress={openPicker}
-        hitSlop={8}
-        accessibilityRole="button"
+        variant="ghost"
+        iconAfter="chevron-down"
+        // The month name is this control's heading, so it keeps heading
+        // typography and the label colour while taking the system's height,
+        // press feel and haptics from Button.
+        labelStyle={[type.headline, { color: theme.label }]}
         // Announced on its own rather than left to the arrows' labels, so the
         // month you are looking at is readable without moving off it.
         accessibilityLabel={`Showing ${formatMonthLabel(selectedMonth)}. Tap to go to another month.`}
-        style={styles.label}
-      >
-        <Text style={[type.headline, { color: theme.label }]}>{formatMonthLabel(selectedMonth)}</Text>
-        <Ionicons name="chevron-down" size={14} color={theme.secondaryLabel} />
-      </Pressable>
+      />
 
-      <Pressable
+      <IconButton
+        icon="chevron-forward"
         onPress={goNext}
-        hitSlop={8}
-        accessibilityRole="button"
         accessibilityLabel={`Next month, ${formatMonthLabel(addMonths(selectedMonth, 1))}`}
-        style={styles.arrow}
-      >
-        <Ionicons name="chevron-forward" size={20} color={theme.secondaryLabel} />
-      </Pressable>
+      />
 
       {/* Only while you are away from the current month — on it, a jump-back
           button is a dead control. Labelled with an arrow and the month it goes
           TO, because "This month" on a screen showing March read as a claim
           about March rather than a way back to August. */}
       {!isCurrentMonth && (
-        <Pressable
+        <Button
+          label={formatShortMonth(thisMonth)}
+          icon="return-up-back"
           onPress={goToday}
-          hitSlop={8}
-          accessibilityRole="button"
+          variant="tonal"
+          size="sm"
+          style={styles.today}
           accessibilityLabel={`Back to ${formatMonthLabel(thisMonth)}`}
-          style={[styles.today, { backgroundColor: theme.accentTint }]}
-        >
-          <Ionicons name="return-up-back" size={13} color={theme.accent} />
-          <Text style={[styles.todayText, { color: theme.accent }]}>{formatShortMonth(thisMonth)}</Text>
-        </Pressable>
+        />
       )}
 
       <MonthPickerSheet
@@ -143,25 +135,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xl,
+    // Tighter than it was: the arrows now carry their own glass box, so they
+    // no longer need empty space to read as separate targets.
+    gap: spacing.sm,
     paddingVertical: spacing.xs,
   },
-  // 44pt — Apple's minimum tap target, and the same reason PressableScale sizes
-  // its own box. A chevron glyph on its own is about 20pt and misses taps.
-  arrow: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  // Row so the chevron sits beside the month name and the whole thing reads as
-  // one tappable control rather than a label with a stray glyph next to it.
-  label: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 44 },
   // Absolute so showing and hiding it cannot nudge the centred month label.
-  today: {
-    position: 'absolute',
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 5,
-    borderRadius: radius.pill,
-  },
-  todayText: { fontSize: 12, fontWeight: '700' },
+  today: { position: 'absolute', right: 0 },
 });

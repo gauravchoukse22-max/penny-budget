@@ -1,9 +1,9 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TextInput } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
+import { IconButton } from '../../components/Button';
 import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { confirmAction } from '../../lib/confirm';
@@ -134,30 +134,24 @@ export default function ManageFundsScreen() {
                 onSubmitEditing={() => commitName(row, isFund)}
                 returnKeyType="done"
               />
-              <Pressable onPress={() => move(row, -1, isFund)} disabled={index === 0} hitSlop={6} style={styles.iconButton}>
-                <Ionicons name="chevron-up" size={18} color={index === 0 ? theme.tertiaryLabel : theme.secondaryLabel} />
-              </Pressable>
-              <Pressable
+              <IconButton
+                icon="chevron-up"
+                onPress={() => move(row, -1, isFund)}
+                disabled={index === 0}
+                accessibilityLabel={`Move ${row.name} up`}
+              />
+              <IconButton
+                icon="chevron-down"
                 onPress={() => move(row, 1, isFund)}
                 disabled={index === rows.length - 1}
-                hitSlop={6}
-                style={styles.iconButton}
-              >
-                <Ionicons
-                  name="chevron-down"
-                  size={18}
-                  color={index === rows.length - 1 ? theme.tertiaryLabel : theme.secondaryLabel}
-                />
-              </Pressable>
-              <Pressable
+                accessibilityLabel={`Move ${row.name} down`}
+              />
+              <IconButton
+                icon="close"
                 onPress={() => confirmAndRemove(row, isFund)}
-                hitSlop={6}
-                style={styles.iconButton}
-                accessibilityRole="button"
+                variant="destructive"
                 accessibilityLabel={`Delete ${isFund ? 'fund' : 'account'} ${row.name}`}
-              >
-                <Ionicons name="close-circle" size={20} color={theme.tertiaryLabel} />
-              </Pressable>
+              />
             </View>
           </SwipeToDelete>
         ))
@@ -173,9 +167,13 @@ export default function ManageFundsScreen() {
           returnKeyType="done"
           onSubmitEditing={add}
         />
-        <Pressable onPress={add} disabled={!draft.trim()} hitSlop={6} style={styles.iconButton}>
-          <Ionicons name="add-circle" size={26} color={draft.trim() ? theme.accent : theme.tertiaryLabel} />
-        </Pressable>
+        <IconButton
+          icon="add"
+          onPress={add}
+          disabled={!draft.trim()}
+          variant="tonal"
+          accessibilityLabel={isFund ? 'Add fund' : 'Add account'}
+        />
       </View>
     </Surface>
   );
@@ -228,7 +226,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth },
   nameInput: { flex: 1, paddingHorizontal: spacing.md, paddingVertical: 10, borderRadius: radius.sm, fontSize: 15 },
   flex1: { flex: 1 },
-  iconButton: { padding: 4 },
   addRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.md },
   footer: { textAlign: 'center', fontSize: 12, lineHeight: 17 },
 });

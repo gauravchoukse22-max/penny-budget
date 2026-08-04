@@ -7,6 +7,7 @@ import { useTheme, spacing, radius, type, CATEGORY_PALETTE } from '../../theme/c
 import { WalletCard } from '../../components/WalletCard';
 import { TransactionRow } from '../../components/TransactionRow';
 import { Surface } from '../../components/Surface';
+import { Button } from '../../components/Button';
 import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { confirmAction, notify } from '../../lib/confirm';
 import { selection } from '../../lib/haptics';
@@ -327,9 +328,7 @@ export default function CardDetailScreen() {
             at all: deleteCard refuses that row regardless, so showing one that
             silently does nothing would only look broken. */}
         {editing && !isCash && (
-          <Pressable style={[styles.deleteButton, { borderColor: theme.systemRed }]} onPress={confirmDelete}>
-            <Text style={{ color: theme.systemRed, fontWeight: '600' }}>Remove Card</Text>
-          </Pressable>
+          <Button label="Remove Card" onPress={confirmDelete} variant="destructive" size="lg" />
         )}
         {editing && isCash && (
           <Text style={[styles.cashNote, { color: theme.tertiaryLabel }]}>
@@ -385,6 +384,5 @@ const styles = StyleSheet.create({
   billingField: { flex: 1, gap: 6 },
   billingLabel: { fontSize: 12, fontWeight: '600' },
   dueHint: { fontSize: 12, marginTop: 10, fontWeight: '600' },
-  deleteButton: { borderWidth: 1.5, paddingVertical: 14, borderRadius: radius.md, alignItems: 'center' },
   cashNote: { fontSize: 13, lineHeight: 18, textAlign: 'center', paddingHorizontal: spacing.md },
 });

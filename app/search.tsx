@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useBudget } from '../context/BudgetContext';
 import { useTheme, spacing, radius, type } from '../theme/colors';
 import { Surface } from '../components/Surface';
 import { KeyboardAwareScreen } from '../components/KeyboardAwareScreen';
 import { TransactionRow } from '../components/TransactionRow';
+import { Button, Chip } from '../components/Button';
 import { searchTransactions, type SearchFilters } from '../features/search-engine';
 import type { Transaction } from '../lib/models';
 import { parseMoneyInput } from '../lib/parse-number';
@@ -95,9 +95,13 @@ export default function SearchScreen() {
           </Pressable>
         </View>
         {(startDate || endDate) && (
-          <Pressable onPress={() => { setStartDate(undefined); setEndDate(undefined); }}>
-            <Text style={{ color: theme.accent, fontSize: 13, marginBottom: 8 }}>Clear dates</Text>
-          </Pressable>
+          <Button
+            label="Clear dates"
+            onPress={() => { setStartDate(undefined); setEndDate(undefined); }}
+            variant="ghost"
+            size="sm"
+            style={styles.clearDates}
+          />
         )}
         {picking && (
           <View>
@@ -128,34 +132,36 @@ export default function SearchScreen() {
               }}
             />
             {Platform.OS === 'ios' && (
-              <Pressable style={styles.pickerDone} onPress={() => setPicking(null)} hitSlop={8}>
-                <Text style={{ color: theme.accent, fontWeight: '600' }}>Done</Text>
-              </Pressable>
+              <Button
+                label="Done"
+                onPress={() => setPicking(null)}
+                variant="ghost"
+                size="sm"
+                style={styles.pickerDone}
+                accessibilityLabel="Done choosing date"
+              />
             )}
           </View>
         )}
 
         <Text style={[styles.fieldLabel, { color: theme.secondaryLabel }]}>Category</Text>
         <View style={styles.chipRow}>
-          <Chip label="Any" active={categoryId === undefined} onPress={() => setCategoryId(undefined)} />
-          <Chip label="Uncategorized" active={categoryId === null} onPress={() => setCategoryId(null)} />
+          <Chip label="Any" selected={categoryId === undefined} onPress={() => setCategoryId(undefined)} size="sm" />
+          <Chip label="Uncategorized" selected={categoryId === null} onPress={() => setCategoryId(null)} size="sm" />
           {categories.map((c) => (
-            <Chip key={c.id} label={c.name} active={categoryId === c.id} color={c.color} onPress={() => setCategoryId(c.id)} />
+            <Chip key={c.id} label={c.name} selected={categoryId === c.id} onPress={() => setCategoryId(c.id)} size="sm" />
           ))}
         </View>
 
         <Text style={[styles.fieldLabel, { color: theme.secondaryLabel }]}>Card</Text>
         <View style={styles.chipRow}>
-          <Chip label="Any" active={cardId === undefined} onPress={() => setCardId(undefined)} />
+          <Chip label="Any" selected={cardId === undefined} onPress={() => setCardId(undefined)} size="sm" />
           {cards.map((c) => (
-            <Chip key={c.id} label={c.name} active={cardId === c.id} color={c.color} onPress={() => setCardId(c.id)} />
+            <Chip key={c.id} label={c.name} selected={cardId === c.id} onPress={() => setCardId(c.id)} size="sm" />
           ))}
         </View>
 
-        <Pressable style={[styles.searchButton, { backgroundColor: theme.accent }]} onPress={runSearch}>
-          <Ionicons name="search" size={16} color="#FFF" />
-          <Text style={{ color: '#FFF', fontWeight: '600' }}>Search</Text>
-        </Pressable>
+        <Button label="Search" icon="search" onPress={runSearch} variant="primary" style={styles.searchButton} />
       </Surface>
 
       {results !== null && (
@@ -184,18 +190,6 @@ export default function SearchScreen() {
   );
 }
 
-function Chip({ label, active, onPress, color }: { label: string; active: boolean; onPress: () => void; color?: string }) {
-  const theme = useTheme();
-  const activeColor = color ?? theme.accent;
-  return (
-    <Pressable onPress={onPress} style={[styles.chip, { backgroundColor: active ? activeColor : theme.fieldBackground }]}>
-      <Text style={{ color: active ? '#FFF' : theme.secondaryLabel, fontSize: 12, fontWeight: '600' }} numberOfLines={1}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 60 },
   sectionTitle: { fontSize: 17, fontWeight: '700', marginBottom: 10 },
@@ -203,9 +197,9 @@ const styles = StyleSheet.create({
   inlineRow: { flexDirection: 'row', gap: 10 },
   flex1: { flex: 1 },
   dateBox: { padding: 12, borderRadius: radius.sm, marginBottom: 10 },
-  pickerDone: { alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 4, marginBottom: 6 },
+  pickerDone: { alignSelf: 'flex-end', marginBottom: 6 },
+  clearDates: { alignSelf: 'flex-start', marginBottom: 8 },
   fieldLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4, marginBottom: 8 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 6 },
-  chip: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.md },
-  searchButton: { flexDirection: 'row', gap: 8, paddingVertical: 15, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md },
+  searchButton: { marginTop: spacing.md },
 });

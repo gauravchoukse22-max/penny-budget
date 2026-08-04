@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Alert, Switch
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useBudget } from '../../context/BudgetContext';
+import { describeCarry } from '../../lib/rollover';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { AmountText } from '../../components/AmountText';
@@ -10,7 +11,7 @@ import { TransactionRow } from '../../components/TransactionRow';
 import { LineChart } from '../../components/charts/LineChart';
 import { Surface } from '../../components/Surface';
 import { computeCategoryTrend } from '../../lib/queries';
-import { formatMonthLabel } from '../../lib/format';
+import { formatMonthLabel, formatCurrency } from '../../lib/format';
 import type { TrendPoint } from '../../lib/models';
 import { listCategoryRules, addCategoryRule, removeCategoryRule } from '../../features/smart-categorizer';
 import {
@@ -26,7 +27,7 @@ export default function CategoryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const router = useRouter();
-  const { categories, categorySummaries, transactions, cards, settings, selectedMonth, setCategoryLimitForSelectedMonth, removeCategory } =
+  const { categories, categorySummaries, transactions, cards, settings, selectedMonth, setCategoryLimitForSelectedMonth, removeCategory, refresh } =
     useBudget();
 
   const category = categories.find((c) => c.id === id);
@@ -58,6 +59,11 @@ export default function CategoryDetailScreen() {
     setRolloverOn(value);
     await setCategoryRolloverEnabled(id, value);
     await loadRollover();
+    // Rollover changes what every OTHER screen thinks is left in this category
+    // — Budget Health, the ledger row, the month's remaining. Without this the
+    // toggle only took effect here until the app restarted, which reads as the
+    // switch not working.
+    await refresh();
   };
 
   const loadRules = React.useCallback(async () => {
@@ -149,9 +155,28 @@ export default function CategoryDetailScreen() {
         <View style={styles.rolloverRow}>
           <View style={{ flex: 1 }}>
             <Text style={{ color: theme.label, fontWeight: '600' }}>Roll unused budget forward</Text>
-            {rolloverOn && rolloverAmount > 0 && (
-              <Text style={{ color: theme.systemGreen, fontSize: 12, marginTop: 2 }}>
-                +{rolloverAmount.toFixed(0)} carried from last month
+            {/* Three states, not two. The old version showed nothing unless
+                the carry was positive, so an overspent category with rollover
+                ON looked identical to one with rollover OFF — and the number
+                that was hurting it was the one being hidden. */}
+            {rolloverOn ? (
+              <Text
+                style={{
+                  color:
+                    rolloverAmount > 0
+                      ? theme.systemGreen
+                      : rolloverAmount < 0
+                      ? theme.systemRed
+                      : theme.tertiaryLabel,
+                  fontSize: 12,
+                  marginTop: 2,
+                }}
+              >
+                {describeCarry(rolloverAmount, (n) => formatCurrency(n, settings.currency))}
+              </Text>
+            ) : (
+              <Text style={{ color: theme.tertiaryLabel, fontSize: 12, marginTop: 2 }}>
+                Unspent money is not carried into the next month.
               </Text>
             )}
           </View>

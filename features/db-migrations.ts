@@ -209,6 +209,123 @@ export async function applyFeatureMigrations(db: SQLite.SQLiteDatabase): Promise
     );
   `);
 
+  // Settings that describe the shared BUDGET rather than the phone
+  // (features/shared-settings.ts). app_settings deliberately never syncs — it
+  // also holds the biometric lock and the household id — so a household member
+  // reads these from here instead, and both phones show the same currency
+  // symbol on the same numbers.
+  //
+  // Key/value rows rather than a column per setting: the next shared setting is
+  // then a new KEY, not an ALTER TABLE, so a member on an older build stores an
+  // unrecognised row and ignores it instead of throwing on an unknown column
+  // mid-pull — the hazard documented on savings_goals.targetFundId below.
+  //
+  // id is 'shs-<householdId>-<key>', derived and never uuid(): both phones write
+  // the currency the moment either changes it, and random ids would make that
+  // two rows with an arbitrary winner (AGENTS.md rule 2). The UNIQUE natural key
+  // is (householdId, settingKey); because the id is a pure function of it, the
+  // two can never disagree.
+  //
+  // settingKey/settingValue rather than key/value: SQLite does accept KEY as an
+  // identifier, but the sync pull builds `INSERT OR REPLACE INTO shared_settings
+  // (<columns from the payload>)` unquoted, and a column name that is also a
+  // keyword is not worth the risk on a path that fails inside a transaction.
+  //
+  // Appended as its own statement rather than inside the block above so this
+  // stays a pure addition to the migration list.
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS shared_settings (
+      id            TEXT PRIMARY KEY NOT NULL,
+      householdId   TEXT NOT NULL,
+      settingKey    TEXT NOT NULL,
+      settingValue  TEXT NOT NULL,
+      updatedAt     TEXT NOT NULL,
+      UNIQUE (householdId, settingKey)
+    );
+  `);
+
+  // Tags (features/tags.ts, lib/tags.ts) — a cross-category label on a
+  // transaction. A category says what KIND of spending something is and a
+  // transaction gets exactly one; a tag says what it was FOR, and that cuts
+  // across categories — a holiday is flights, dinners and a pharmacy run.
+  //
+  // Two tables because it is a many-to-many: one purchase can be both
+  // "vacation" and "reimbursable", and one tag spans thousands of purchases.
+  // A comma-joined string column on transactions was the obvious cheaper
+  // option and is rejected outright — renaming or deleting a tag would mean
+  // rewriting every transaction row that mentions it, and "vacation" would
+  // match "vacation-2025" on any query that could be written against it.
+  //
+  // NO foreign keys and NO ON DELETE CASCADE, deliberately: FK enforcement is
+  // off in this database, so a cascade here would read as protection while
+  // doing nothing. features/tags.ts deletes the join rows by hand on both
+  // sides and journals each one (AGENTS.md rule 2).
+  //
+  // Both ids are DERIVED, never uuid() — see the long note in lib/tags.ts.
+  // tags.id is `tag-<slug>-<hash>` of the name, so both phones typing
+  // "vacation" write one row; transaction_tags.id is
+  // `txtag-<transactionId>-<tagId>`, so both phones tagging the same purchase
+  // write one join row instead of two and the tag total is not doubled.
+  // Neither table carries a UNIQUE natural key: the derived primary key IS the
+  // natural key, and a second UNIQUE constraint could only ever disagree with
+  // it — which on the pull path throws inside a transaction and stalls sync.
+  //
+  // nameKey is stored rather than derived at read time so the picker can find
+  // an existing tag case-insensitively without pulling every row into JS.
+  //
+  // Refund claims (features/refunds.ts) — "I expect this money back".
+  //
+  // Its OWN TABLE rather than columns on transactions, for three reasons and
+  // the first is decisive:
+  //  1. ROLLOUT. A new column on `transactions` rides along in every
+  //     transaction sync payload, and a household member on a build without
+  //     the migration throws applying it — stalling their entire pull, the
+  //     hazard documented on savings_goals.targetFundId below. A new TABLE is
+  //     simply absent from their SYNCABLE_TABLES, so their pull SKIPS these
+  //     records instead of throwing (the assets/liabilities story below).
+  //  2. It is more than one fact — expected amount, status, when it landed —
+  //     which is three mostly-NULL columns on every transaction ever created.
+  //  3. It is sparse: a handful of rows against thousands of transactions.
+  //
+  // expectedAmount is separate from the transaction's own amount because
+  // partial refunds are the normal case: a $200 order with one $60 item sent
+  // back is $60 outstanding, not $200. Stored POSITIVE — it is money coming
+  // back, and the transaction it hangs off already carries the sign of the
+  // original spend.
+  //
+  // id is 'refund-<transactionId>', derived: one claim per transaction, so
+  // both phones marking the same purchase converge on one row rather than
+  // each counting its own toward the outstanding total.
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS tags (
+      id          TEXT PRIMARY KEY NOT NULL,
+      name        TEXT NOT NULL,
+      nameKey     TEXT NOT NULL,
+      color       TEXT NOT NULL,
+      createdAt   TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_tags_name_key ON tags(nameKey);
+
+    CREATE TABLE IF NOT EXISTS transaction_tags (
+      id            TEXT PRIMARY KEY NOT NULL,
+      transactionId TEXT NOT NULL,
+      tagId         TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_transaction_tags_tx ON transaction_tags(transactionId);
+    CREATE INDEX IF NOT EXISTS idx_transaction_tags_tag ON transaction_tags(tagId);
+
+    CREATE TABLE IF NOT EXISTS refund_claims (
+      id              TEXT PRIMARY KEY NOT NULL,
+      transactionId   TEXT NOT NULL,
+      expectedAmount  REAL NOT NULL DEFAULT 0,
+      status          TEXT NOT NULL DEFAULT 'awaiting',
+      note            TEXT,
+      createdAt       TEXT NOT NULL,
+      resolvedAt      TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_refund_claims_status ON refund_claims(status);
+  `);
+
   // -- 2. Self-heal columns on existing tables --------------------------------
 
   // `funds` predates the Funds grid, so installs that already ran the old

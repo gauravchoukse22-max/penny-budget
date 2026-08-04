@@ -116,7 +116,7 @@ eq(typeLabel('liability', 'from-a-newer-build'), 'Other', 'unknown synced type s
 
 // ── backup format ────────────────────────────────────────────────────────────
 
-eq(BACKUP_VERSION, 5, 'backup format bumped to 5');
+eq(BACKUP_VERSION, 7, 'backup format bumped to 7');
 eq(BACKUP_TABLES.includes('assets'), true, 'backup carries assets');
 eq(BACKUP_TABLES.includes('liabilities'), true, 'backup carries liabilities');
 
@@ -134,10 +134,19 @@ eq(v2.includes('transactions'), true, 'v2 restore still covers core tables');
 // Ordering is dependency order — filtering must preserve it.
 eq(
   v3,
-  // v3 predates net worth (v4) AND splits (v5), so a v3 file must leave all
-  // three tables alone rather than wiping them.
+  // v3 predates net worth (v4), splits (v5), the shared budget settings (v6)
+  // AND tags/refund claims (v7), so a v3 file must leave all eight tables alone
+  // rather than wiping them.
   BACKUP_TABLES.filter(
-    (t) => t !== 'assets' && t !== 'liabilities' && t !== 'transaction_splits' && t !== 'net_worth_snapshots'
+    (t) =>
+      t !== 'assets' &&
+      t !== 'liabilities' &&
+      t !== 'transaction_splits' &&
+      t !== 'net_worth_snapshots' &&
+      t !== 'shared_settings' &&
+      t !== 'tags' &&
+      t !== 'transaction_tags' &&
+      t !== 'refund_claims'
   ),
   'v3 filter preserves table order'
 );
@@ -145,7 +154,9 @@ eq(
 // A current-version file round-trips validation; anything newer is refused.
 eq(validateBackup({ version: 4, timestamp: 't', tables: {} }).valid, true, 'an older v4 file still validates');
 eq(validateBackup({ version: 5, timestamp: 't', tables: {} }).valid, true, 'v5 file validates');
-eq(validateBackup({ version: 6, timestamp: 't', tables: {} }).valid, false, 'newer file refused');
+eq(validateBackup({ version: 6, timestamp: 't', tables: {} }).valid, true, 'v6 file validates');
+eq(validateBackup({ version: 7, timestamp: 't', tables: {} }).valid, true, 'v7 file validates');
+eq(validateBackup({ version: 8, timestamp: 't', tables: {} }).valid, false, 'newer file refused');
 eq(validateBackup({ version: 'x', tables: {} }).valid, false, 'junk version refused');
 
 // The completion message tells the user what an old file did NOT replace.

@@ -15,6 +15,7 @@ import { RemainingLabel } from '../../components/RemainingLabel';
 import { TransactionRow } from '../../components/TransactionRow';
 import { StreakBadge } from '../../components/FeatureCards';
 import { MonthSwitcher } from '../../components/MonthSwitcher';
+import { Button } from '../../components/Button';
 import { daysLeftInMonth, formatCurrency } from '../../lib/format';
 import { getStreaks } from '../../features/streaks-and-gamification';
 import { selection, tapLight } from '../../lib/haptics';
@@ -233,9 +234,9 @@ export default function HomeScreen() {
               flat (accentTint, no gradient) so the surplus hero stays the
               loudest thing on this screen. */}
           <View style={styles.quickRow}>
-            <QuickLink icon="pie-chart-outline" label="Budget" onPress={() => router.push('/(tabs)/budget')} />
-            <QuickLink icon="card-outline" label="Cards" onPress={() => router.push('/(tabs)/cards')} />
-            <QuickLink icon="bar-chart-outline" label="Insights" onPress={() => router.push('/(tabs)/insights')} />
+            <Button label="Budget" icon="pie-chart-outline" onPress={() => router.push('/(tabs)/budget')} variant="tonal" style={styles.quickCard} />
+            <Button label="Cards" icon="card-outline" onPress={() => router.push('/(tabs)/cards')} variant="tonal" style={styles.quickCard} />
+            <Button label="Insights" icon="bar-chart-outline" onPress={() => router.push('/(tabs)/insights')} variant="tonal" style={styles.quickCard} />
           </View>
 
           <Surface>
@@ -267,9 +268,13 @@ export default function HomeScreen() {
           <Surface>
             <View style={styles.sectionHeaderRow}>
               <Text style={[styles.sectionTitle, { color: theme.label }]}>Recent Transactions</Text>
-              <Pressable onPress={() => router.push('/(tabs)/transactions')}>
-                <Text style={{ color: theme.accent, fontSize: 14, fontWeight: '600' }}>See all</Text>
-              </Pressable>
+              <Button
+                label="See all"
+                onPress={() => router.push('/(tabs)/transactions')}
+                variant="ghost"
+                size="sm"
+                accessibilityLabel="See all transactions"
+              />
             </View>
             {recent.length === 0 ? (
               <View style={styles.emptyState}>
@@ -301,21 +306,6 @@ export default function HomeScreen() {
         <Ionicons name="add" size={28} color="#FFFFFF" />
       </PressableScale>
     </SafeAreaView>
-  );
-}
-
-function QuickLink({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
-  const theme = useTheme();
-  return (
-    <Pressable
-      style={[styles.quickCard, { backgroundColor: theme.accentTint }]}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-    >
-      <Ionicons name={icon} size={18} color={theme.accent} />
-      <Text style={{ color: theme.label, fontSize: 13, fontWeight: '600' }}>{label}</Text>
-    </Pressable>
   );
 }
 
@@ -351,13 +341,8 @@ const styles = StyleSheet.create({
   heroCellHint: { fontSize: 11 },
   breakdownToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 4 },
   formula: { fontSize: 12 },
-  statsRow: { flexDirection: 'row', gap: spacing.md },
   quickRow: { flexDirection: 'row', gap: spacing.md },
-  quickCard: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: radius.md },
-  statCard: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: spacing.md },
-  statLabel: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
-  statHint: { fontSize: 10, color: 'rgba(255,255,255,0.75)' },
-  daysLeft: { fontSize: 20, fontWeight: '800', color: '#FFFFFF' },
+  quickCard: { flex: 1 },
   sectionTitle: { fontSize: 17, fontWeight: '700', marginBottom: 10 },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   healthRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7 },

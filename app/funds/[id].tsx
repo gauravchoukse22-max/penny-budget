@@ -3,10 +3,10 @@ import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useBudget } from '../../context/BudgetContext';
-import { useTheme, spacing, radius, type as typeScale } from '../../theme/colors';
+import { useTheme, spacing, type as typeScale } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
 import { AmountText } from '../../components/AmountText';
-import { PressableScale } from '../../components/PressableScale';
+import { Button } from '../../components/Button';
 import { FundEntryRow } from '../../components/FundEntryRow';
 import { formatMonthLabel } from '../../lib/format';
 import {
@@ -186,14 +186,7 @@ export default function FundHistoryScreen() {
         })
       )}
 
-      <PressableScale
-        haptic
-        onPress={() => router.push('/funds')}
-        style={[styles.backButton, { backgroundColor: theme.card }]}
-      >
-        <Ionicons name="grid-outline" size={18} color={theme.accent} />
-        <Text style={{ color: theme.accent, fontWeight: '700' }}>Back to the grid</Text>
-      </PressableScale>
+      <Button label="Back to the grid" icon="grid-outline" onPress={() => router.push('/funds')} variant="tonal" />
     </ScrollView>
   );
 }
@@ -208,14 +201,6 @@ const styles = StyleSheet.create({
   monthNumbers: { alignItems: 'flex-end', gap: 2 },
   splitRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
   entries: { marginTop: spacing.sm },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
-  },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.sm },
   emptyTitle: { fontSize: 20, fontWeight: '700', marginTop: spacing.md },
   emptyBody: { fontSize: 14, textAlign: 'center', lineHeight: 20 },

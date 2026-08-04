@@ -7,6 +7,7 @@ import { Surface } from './Surface';
 import { GradientCard } from './GradientCard';
 import { AmountText } from './AmountText';
 import { ProgressBar } from './ProgressBar';
+import { Button, IconButton } from './Button';
 
 // 1. StreakBadge
 export function StreakBadge({ currentStreak, longestStreak }: { currentStreak: number; longestStreak: number }) {
@@ -242,9 +243,12 @@ export function CategoryRuleRow({ keyword, categoryName, categoryColor, onDelete
     <View style={[styles.row, { paddingVertical: spacing.sm }]}>
       <View style={[styles.dot, { backgroundColor: categoryColor, marginRight: spacing.sm }]} />
       <Text style={[typeScale.subhead, { color: theme.label, flex: 1 }]}>"{keyword}" <Text style={{color: theme.tertiaryLabel}}>→</Text> {categoryName}</Text>
-      <Pressable onPress={onDelete} hitSlop={10}>
-        <Ionicons name="trash-outline" size={18} color={theme.systemRed} />
-      </Pressable>
+      <IconButton
+        icon="trash-outline"
+        onPress={() => onDelete?.()}
+        variant="destructive"
+        accessibilityLabel={`Delete rule: ${keyword} to ${categoryName}`}
+      />
     </View>
   );
 }
@@ -283,18 +287,13 @@ export function AppLockScreen({ onUnlock }: { onUnlock: () => void }) {
     <View style={[StyleSheet.absoluteFill, styles.lockScreen, { backgroundColor: theme.background }]}>
       <Ionicons name="lock-closed" size={48} color={theme.accent} style={{ marginBottom: spacing.lg }} />
       <Text style={[typeScale.headline, { color: theme.label, marginBottom: spacing.md }]}>Penny Budget is Locked</Text>
-      <Pressable
+      <Button
+        label={biometricType ? `Unlock with ${biometricType}` : 'Unlock'}
         onPress={onUnlock}
-        style={({ pressed }) => [
-          styles.unlockButton,
-          { backgroundColor: theme.accent, opacity: pressed ? 0.8 : 1 }
-        ]}
-      >
-        <Ionicons name="scan" size={20} color="#FFF" style={{ marginRight: spacing.sm }} />
-        <Text style={[typeScale.subhead, { color: '#FFF', fontWeight: '600' }]}>
-          {biometricType ? `Unlock with ${biometricType}` : 'Unlock'}
-        </Text>
-      </Pressable>
+        variant="primary"
+        size="lg"
+        icon="scan"
+      />
     </View>
   );
 }
@@ -366,13 +365,9 @@ export function BulkActionBar({
   return (
     <View style={[styles.bulkActionBar, { backgroundColor: theme.groupedBackground }]}>
       <Text style={[typeScale.subhead, { color: theme.label, fontWeight: '600' }]}>{count} selected</Text>
-      <View style={styles.row}>
-        <Pressable onPress={onCategorize} style={[styles.bulkActionBtn, { backgroundColor: theme.accent }]}>
-          <Text style={[typeScale.footnote, { color: '#FFF', fontWeight: '600' }]}>Categorize</Text>
-        </Pressable>
-        <Pressable onPress={onDelete} style={[styles.bulkActionBtn, { backgroundColor: theme.systemRed, marginLeft: spacing.sm }]}>
-          <Text style={[typeScale.footnote, { color: '#FFF', fontWeight: '600' }]}>Delete</Text>
-        </Pressable>
+      <View style={[styles.row, { gap: spacing.sm }]}>
+        <Button label="Categorize" onPress={onCategorize} variant="primary" size="sm" />
+        <Button label="Delete" onPress={onDelete} variant="destructive" size="sm" />
       </View>
     </View>
   );
@@ -400,11 +395,9 @@ const styles = StyleSheet.create({
   debtRow: { padding: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(150,150,150,0.2)' },
   toggleDot: { width: 14, height: 14, borderRadius: 7 },
   lockScreen: { zIndex: 9999, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  unlockButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.pill },
   searchBarContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: 10, borderRadius: radius.md, marginVertical: spacing.sm },
   searchInput: { flex: 1, marginLeft: spacing.sm, fontSize: 16 },
   multiSelectRow: { paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(150,150,150,0.1)' },
   checkbox: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   bulkActionBar: { position: 'absolute', bottom: 30, left: spacing.lg, right: spacing.lg, borderRadius: radius.lg, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 10 },
-  bulkActionBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.sm },
 });

@@ -156,7 +156,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   // goals, transfers and goal amounts. All of it ran on every month change,
   // ahead of any redraw.
   const refresh = useCallback(async () => {
-    const [s, c, cat, goals, tx, transfers, goalAmounts, salary, limitOverrides] = await Promise.all([
+    const [s, c, cat, goals, tx, transfers, goalAmounts, salary, limitOverrides, rollovers] = await Promise.all([
       q.getAppSettings(),
       q.listCards(),
       q.listCategories(),
@@ -166,6 +166,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
       q.resolveSavingsGoalAmounts(selectedMonth),
       q.resolveSalaryForMonth(selectedMonth),
       q.resolveCategoryLimits(selectedMonth),
+      q.resolveRollovers(selectedMonth),
     ]);
     setSettings(s);
     setCards(c);
@@ -173,7 +174,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     setSavingsGoals(goals);
     setTransactions(tx);
     setSurplus(q.computeSurplusFrom(salary, tx, goals, transfers, goalAmounts));
-    setCategorySummaries(q.computeCategorySummariesFrom(cat, tx, limitOverrides));
+    setCategorySummaries(q.computeCategorySummariesFrom(cat, tx, limitOverrides, rollovers));
     setCardTotals(q.computeCardTotalsFrom(tx));
     setTransferStatus(transfers);
     setSavingsGoalAmounts(goalAmounts);

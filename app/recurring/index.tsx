@@ -9,6 +9,7 @@ import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { AmountText } from '../../components/AmountText';
+import { Button, Chip, IconButton } from '../../components/Button';
 import {
   listRecurringTransactions,
   createRecurringTransaction,
@@ -160,23 +161,25 @@ export default function RecurringScreen() {
                   </View>
                   <AmountText amount={item.amount} currency={settings.currency} size={14} weight="semibold" />
                   <Switch value={item.active} onValueChange={() => toggle(item)} style={styles.switch} />
-                  <Pressable
+                  <IconButton
+                    icon="close"
                     onPress={() => confirmAndRemove(item)}
-                    hitSlop={8}
-                    accessibilityRole="button"
+                    variant="destructive"
                     accessibilityLabel={`Delete recurring bill ${item.note}`}
-                  >
-                    <Ionicons name="close-circle" size={20} color={theme.tertiaryLabel} />
-                  </Pressable>
+                  />
                 </View>
               </SwipeToDelete>
             );
           })
         )}
-        <Pressable style={styles.discoverRow} onPress={discover}>
-          <Ionicons name="sparkles-outline" size={18} color={theme.accent} />
-          <Text style={{ color: theme.accent, marginLeft: 6, fontWeight: '600' }}>Discover from history</Text>
-        </Pressable>
+        <Button
+          label="Discover from history"
+          icon="sparkles-outline"
+          onPress={discover}
+          variant="tonal"
+          size="sm"
+          style={styles.discoverRow}
+        />
       </Surface>
 
       {suggestions.length > 0 && (
@@ -193,9 +196,12 @@ export default function RecurringScreen() {
                 </Text>
               </View>
               <AmountText amount={s.amount} currency={settings.currency} size={14} weight="semibold" />
-              <Pressable onPress={() => acceptSuggestion(s)} hitSlop={8} style={{ marginLeft: 8 }}>
-                <Ionicons name="add-circle" size={24} color={theme.accent} />
-              </Pressable>
+              <IconButton
+                icon="add"
+                onPress={() => acceptSuggestion(s)}
+                variant="tonal"
+                accessibilityLabel={`Add ${s.note} as a recurring bill`}
+              />
             </View>
           ))}
         </Surface>
@@ -246,23 +252,11 @@ export default function RecurringScreen() {
         <Text style={[styles.fieldLabel, { color: theme.secondaryLabel }]}>Card</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {cards.map((c) => (
-            <Pressable
-              key={c.id}
-              onPress={() => setCardId(c.id)}
-              style={[styles.cardChip, { backgroundColor: c.color, opacity: cardId === c.id ? 1 : 0.4 }]}
-            >
-              <Text style={styles.cardChipText}>{c.name}</Text>
-            </Pressable>
+            <Chip key={c.id} label={c.name} selected={cardId === c.id} onPress={() => setCardId(c.id)} style={styles.cardChip} />
           ))}
         </ScrollView>
 
-        <Pressable
-          disabled={!canAdd}
-          style={[styles.addButton, { backgroundColor: theme.accent, opacity: canAdd ? 1 : 0.4 }]}
-          onPress={add}
-        >
-          <Text style={{ color: '#FFF', fontWeight: '600' }}>Add Recurring Bill</Text>
-        </Pressable>
+        <Button label="Add Recurring Bill" onPress={add} variant="primary" disabled={!canAdd} style={styles.addButton} />
       </Surface>
 
       <Text style={[styles.footer, { color: theme.tertiaryLabel }]}>
@@ -282,7 +276,7 @@ const styles = StyleSheet.create({
   rowMiddle: { flex: 1 },
   rowTitle: { fontSize: 14, fontWeight: '500' },
   switch: { transform: [{ scale: 0.8 }] },
-  discoverRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 10 },
+  discoverRow: { alignSelf: 'flex-start', marginTop: 10 },
   input: { padding: 12, borderRadius: radius.sm, fontSize: 15, marginBottom: 10 },
   inlineRow: { flexDirection: 'row', gap: 10 },
   flex1: { flex: 1 },
@@ -292,8 +286,7 @@ const styles = StyleSheet.create({
   gridItem: { alignItems: 'center', width: 72 },
   iconWrap: { borderRadius: 22, padding: 2 },
   gridLabel: { fontSize: 11, marginTop: 4, textAlign: 'center' },
-  cardChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.md, marginRight: 8 },
-  cardChipText: { color: '#FFF', fontWeight: '600' },
-  addButton: { paddingVertical: 15, borderRadius: radius.md, alignItems: 'center', marginTop: spacing.lg },
+  cardChip: { marginRight: 8 },
+  addButton: { marginTop: spacing.lg },
   footer: { textAlign: 'center', fontSize: 12 },
 });
