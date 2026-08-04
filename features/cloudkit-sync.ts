@@ -107,6 +107,11 @@ export const SYNCABLE_TABLES = new Set([
   // unroutable rather than merely unused. See features/funds.ts.
   'fund_balances',
   'fund_entries',
+  // Net worth (features/net-worth.ts). A build without these two entries skips
+  // their records on pull rather than throwing, so shipping them is safe even
+  // while a household member is still on an older build.
+  'assets',
+  'liabilities',
 ]);
 
 /**

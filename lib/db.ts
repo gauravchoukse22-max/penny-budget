@@ -211,6 +211,14 @@ async function migrateFeatureTables(db: SQLite.SQLiteDatabase): Promise<void> {
   if (!settingsColumnNames.has('watchedCategories')) {
     await db.execAsync('ALTER TABLE app_settings ADD COLUMN watchedCategories TEXT;');
   }
+  // Bill due-date reminders toggle (features/bill-reminders.ts). Device-local
+  // on purpose, and doubly so: app_settings never syncs, AND the thing this
+  // flag controls — the OS notification permission and the locally scheduled
+  // notifications — exists only on this phone. Syncing it would flip a switch
+  // on a co-member's device that their OS never granted.
+  if (!settingsColumnNames.has('billRemindersEnabled')) {
+    await db.execAsync('ALTER TABLE app_settings ADD COLUMN billRemindersEnabled INTEGER NOT NULL DEFAULT 0;');
+  }
 
   // The Funds grid's tables (funds, fund_accounts, fund_entries) live in
   // features/db-migrations. That module used to export a run-it-yourself

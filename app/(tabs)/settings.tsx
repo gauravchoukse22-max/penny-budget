@@ -10,6 +10,7 @@ import { Surface } from '../../components/Surface';
 import { listAllTransactions } from '../../lib/queries';
 import { exportTransactionsCsv, importTransactionsCsv, importParticularsCsv } from '../../lib/csv';
 import { exportDatabaseToJson, importDatabaseFromJson } from '../../features/backup-restore';
+import { exportMonthlyReportPdf } from '../../features/report-export';
 import { checkBiometricsSupport, authenticateUser } from '../../features/biometrics';
 import { pickAndParseStatement } from '../../features/statement-import';
 import { setPendingImport } from '../../features/import-preview-store';
@@ -106,6 +107,15 @@ export default function SettingsScreen() {
         notify('Import complete', `Imported ${result.imported} transactions, skipped ${result.skipped}.`);
         await refresh();
       }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doExportReport = async () => {
+    setBusy(true);
+    try {
+      await exportMonthlyReportPdf(selectedMonth);
     } finally {
       setBusy(false);
     }
@@ -251,7 +261,21 @@ export default function SettingsScreen() {
           <View style={[styles.divider, { backgroundColor: theme.separator }]} />
           <SettingsLink label="Recurring Bills" onPress={() => router.push('/recurring')} />
           <View style={[styles.divider, { backgroundColor: theme.separator }]} />
+          {/* Bills is the calendar VIEW of what Recurring Bills defines, so it
+              sits directly under it rather than in its own section. */}
+          <SettingsLink
+            label="Bill Calendar"
+            detail="Due dates this month, and reminders"
+            onPress={() => router.push('/bills')}
+          />
+          <View style={[styles.divider, { backgroundColor: theme.separator }]} />
           <SettingsLink label="Funds" onPress={() => router.push('/funds')} />
+          <View style={[styles.divider, { backgroundColor: theme.separator }]} />
+          <SettingsLink
+            label="Net Worth"
+            detail="What you own and owe, entered by you"
+            onPress={() => router.push('/net-worth')}
+          />
           <View style={[styles.divider, { backgroundColor: theme.separator }]} />
           <SettingsLink label="Search Transactions" onPress={() => router.push('/search')} />
         </Surface>
@@ -304,6 +328,16 @@ export default function SettingsScreen() {
 
         <Surface>
           <Text style={[styles.sectionTitle, { color: theme.label }]}>Data</Text>
+          {/* Named with the month it will cover: this exports the month you are
+              looking at, not "everything", and a report that silently covered
+              the wrong month would be worse than no report. */}
+          <Pressable style={styles.actionRow} onPress={doExportReport} disabled={busy}>
+            <Ionicons name="document-text-outline" size={20} color={theme.accent} />
+            <Text style={{ color: theme.accent, marginLeft: 10, fontWeight: '600' }}>
+              Export {formatMonthLabel(selectedMonth)} report (PDF)
+            </Text>
+          </Pressable>
+          <View style={[styles.divider, { backgroundColor: theme.separator }]} />
           <Pressable style={styles.actionRow} onPress={doExport} disabled={busy}>
             <Ionicons name="download-outline" size={20} color={theme.accent} />
             <Text style={{ color: theme.accent, marginLeft: 10, fontWeight: '600' }}>Export CSV</Text>

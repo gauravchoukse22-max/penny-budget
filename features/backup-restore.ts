@@ -14,7 +14,8 @@ import { readPickedFileAsText, downloadOrShareFile } from '../lib/files';
 // wipe, so it is load-bearing rather than decoration:
 //   2 — everything below except the Funds grid.
 //   3 — adds funds, fund_accounts, fund_entries and the legacy fund_balances.
-export const BACKUP_VERSION = 3;
+//   4 — adds assets and liabilities (Net Worth).
+export const BACKUP_VERSION = 4;
 
 // Parent tables first so a restore inserts them before the rows that reference
 // them. (Deletes run in reverse.) Transient sync state (outbox, sync_meta) is
@@ -36,6 +37,10 @@ export const BACKUP_TABLES = [
   'transactions',
   'recurring_transactions',
   'category_rules',
+  // Net worth. Standalone rows — nothing references them and they reference
+  // nothing, so their position in this order carries no dependency weight.
+  'assets',
+  'liabilities',
   'streaks',
   'category_budgets',
   'savings_goal_budgets',
@@ -59,6 +64,11 @@ const FUNDS_BACKUP_VERSION = 3;
 
 const FUNDS_TABLES: ReadonlySet<string> = new Set(['funds', 'fund_accounts', 'fund_entries', 'fund_balances']);
 
+/** The first BACKUP_VERSION whose files carry Net Worth. */
+const NET_WORTH_BACKUP_VERSION = 4;
+
+const NET_WORTH_TABLES: ReadonlySet<string> = new Set(['assets', 'liabilities']);
+
 /**
  * The tables a backup of this version is authoritative for — the only ones a
  * restore may wipe.
@@ -76,8 +86,14 @@ const FUNDS_TABLES: ReadonlySet<string> = new Set(['funds', 'fund_accounts', 'fu
  * nothing on screen to say so.
  */
 export function restorableTables(version: number): readonly string[] {
-  if (version >= FUNDS_BACKUP_VERSION) return BACKUP_TABLES;
-  return BACKUP_TABLES.filter((table) => !FUNDS_TABLES.has(table));
+  return BACKUP_TABLES.filter((table) => {
+    if (version < FUNDS_BACKUP_VERSION && FUNDS_TABLES.has(table)) return false;
+    // Same rule for Net Worth: a v3 file's silence about assets/liabilities
+    // means "I don't know about that", so a restore leaves those rows alone
+    // rather than wiping them.
+    if (version < NET_WORTH_BACKUP_VERSION && NET_WORTH_TABLES.has(table)) return false;
+    return true;
+  });
 }
 
 /**
@@ -144,8 +160,11 @@ export async function restoreAllTables(backup: BackupData): Promise<void> {
  * still on screen and wondering whether the restore quietly missed them.
  */
 export function restoreCompletionMessage(version: number): string {
-  if (version >= FUNDS_BACKUP_VERSION) return 'Data restored. Please close and reopen the app.';
-  return 'Data restored. This backup predates the Funds grid, so your Funds were left exactly as they are. Please close and reopen the app.';
+  if (version >= NET_WORTH_BACKUP_VERSION) return 'Data restored. Please close and reopen the app.';
+  if (version >= FUNDS_BACKUP_VERSION) {
+    return 'Data restored. This backup predates Net Worth, so your assets and liabilities were left exactly as they are. Please close and reopen the app.';
+  }
+  return 'Data restored. This backup predates the Funds grid and Net Worth, so those were left exactly as they are. Please close and reopen the app.';
 }
 
 /** Validates a parsed backup's shape/version before any data is touched. */

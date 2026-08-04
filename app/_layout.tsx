@@ -107,9 +107,11 @@ function RootNavigator() {
         <Stack.Screen name="category/[id]" options={{ headerShown: true, title: 'Category' }} />
         <Stack.Screen name="card/[id]" options={{ headerShown: true, title: 'Card' }} />
         <Stack.Screen name="recurring/index" options={{ headerShown: true, title: 'Recurring Bills' }} />
+        <Stack.Screen name="bills/index" options={{ headerShown: true, title: 'Bills' }} />
         <Stack.Screen name="funds/index" options={{ headerShown: true, title: 'Funds' }} />
         <Stack.Screen name="funds/manage" options={{ headerShown: true, title: 'Funds & Accounts' }} />
         <Stack.Screen name="funds/[id]" options={{ headerShown: true, title: 'Fund History' }} />
+        <Stack.Screen name="net-worth/index" options={{ headerShown: true, title: 'Net Worth' }} />
         <Stack.Screen name="search" options={{ headerShown: true, title: 'Search' }} />
         {/* No headerLargeTitle. Its translucent large-title bar rendered with
             no background here, so the member list scrolled visibly through the

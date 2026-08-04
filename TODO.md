@@ -174,6 +174,29 @@ These are real risks, not paperwork. Each changed behaviour no agent could obser
       clean, but nothing has rendered on a simulator — the money map's ribbon
       geometry and the edit sheet's reordering especially need eyes. Check both
       light/dark and an empty-data install.
+- [ ] **The rebuilt Cards tab (compact rows).** Full-height WalletCards became
+      one row per card: mini swatch, name + last four, due countdown, month
+      total. Needs eyes on the swipe-to-delete panel clipping inside the rounded
+      Surface, and the pressed-state colour of a row.
+- [ ] **Net Worth (new screen).** `app/net-worth/index.tsx` finally uses the
+      long-dormant `assets`/`liabilities` tables. Both are now in
+      `SYNCABLE_TABLES` and every write journals, so this is the first new
+      SYNCED feature since the sharing rework — a two-phone check matters more
+      here than a simulator one. Backup format went to v4; a v3 file must leave
+      existing net-worth rows ALONE rather than clearing them (the truncated-
+      backup trap), which is fixture-tested but never run against a real restore.
+- [ ] **Bill calendar + reminders (new screen).** `app/bills/index.tsx` plus
+      `lib/bill-schedule.ts` (14 fixtures) and `features/bill-reminders.ts`.
+      **The notification half cannot work until the next NATIVE build** —
+      expo-notifications was only added to package.json, so autolinking happens
+      at iOS 19 / vc13. Until then the code degrades to a disabled switch. Needs
+      eyes on: the calendar grid on a small phone, permission prompt copy, and
+      that toggling reminders off really cancels scheduled ones.
+- [ ] **Monthly PDF report export.** `features/report-export.ts` (34 fixtures on
+      the HTML generator). Same native caveat: expo-print links at the next
+      build; before that the button says so instead of failing. Nobody has seen
+      the rendered PDF — check page breaks and that a month with no data doesn't
+      produce an empty sheet.
 - [ ] **The seeded Cash card.** `features/db-migrations.ts` seeds it once per
       install at the well-known id `penny-cash-card`, stamped in
       `app_settings.cashCardSeededAt`. A fresh install on the iOS simulator

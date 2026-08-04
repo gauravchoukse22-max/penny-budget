@@ -215,6 +215,18 @@ export async function applyFeatureMigrations(db: SQLite.SQLiteDatabase): Promise
   );
   await addColumnIfMissing(db, 'transactions', 'receiptUri', 'TEXT');
   await addColumnIfMissing(db, 'transactions', 'memo', 'TEXT');
+  // Net worth (features/net-worth.ts). Both tables predate the feature that
+  // finally reads them, so installs that already ran the CREATE need patching:
+  // liabilities never had a type column at all, and neither table had a note.
+  //
+  // ROLLOUT NOTE: these columns ride along in the assets/liabilities sync
+  // payloads. Unlike the savings_goals case above, a co-member on an older
+  // build is SAFE — their build has neither table in SYNCABLE_TABLES, so their
+  // pull skips these records outright instead of throwing on the unknown
+  // columns. They simply don't see net worth until they update.
+  await addColumnIfMissing(db, 'assets', 'note', 'TEXT');
+  await addColumnIfMissing(db, 'liabilities', 'note', 'TEXT');
+  await addColumnIfMissing(db, 'liabilities', 'type', "TEXT NOT NULL DEFAULT 'other'");
 
   // -- 3. Seed the well-known rows -------------------------------------------
 
