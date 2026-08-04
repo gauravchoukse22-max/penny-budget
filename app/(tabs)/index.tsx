@@ -10,7 +10,6 @@ import { AnimatedAmount } from '../../components/AnimatedAmount';
 import { totalSavingsGoals } from '../../lib/queries';
 import { ProgressBar } from '../../components/ProgressBar';
 import { Surface } from '../../components/Surface';
-import { GradientCard } from '../../components/GradientCard';
 import { PressableScale } from '../../components/PressableScale';
 import { RemainingLabel } from '../../components/RemainingLabel';
 import { TransactionRow } from '../../components/TransactionRow';
@@ -75,7 +74,20 @@ export default function HomeScreen() {
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const cardById = new Map(cards.map((c) => [c.id, c]));
   const recent = transactions.slice(0, 5);
-  const heroGradient = surplus.surplus > 0 ? theme.heroPositive : surplus.surplus < 0 ? theme.heroNegative : theme.heroNeutral;
+  const heroColor = surplus.surplus > 0 ? theme.positiveMuted : surplus.surplus < 0 ? theme.negativeMuted : theme.label;
+  // The pace bar's denominator: what this month plans to spend (salary minus
+  // planned savings), falling back to the category budgets' sum when no salary
+  // is set. Zero means no bar — a fraction of nothing says nothing.
+  const budgetedTotal = categorySummaries.reduce((sum, s) => sum + s.category.monthlyLimit, 0);
+  const monthBudget = surplus.salary > 0 ? Math.max(0, surplus.salary - totalSavingsGoals(savingsGoals, savingsGoalAmounts)) : budgetedTotal;
+  const daysLeft = daysLeftInMonth(selectedMonth);
+  const daysInMonth = new Date(
+    parseInt(selectedMonth.slice(0, 4), 10),
+    parseInt(selectedMonth.slice(5, 7), 10),
+    0
+  ).getDate();
+  const monthElapsedPct = Math.min(100, Math.max(0, ((daysInMonth - daysLeft) / daysInMonth) * 100));
+  const dailyPace = daysLeft > 0 ? Math.max(0, surplus.surplus) / daysLeft : 0;
   // Same month-resolved amounts as the "Saved" figure — using the base
   // amounts here made the tile read nonsense like "$1,942 of $1,542" the
   // moment a goal's amount was edited for the month.
@@ -139,15 +151,25 @@ export default function HomeScreen() {
             </Pressable>
           )}
 
-          <GradientCard colors={heroGradient} style={styles.heroCard}>
-            <Text style={styles.heroLabel}>{surplus.surplus < 0 ? 'Over budget' : 'Left to spend'}</Text>
-            <AnimatedAmount
-              amount={surplus.surplus < 0 ? Math.abs(surplus.surplus) : surplus.surplus}
-              currency={settings.currency}
-              size={48}
-              weight="bold"
-              color="#FFFFFF"
-            />
+          {/* The "A+" hero: typography carries the verdict, not colored blocks.
+              Four competing gradient cards became one quiet surface — the
+              number is green/red/neutral, a 4pt pace line shows spend against
+              the month with a tick at today, and Spent/Saved/Daily-pace sit in
+              a hairline footer. "Days left" lives in the caption; the stat the
+              user can act on is the per-day figure, so that gets the cell. */}
+          <Surface style={styles.heroCard}>
+            <Text style={[styles.heroLabel, { color: theme.secondaryLabel }]}>
+              {surplus.surplus < 0 ? 'Over budget' : 'Left to spend'}
+            </Text>
+            <View style={styles.heroAmountWrap}>
+              <AnimatedAmount
+                amount={surplus.surplus < 0 ? Math.abs(surplus.surplus) : surplus.surplus}
+                currency={settings.currency}
+                size={44}
+                weight="bold"
+                color={heroColor}
+              />
+            </View>
             <Pressable
               onPress={() => {
                 tapLight();
@@ -156,30 +178,56 @@ export default function HomeScreen() {
               hitSlop={8}
               style={styles.breakdownToggle}
             >
-              <Text style={styles.formula}>
+              <Text style={[styles.formula, { color: theme.tertiaryLabel }]}>
                 {showBreakdown
                   ? `${formatCurrency(surplus.salary, settings.currency)} in  −  ${formatCurrency(surplus.spend, settings.currency)} spent  −  ${formatCurrency(surplus.savings, settings.currency)} saved`
-                  : 'How is this calculated?'}
+                  : `${formatCurrency(surplus.spend, settings.currency)} of ${formatCurrency(monthBudget, settings.currency)} spent · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left`}
               </Text>
-              <Ionicons name={showBreakdown ? 'chevron-up' : 'chevron-down'} size={12} color="rgba(255,255,255,0.75)" />
+              <Ionicons name={showBreakdown ? 'chevron-up' : 'chevron-down'} size={12} color={theme.tertiaryLabel} />
             </Pressable>
-          </GradientCard>
 
-          <View style={styles.statsRow}>
-            <GradientCard colors={theme.statSpent} style={styles.statCard}>
-              <Text style={styles.statLabel}>Spent</Text>
-              <AmountText amount={surplus.spend} currency={settings.currency} size={17} weight="bold" color="#FFFFFF" />
-            </GradientCard>
-            <GradientCard colors={theme.statSaved} style={styles.statCard}>
-              <Text style={styles.statLabel}>Saved</Text>
-              <AmountText amount={surplus.savings} currency={settings.currency} size={17} weight="bold" color="#FFFFFF" />
-              {savingsTarget > 0 && <Text style={styles.statHint}>of {formatCurrency(savingsTarget, settings.currency)}</Text>}
-            </GradientCard>
-            <GradientCard colors={theme.statDays} style={styles.statCard}>
-              <Text style={styles.statLabel}>Days Left</Text>
-              <Text style={styles.daysLeft}>{daysLeftInMonth(selectedMonth)}</Text>
-            </GradientCard>
-          </View>
+            {/* Fill = share of the month's money spent; tick = share of the
+                month's days elapsed. Fill past the tick reads instantly as
+                "spending faster than the month". Only rendered when a budget
+                exists — a bar with no denominator is noise. */}
+            {monthBudget > 0 && (
+              <View style={[styles.paceTrack, { backgroundColor: theme.fieldBackground }]}>
+                <View
+                  style={[
+                    styles.paceFill,
+                    {
+                      backgroundColor: heroColor,
+                      width: `${Math.min(100, (surplus.spend / monthBudget) * 100)}%`,
+                    },
+                  ]}
+                />
+                <View style={[styles.paceTick, { backgroundColor: theme.secondaryLabel, left: `${monthElapsedPct}%` }]} />
+              </View>
+            )}
+
+            <View style={[styles.heroFooter, { borderTopColor: theme.separator }]}>
+              <View style={styles.heroCell}>
+                <Text style={[styles.heroCellLabel, { color: theme.secondaryLabel }]}>Spent</Text>
+                <AmountText amount={surplus.spend} currency={settings.currency} size={15} weight="semibold" color={theme.label} />
+              </View>
+              <View style={styles.heroCell}>
+                <Text style={[styles.heroCellLabel, { color: theme.secondaryLabel }]}>Saved</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 3 }}>
+                  <AmountText amount={surplus.savings} currency={settings.currency} size={15} weight="semibold" color={theme.label} />
+                  {savingsTarget > 0 && (
+                    <Text style={[styles.heroCellHint, { color: theme.tertiaryLabel }]}>of {formatCurrency(savingsTarget, settings.currency)}</Text>
+                  )}
+                </View>
+              </View>
+              <View style={[styles.heroCell, { alignItems: 'flex-end' }]}>
+                <Text style={[styles.heroCellLabel, { color: theme.secondaryLabel }]}>Daily pace</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                  <AmountText amount={dailyPace} currency={settings.currency} size={15} weight="semibold" color={theme.label} />
+                  <Text style={[styles.heroCellHint, { color: theme.tertiaryLabel }]}>/day</Text>
+                </View>
+              </View>
+            </View>
+          </Surface>
 
           {/* Quick access to the screens that left the tab bar. Deliberately
               flat (accentTint, no gradient) so the surplus hero stays the
@@ -283,10 +331,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   bannerText: { flex: 1, fontWeight: '700', fontSize: 14, color: '#FFFFFF' },
-  heroCard: { alignItems: 'center', gap: 6, paddingVertical: spacing.xxl },
-  heroLabel: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, color: 'rgba(255,255,255,0.85)' },
-  breakdownToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  formula: { fontSize: 12, color: 'rgba(255,255,255,0.8)' },
+  heroCard: { gap: 6, paddingVertical: spacing.xl },
+  heroLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  heroAmountWrap: { alignItems: 'center' },
+  paceTrack: { height: 4, borderRadius: 2, marginTop: spacing.md, overflow: 'visible' },
+  paceFill: { height: 4, borderRadius: 2 },
+  // Slightly taller than the track and centered on it, so it reads as a marker
+  // over the bar rather than a segment of it.
+  paceTick: { position: 'absolute', top: -3, width: 1.5, height: 10, borderRadius: 1 },
+  heroFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  heroCell: { gap: 2 },
+  heroCellLabel: { fontSize: 11 },
+  heroCellHint: { fontSize: 11 },
+  breakdownToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 4 },
+  formula: { fontSize: 12 },
   statsRow: { flexDirection: 'row', gap: spacing.md },
   quickRow: { flexDirection: 'row', gap: spacing.md },
   quickCard: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: radius.md },
