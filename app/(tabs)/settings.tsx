@@ -15,7 +15,7 @@ import { pickAndParseStatement } from '../../features/statement-import';
 import { setPendingImport } from '../../features/import-preview-store';
 import { BANK_LINKING_ENABLED } from '../../lib/feature-flags';
 import { confirmAction, notify } from '../../lib/confirm';
-import { formatMonthLabel } from '../../lib/format';
+import { formatMonthLabel, currencySymbol } from '../../lib/format';
 import { useHouseholdStatus, sharingSummary } from '../../lib/useHouseholdStatus';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR'];
@@ -68,6 +68,7 @@ export default function SettingsScreen() {
   const [busy, setBusy] = useState(false);
   const [biometricType, setBiometricType] = useState<string | null>(null);
   const [pickingCardFor, setPickingCardFor] = useState(false);
+  const [pickingCurrency, setPickingCurrency] = useState(false);
   // iOS drops a presentation that begins while another sheet is still
   // dismissing, so the file picker never appeared. Hold the chosen card until
   // the sheet has fully gone away (Modal.onDismiss), then present the picker.
@@ -214,24 +215,6 @@ export default function SettingsScreen() {
         </View>
 
         <Surface>
-          <Text style={[styles.sectionTitle, { color: theme.label }]}>Currency</Text>
-          <View style={styles.row}>
-            {CURRENCIES.map((cur) => (
-              <Pressable
-                key={cur}
-                onPress={() => updateSettings({ currency: cur })}
-                style={[styles.chip, { backgroundColor: settings.currency === cur ? theme.accent : theme.fieldBackground }]}
-              >
-                <Text style={{ color: settings.currency === cur ? '#FFFFFF' : theme.secondaryLabel, fontWeight: '700' }}>{cur}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <Text style={[styles.hint, { color: theme.tertiaryLabel }]}>
-            Changes only the display symbol — does not convert historical amounts.
-          </Text>
-        </Surface>
-
-        <Surface>
           <Text style={[styles.sectionTitle, { color: theme.label }]}>Account</Text>
           <SettingsLink
             label={cloudConfigured && user ? `Signed in as ${user.email}` : 'Sign In / Create Account'}
@@ -375,6 +358,24 @@ export default function SettingsScreen() {
           </Text>
         </Surface>
 
+        {/* Currency lives LAST, as a picker row: it's set once at onboarding and
+            essentially never again, so a permanently open chip row at the top
+            was prime real estate spent on a decision nobody revisits — and it
+            made the screen open with something that looks editable by accident. */}
+        <Surface>
+          <Text style={[styles.sectionTitle, { color: theme.label }]}>Preferences</Text>
+          <Pressable
+            style={styles.actionRow}
+            onPress={() => setPickingCurrency(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`Currency, currently ${settings.currency}`}
+          >
+            <Text style={{ color: theme.label, fontSize: 15, flex: 1 }}>Currency</Text>
+            <Text style={{ color: theme.secondaryLabel, fontSize: 15, marginRight: 6 }}>{settings.currency}</Text>
+            <Ionicons name="chevron-forward" size={18} color={theme.tertiaryLabel} />
+          </Pressable>
+        </Surface>
+
         <Surface>
           <Text style={[styles.sectionTitle, { color: theme.label }]}>About</Text>
           <SettingsLink label="What's New" onPress={() => router.push('/whats-new')} />
@@ -410,6 +411,45 @@ export default function SettingsScreen() {
             ))}
           </ScrollView>
           <Pressable style={[styles.modalCancel, { borderColor: theme.separator }]} onPress={() => setPickingCardFor(false)}>
+            <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
+          </Pressable>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={pickingCurrency}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setPickingCurrency(false)}
+      >
+        <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
+          <Text style={[type.title2, { color: theme.label, marginBottom: spacing.sm }]}>Currency</Text>
+          <Text style={[styles.hint, { color: theme.tertiaryLabel, marginBottom: spacing.md }]}>
+            Changes only the display symbol — does not convert historical amounts.
+          </Text>
+          <ScrollView>
+            {CURRENCIES.map((cur) => {
+              const active = settings.currency === cur;
+              return (
+                <Pressable
+                  key={cur}
+                  style={styles.pickerRow}
+                  onPress={async () => {
+                    await updateSettings({ currency: cur });
+                    setPickingCurrency(false);
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text style={{ color: theme.label, fontSize: 16, flex: 1 }}>
+                    {currencySymbol(cur)}  {cur}
+                  </Text>
+                  {active && <Ionicons name="checkmark" size={20} color={theme.accent} />}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          <Pressable style={[styles.modalCancel, { borderColor: theme.separator }]} onPress={() => setPickingCurrency(false)}>
             <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
           </Pressable>
         </View>
