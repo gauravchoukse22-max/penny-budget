@@ -11,8 +11,23 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 
 ## Gary only
 
-- [ ] **Upload the current build to TestFlight.** Xcode Organizer → Distribute App
-      → App Store Connect → Upload. Needs his Apple ID, so it can never be automated.
+- [ ] **Upload a build to TestFlight.** Xcode Organizer → Distribute App →
+      App Store Connect → Upload. Needs his Apple ID, so it can never be
+      automated. **Pick the archive by its explicit name**, never by the version
+      string: Organizer shows 13, 14, 15, 16, 17 and 18 all as plain "1.2.0 (n)".
+      **1.2.0 (18)** is the newest built and carries the statement-importer fix
+      Disha is waiting on; **19 will supersede it** once the batch above is
+      verified, so if 19 exists, upload 19 instead.
+- [ ] **Delete the stale June 2027 transactions**, then re-import the Chase
+      statement. The first import filed them a year ahead (the year bug, fixed in
+      18). On the new build: tap the month name → year arrow to 2027 → June will
+      have a dot showing it holds transactions. Clear them BEFORE re-importing so
+      the duplicate check isn't comparing against wrongly-dated copies.
+- [ ] **Confirm the statement import actually works on the real Chase PDF.** The
+      parser rewrite has 109 fixtures but has never seen a real bank statement —
+      Gary declined to share the file, so his next in-app import IS the test. If
+      it still imports nothing, the dialog now names which check failed and
+      quotes a line it read; send that text (it contains no amounts).
 - [ ] **Android: run the 14-day closed test** with ~12 testers, then apply for
       production access. Google gates production on this for personal accounts.
 - [ ] **Play listing**: Data safety, content rating, store listing copy and
@@ -20,24 +35,73 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 
 ## Claude
 
-### Next
+### Next — START HERE in a fresh session
+- [ ] **Verify the 2026-08-03/04 batch on the simulator, then cut iOS 19 /
+      Android vc13.** SEVEN screens changed and NONE has rendered anywhere:
+      Home (A+ hero), Add Transaction (chips), Cards (rows), Budget (ledger),
+      Insights (Review Night + Edit sheet), Settings (hub, currency picker,
+      three new links), Card detail (Edit/Save mode) — plus two brand-new
+      screens, Net Worth and Bill Calendar. Every item is detailed in "Verified
+      only by typecheck" below. Order: build for simulator → walk each screen →
+      fix what looks wrong → bump to 19/vc13 in app.json + build.gradle +
+      ios/PennyBudget/Info.plist → archive + gradle → verify signing and that
+      the compiled bundle contains the new code → hand Gary the archive name.
+      **The native build is also what finally links expo-print,
+      expo-notifications and expo-system-ui**, so PDF export, bill reminders and
+      Android dark mode only start working from this build onward.
 - [ ] **Disha rejoins with Replace** — the flow exists now; walk them through it.
       That is what clears her duplicate categories and cards in one action. She
       should back up first (Settings → Backup), since Replace discards whatever
       is only on her phone.
 
+### Competitive gaps — what paid apps ship that Penny doesn't (researched 2026-08-03)
+Measured against YNAB ($109/yr), Monarch ($99.99/yr), Copilot ($95/yr), Rocket
+Money, Simplifi, PocketGuard, and the one-time-purchase indies. Split by whether
+the gap is closable WITHOUT bank linking — the ones that need a bank feed are
+deliberate non-goals and belong in marketing copy, not this list.
+
+**Next up — the one top-5 gap not yet built:**
+- [ ] **Goal target dates + debt payoff planner.** Two features, both pure
+      arithmetic over data already stored, and they pair with the Net Worth
+      screen that just shipped (liabilities are entered there already).
+      (a) Goals answer "funded by March at $200/mo", and the reverse — "to hit
+      it by June you need $340/mo" (YNAB target-by-date, Simplifi fully-funded
+      date). (b) Debt payoff: avalanche vs snowball ordering over the
+      `liabilities` rows, with "paying $50 extra clears this 14 months sooner"
+      (YNAB Loan Planner, PocketGuard Plus). No bank feed, no new dependency.
+      Deferred from the 2026-08-03 batch on purpose: seven screens changed that
+      day and none had rendered yet, so an eighth would have been unverifiable.
+
+**Lower priority, none started:**
+- [ ] **Multi-currency.** MoneyCoach and Buddy have it; real data-model surgery
+      here. Blocked behind the currency-sync bug below — fix that first.
+- [ ] **Tags** (cross-category labels, YNAB flags / Simplifi tags), **split
+      transactions**, **receipt photo attachments**, **refund tracker**
+      (Simplifi's, small and distinctive), **Apple Watch app**.
+- [ ] **Home-screen widgets** — designed in `docs/WidgetDesign.md` (5 widgets,
+      recommended first is "Left to Spend" small), then **dropped by Gary on
+      2026-08-03**. The doc stands if it ever comes back; note it is the first
+      feature needing a Swift target and an App Group (an Apple-portal step only
+      Gary can do), which is part of why it was dropped.
+
+**Deliberate non-goals** (need bank linking, against the on-device stance): auto
+transaction sync, live balances, bill negotiation, credit score, investment
+feeds, Amazon order matching, auto-transfers. Penny's counter-position: PDF/CSV
+statement import from any bank, $0 forever, household sharing with no per-seat
+price, categorisation that runs on the phone. Pitch: *"Everything a $100/yr
+budget app does with your bank data — done from your statements, on your phone,
+free."*
+
 ### Known gaps, not yet built
 - [ ] **Currency does not sync.** Household members with different currencies see
       mismatched symbols on the same numbers. Needs a shared settings record;
       `app_settings` deliberately never syncs because it also holds device-local
-      state (biometric lock, household id).
+      state (biometric lock, household id). Now also blocks multi-currency above.
 - [ ] **A truncated v3 backup file would still wipe Funds.** Restore trusts the
       declared format version; a file claiming v3 without a `funds` key clears the
       grid. Needs validation, not the key-presence guess that was rejected.
-- [ ] **`assets` and `liabilities` tables** exist in migrations, are read by nothing,
-      and are absent from backups. Either use them or drop them before they bite.
-- [ ] **`expo-system-ui` is not installed**, so `userInterfaceStyle: automatic`
-      does not fully apply light/dark on Android.
+      (Net Worth's v4 addition took the careful path — a v3 file leaves
+      assets/liabilities alone — but Funds still has the original hole.)
 
 ### Fixed and verified on-simulator 2026-08-02: scrolling changed the month
 Reported twice, so it was not marginal. Home's month swipe used
