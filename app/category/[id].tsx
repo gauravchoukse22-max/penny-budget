@@ -115,7 +115,12 @@ export default function CategoryDetailScreen() {
   };
 
   return (
-    <ScrollView style={{ backgroundColor: theme.groupedBackground }} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={{ backgroundColor: theme.groupedBackground }}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+    >
       <View style={styles.headerRow}>
         <CategoryIcon icon={category.icon} color={category.color} size={26} />
         <Text style={[styles.title, { color: theme.label }]}>{category.name}</Text>

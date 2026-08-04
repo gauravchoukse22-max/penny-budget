@@ -37,6 +37,17 @@ export interface Theme {
   statSpent: Gradient;
   statSaved: Gradient;
   statDays: Gradient;
+  // ── Glass ──────────────────────────────────────────────────────────────
+  // Buttons read as glass without a BlurView: a translucent fill lets the
+  // surface tint through, a hairline border catches the edge, and a lighter
+  // top-edge highlight fakes the way glass picks up light from above. Real
+  // blur was considered and rejected — it needs a native module and costs
+  // real GPU time on Android, and these buttons sit on flat cards where
+  // there is nothing behind them worth blurring.
+  glassFill: string;
+  glassFillStrong: string;
+  glassBorder: string;
+  glassHighlight: string;
 }
 
 // Bold & colorful design tokens (Mint/Monarch-style): vivid gradients on hero
@@ -75,6 +86,11 @@ const light: Theme = {
   statSpent: ['#FF9F43', '#FF7043'] as const,
   statSaved: ['#22C55E', '#0EA96B'] as const,
   statDays: ['#5B8DEF', '#6C4CF5'] as const,
+  // On light surfaces glass is a cool grey wash; the highlight is near-white.
+  glassFill: 'rgba(118,118,128,0.10)',
+  glassFillStrong: 'rgba(118,118,128,0.16)',
+  glassBorder: 'rgba(60,60,67,0.14)',
+  glassHighlight: 'rgba(255,255,255,0.65)',
 };
 
 const dark: Theme = {
@@ -107,6 +123,12 @@ const dark: Theme = {
   statSpent: ['#FF8A3D', '#E85D2D'] as const,
   statSaved: ['#1FAA59', '#0B7A41'] as const,
   statDays: ['#5B8DEF', '#7C6CF7'] as const,
+  // On dark surfaces glass is a light wash — a dark fill would read as a hole,
+  // not a pane. The highlight is dimmer so it glints rather than glares.
+  glassFill: 'rgba(235,235,245,0.10)',
+  glassFillStrong: 'rgba(235,235,245,0.16)',
+  glassBorder: 'rgba(235,235,245,0.16)',
+  glassHighlight: 'rgba(255,255,255,0.16)',
 };
 
 export function useTheme(): Theme {

@@ -5,6 +5,7 @@ import { useTheme, spacing, radius, type } from '../theme/colors';
 import { formatCurrency, currencySymbol } from '../lib/format';
 import { parseMoneyExpression } from '../lib/parse-number';
 import { PressableScale } from './PressableScale';
+import { DismissKeyboard } from './DismissKeyboard';
 import { tapLight, tapMedium, success } from '../lib/haptics';
 
 type Props = {
@@ -74,6 +75,7 @@ export function NumberEditorSheet({
         style={{ flex: 1, backgroundColor: theme.groupedBackground }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
+        <DismissKeyboard>
         <View style={styles.header}>
           <Pressable onPress={onClose} hitSlop={10}>
             <Text style={{ color: theme.secondaryLabel, fontSize: 16 }}>Cancel</Text>
@@ -137,6 +139,7 @@ export function NumberEditorSheet({
             ))}
           </View>
         </View>
+        </DismissKeyboard>
       </KeyboardAvoidingView>
     </Modal>
   );

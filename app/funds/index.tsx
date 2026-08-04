@@ -180,7 +180,12 @@ export default function FundsScreen() {
           </Text>
         </ScrollView>
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollBody}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+        >
           <View style={styles.table}>
             {/* Pinned pane — fund name + row total. Never scrolls sideways, so
                 a row can always be identified and its total read. */}
