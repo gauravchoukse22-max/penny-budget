@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, SectionList, ScrollView, Pressable, TextInput, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,9 +10,20 @@ import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { MonthSwitcher } from '../../components/MonthSwitcher';
 import { Button, IconButton } from '../../components/Button';
-import { formatDayLabel, formatMonthLabel } from '../../lib/format';
+import { formatCurrency, formatDayLabel, formatMonthLabel } from '../../lib/format';
 import { bulkUpdateCategory, bulkUpdateCard, bulkDeleteTransactions } from '../../features/bulk-actions';
 import { confirmAction } from '../../lib/confirm';
+import { TagChips } from '../../components/TagPicker';
+import { RefundBadge } from '../../components/RefundBadge';
+import {
+  listTags,
+  listTransactionsWithTag,
+  sweepOrphanedTransactionTags,
+  tagIdsForTransactions,
+  type Tag,
+} from '../../features/tags';
+import { claimsForTransactions, outstandingRefundTotal, type RefundClaim } from '../../features/refunds';
+import { sumAmount } from '../../lib/queries';
 import type { Category, Transaction } from '../../lib/models';
 
 /**
@@ -39,6 +50,81 @@ export default function TransactionsScreen() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [picker, setPicker] = useState<'category' | 'card' | null>(null);
+
+  // ── Tags and refund claims ────────────────────────────────────────────────
+  // Loaded here rather than pushed through BudgetContext: the context holds the
+  // selected MONTH, and a tag deliberately spans months (a trip that straddles
+  // July and August is one trip). Keeping these local is what lets the tag
+  // filter below widen the list beyond the selected month without touching how
+  // every other screen loads its data.
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [taggedTransactions, setTaggedTransactions] = useState<Transaction[]>([]);
+  const [tagIdsByTransaction, setTagIdsByTransaction] = useState<Map<string, string[]>>(new Map());
+  const [claimsByTransaction, setClaimsByTransaction] = useState<Map<string, RefundClaim>>(new Map());
+  const [outstanding, setOutstanding] = useState(0);
+
+  const tagById = new Map(tags.map((t) => [t.id, t]));
+
+  useEffect(() => {
+    let alive = true;
+    // The tag sweep runs HERE and not inside listTags(). features/tags.ts keeps
+    // it as a backstop for the delete paths it cannot reach — bulk delete, and a
+    // transaction tombstoned on the other phone — but a backstop nothing calls
+    // is not a backstop, and the only other caller (listTagSummaries) is not on
+    // any screen yet. This is the screen where an orphan would actually show
+    // itself, as a tag chip on a row that no longer exists and a tag total that
+    // does not match the transactions listed under it. Costs one SELECT once
+    // there is nothing to sweep, which is the steady state.
+    Promise.all([sweepOrphanedTransactionTags(), listTags(), outstandingRefundTotal()]).then(
+      ([, loadedTags, total]) => {
+        if (!alive) return;
+        setTags(loadedTags);
+        setOutstanding(total);
+      }
+    );
+    return () => {
+      alive = false;
+    };
+    // Re-read whenever the month's transactions change: that is the signal that
+    // something was added, edited or deleted, which is exactly when a claim may
+    // have been settled or a tag may have stopped being used.
+  }, [transactions]);
+
+  // A tag's transactions come from their own query across EVERY month, so the
+  // month switcher is hidden while a tag filter is on — see below.
+  useEffect(() => {
+    if (!tagFilter) {
+      setTaggedTransactions([]);
+      return;
+    }
+    let alive = true;
+    listTransactionsWithTag(tagFilter).then((rows) => {
+      if (alive) setTaggedTransactions(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [tagFilter, transactions]);
+
+  const baseTransactions = tagFilter ? taggedTransactions : transactions;
+  // Keyed on the id list rather than the array identity: `transactions` is a
+  // fresh array on every context refresh, and depending on the array itself
+  // would re-run these two queries on every unrelated render.
+  const baseIdKey = baseTransactions.map((t) => t.id).join(',');
+
+  useEffect(() => {
+    let alive = true;
+    const ids = baseIdKey ? baseIdKey.split(',') : [];
+    Promise.all([tagIdsForTransactions(ids), claimsForTransactions(ids)]).then(([byTag, byClaim]) => {
+      if (!alive) return;
+      setTagIdsByTransaction(byTag);
+      setClaimsByTransaction(byClaim);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [baseIdKey]);
 
   const enterSelect = (id: string) => {
     setSelectMode(true);
@@ -85,10 +171,11 @@ export default function TransactionsScreen() {
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const cardById = new Map(cards.map((c) => [c.id, c]));
 
-  const filtersActive = cardFilter !== null || categoryFilter.kind !== 'all';
+  const filtersActive = cardFilter !== null || categoryFilter.kind !== 'all' || tagFilter !== null;
   const clearFilters = () => {
     setCardFilter(null);
     setCategoryFilter(ALL_CATEGORIES);
+    setTagFilter(null);
   };
 
   // What the collapsed bar says the list is currently showing. Always names both
@@ -96,15 +183,19 @@ export default function TransactionsScreen() {
   // list — the old chip rows showed that by highlighting, and the whole point of
   // collapsing them is that they are no longer on screen.
   const cardFilterLabel = cardFilter ? cardById.get(cardFilter)?.name ?? 'Card' : 'All cards';
+  // Appended to the bar's label only when set, so the common case keeps the
+  // two-part "All cards · All categories" shape it already has.
+  const tagFilterSuffix = tagFilter ? ` · #${tagById.get(tagFilter)?.name ?? 'Tag'}` : '';
   const categoryFilterLabel =
     categoryFilter.kind === 'all'
       ? 'All categories'
       : categoryFilter.kind === 'uncategorized'
         ? 'Uncategorized'
         : categoryById.get(categoryFilter.id)?.name ?? 'Category';
+  const activeTag = tagFilter ? tagById.get(tagFilter) : undefined;
 
   const filtered = useMemo(() => {
-    return transactions.filter((t) => {
+    return baseTransactions.filter((t) => {
       if (cardFilter && t.cardId !== cardFilter) return false;
       if (categoryFilter.kind === 'uncategorized' && t.categoryId !== null) return false;
       if (categoryFilter.kind === 'one' && t.categoryId !== categoryFilter.id) return false;
@@ -121,7 +212,7 @@ export default function TransactionsScreen() {
       }
       return true;
     });
-  }, [transactions, cardFilter, categoryFilter, search]);
+  }, [baseTransactions, cardFilter, categoryFilter, search]);
 
   const sections = useMemo(() => {
     const byDay = new Map<string, Transaction[]>();
@@ -179,8 +270,49 @@ export default function TransactionsScreen() {
 
       {/* Hidden in select mode: the header above has already become a selection
           toolbar, and changing month mid-selection would leave the user holding
-          ids they can no longer see. */}
-      {!selectMode && <MonthSwitcher style={styles.monthSwitcher} />}
+          ids they can no longer see.
+
+          Also hidden while a tag filter is on, for the same reason: that list
+          spans every month, so a month switcher would be a control that visibly
+          does nothing. The banner below says so in words rather than leaving
+          the user to infer it from a missing widget. */}
+      {!selectMode && !tagFilter && <MonthSwitcher style={styles.monthSwitcher} />}
+
+      {/* The point of tags, stated as a number: what this label costs across
+          every category and every month. Totals the DISPLAYED rows, so it can
+          never disagree with the list underneath it when a card or category
+          filter is also on. */}
+      {activeTag && !selectMode && (
+        <View style={[styles.tagBanner, { backgroundColor: theme.card }]}>
+          <View style={[styles.tagBannerDot, { backgroundColor: activeTag.color }]} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: theme.label, fontWeight: '700', fontSize: 15 }} numberOfLines={1}>
+              {activeTag.name}
+            </Text>
+            <Text style={{ color: theme.secondaryLabel, fontSize: 12 }}>
+              {filtered.length} transaction{filtered.length === 1 ? '' : 's'} · all months
+            </Text>
+          </View>
+          <Text style={{ color: theme.label, fontWeight: '700', fontSize: 17 }}>
+            {formatCurrency(sumAmount(filtered), settings.currency)}
+          </Text>
+        </View>
+      )}
+
+      {/* Money the user is owed, surfaced where they will actually see it. A
+          refund that never arrives is invisible by nature — the charge looks
+          like any other — so the only thing that recovers it is a total that
+          stays on screen. Hidden at zero rather than showing "$0.00 owed",
+          which is noise. */}
+      {outstanding > 0 && !selectMode && !tagFilter && (
+        <View style={[styles.outstandingBanner, { backgroundColor: theme.card }]}>
+          <Ionicons name="hourglass-outline" size={15} color={theme.systemAmber} />
+          <Text style={{ color: theme.secondaryLabel, fontSize: 13, flex: 1 }}>Awaiting refunds</Text>
+          <Text style={{ color: theme.systemAmber, fontWeight: '700', fontSize: 15 }}>
+            {formatCurrency(outstanding, settings.currency)}
+          </Text>
+        </View>
+      )}
 
       <View style={[styles.searchBox, { backgroundColor: theme.fieldBackground }]}>
         <Ionicons name="search" size={16} color={theme.tertiaryLabel} />
@@ -198,14 +330,14 @@ export default function TransactionsScreen() {
           the way down the screen — the user saw filters, not transactions. */}
       <View style={styles.filterBarRow}>
         <Button
-          label={`${cardFilterLabel} · ${categoryFilterLabel}`}
+          label={`${cardFilterLabel} · ${categoryFilterLabel}${tagFilterSuffix}`}
           onPress={() => setShowFilters(true)}
           variant={filtersActive ? 'tonal' : 'glass'}
           size="sm"
           icon="funnel"
           iconAfter="chevron-down"
           style={styles.filterBar}
-          accessibilityLabel={`Filters: ${cardFilterLabel}, ${categoryFilterLabel}. Tap to change.`}
+          accessibilityLabel={`Filters: ${cardFilterLabel}, ${categoryFilterLabel}${tagFilterSuffix}. Tap to change.`}
         />
         {/* Only rendered while something is actually filtered, so "Clear" is
             never a dead control — and when it IS there it sits outside the
@@ -226,6 +358,14 @@ export default function TransactionsScreen() {
           </Text>
         )}
         renderItem={({ item }) => {
+          // Rendered UNDER the row rather than inside it: components/
+          // TransactionRow.tsx is shared with Search, the category screen and
+          // the card screen, and widening it for this would change all of them.
+          // This keeps the row exactly as it is and adds a second line only when
+          // there is something to say.
+          const itemTags = (tagIdsByTransaction.get(item.id) ?? []).flatMap((id) => tagById.get(id) ?? []);
+          const claim = claimsByTransaction.get(item.id);
+          const hasMeta = itemTags.length > 0 || claim?.status === 'awaiting';
           const row = (
             <View style={{ backgroundColor: theme.groupedBackground, paddingHorizontal: 4 }}>
               <TransactionRow
@@ -238,6 +378,12 @@ export default function TransactionsScreen() {
                 onLongPress={() => !selectMode && enterSelect(item.id)}
                 onPress={() => (selectMode ? toggleSelect(item.id) : router.push(`/transaction/${item.id}`))}
               />
+              {hasMeta && (
+                <View style={styles.rowMeta}>
+                  <TagChips tags={itemTags} size="sm" />
+                  <RefundBadge claim={claim} currency={settings.currency} />
+                </View>
+              )}
             </View>
           );
           // No confirmation: one transaction deletes only itself, and the
@@ -357,6 +503,37 @@ export default function TransactionsScreen() {
                 leading={<CategoryIcon icon={c.icon} color={c.color} size={18} />}
               />
             ))}
+
+            {/* Only rendered once the user has a tag. An empty TAG section
+                would be a heading over nothing on every install that never uses
+                the feature. */}
+            {tags.length > 0 && (
+              <>
+                <Text style={[styles.sheetSection, { color: theme.secondaryLabel, marginTop: spacing.lg }]}>TAG</Text>
+                {/* Says what picking one DOES, because it behaves differently
+                    from the two filters above it — it leaves the selected month
+                    behind, and that is the whole point rather than a side
+                    effect. */}
+                <Text style={[styles.sheetNote, { color: theme.tertiaryLabel }]}>
+                  Picking a tag searches every month, not just {formatMonthLabel(selectedMonth)}.
+                </Text>
+                <OptionRow
+                  label="Any tag"
+                  selected={tagFilter === null}
+                  onPress={() => setTagFilter(null)}
+                  leading={<Ionicons name="pricetags-outline" size={18} color={theme.secondaryLabel} />}
+                />
+                {tags.map((t) => (
+                  <OptionRow
+                    key={t.id}
+                    label={t.name}
+                    selected={tagFilter === t.id}
+                    onPress={() => setTagFilter(t.id)}
+                    leading={<View style={[styles.cardDot, { backgroundColor: t.color }]} />}
+                  />
+                ))}
+              </>
+            )}
           </ScrollView>
           <Button
             label={`Show ${filtered.length} transaction${filtered.length === 1 ? '' : 's'}`}
@@ -449,6 +626,40 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   sheetSection: { fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: spacing.xs },
+  sheetNote: { fontSize: 12, lineHeight: 16, marginBottom: spacing.xs },
+  // Sits under the row, indented past the category icon so it reads as belonging
+  // to the transaction above rather than as its own list item.
+  rowMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
+    paddingLeft: 48,
+    paddingRight: spacing.sm,
+    paddingBottom: 6,
+    marginTop: -4,
+  },
+  tagBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+  },
+  tagBannerDot: { width: 10, height: 10, borderRadius: 5 },
+  outstandingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+  },
   // 44pt tall including padding — Apple's minimum tap target, and the reason
   // these are rows rather than the denser chips they replace.
   optionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },

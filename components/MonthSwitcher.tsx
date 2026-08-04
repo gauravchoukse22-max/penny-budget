@@ -88,6 +88,10 @@ export function MonthSwitcher({ onChange, style }: Props) {
         label={formatMonthLabel(selectedMonth)}
         onPress={openPicker}
         variant="ghost"
+        // `sm` for its tighter padding, not its type: a long month name plus two
+        // arrows has to leave room for the absolutely-placed "back to this
+        // month" pill at the right edge.
+        size="sm"
         iconAfter="chevron-down"
         // The month name is this control's heading, so it keeps heading
         // typography and the label colour while taking the system's height,
@@ -137,7 +141,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     // Tighter than it was: the arrows now carry their own glass box, so they
     // no longer need empty space to read as separate targets.
-    gap: spacing.sm,
+    gap: spacing.xs,
     paddingVertical: spacing.xs,
   },
   // Absolute so showing and hiding it cannot nudge the centred month label.

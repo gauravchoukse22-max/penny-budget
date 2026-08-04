@@ -252,7 +252,7 @@ export default function RecurringScreen() {
         <Text style={[styles.fieldLabel, { color: theme.secondaryLabel }]}>Card</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {cards.map((c) => (
-            <Chip key={c.id} label={c.name} selected={cardId === c.id} onPress={() => setCardId(c.id)} style={styles.cardChip} />
+            <Chip key={c.id} label={c.name} selected={cardId === c.id} onPress={() => setCardId(c.id)} style={styles.cardChip} selectedColor={c.color} />
           ))}
         </ScrollView>
 

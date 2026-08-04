@@ -149,7 +149,7 @@ export default function SearchScreen() {
           <Chip label="Any" selected={categoryId === undefined} onPress={() => setCategoryId(undefined)} size="sm" />
           <Chip label="Uncategorized" selected={categoryId === null} onPress={() => setCategoryId(null)} size="sm" />
           {categories.map((c) => (
-            <Chip key={c.id} label={c.name} selected={categoryId === c.id} onPress={() => setCategoryId(c.id)} size="sm" />
+            <Chip key={c.id} label={c.name} selected={categoryId === c.id} onPress={() => setCategoryId(c.id)} size="sm" selectedColor={c.color} />
           ))}
         </View>
 
@@ -157,7 +157,7 @@ export default function SearchScreen() {
         <View style={styles.chipRow}>
           <Chip label="Any" selected={cardId === undefined} onPress={() => setCardId(undefined)} size="sm" />
           {cards.map((c) => (
-            <Chip key={c.id} label={c.name} selected={cardId === c.id} onPress={() => setCardId(c.id)} size="sm" />
+            <Chip key={c.id} label={c.name} selected={cardId === c.id} onPress={() => setCardId(c.id)} size="sm" selectedColor={c.color} />
           ))}
         </View>
 

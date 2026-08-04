@@ -159,10 +159,21 @@ eq(validateBackup({ version: 7, timestamp: 't', tables: {} }).valid, true, 'v7 f
 eq(validateBackup({ version: 8, timestamp: 't', tables: {} }).valid, false, 'newer file refused');
 eq(validateBackup({ version: 'x', tables: {} }).valid, false, 'junk version refused');
 
-// The completion message tells the user what an old file did NOT replace.
-eq(restoreCompletionMessage(4), 'Data restored. Please close and reopen the app.', 'v4 message is plain');
+// The completion message tells the user what an old file did NOT replace. The
+// user just accepted a dialog saying "this replaces ALL current data", so every
+// exception has to be named or the message is a lie by omission.
+//
+// Asserted by CONTENT, not by exact string: the message is assembled from
+// whichever gates the file predates, and pinning the full sentence means every
+// future BACKUP_VERSION bump breaks this harness for no real reason. What
+// matters is that each thing left alone gets named.
+eq(restoreCompletionMessage(BACKUP_VERSION), 'Data restored. Please close and reopen the app.', 'a current-version file replaces everything, so the message is plain');
+eq(restoreCompletionMessage(4).includes('split transactions'), true, 'v4 predates splits and says so');
+eq(restoreCompletionMessage(4).includes('tags'), true, 'v4 predates tags and says so');
+eq(restoreCompletionMessage(4).includes('Net Worth'), false, 'v4 DOES carry net worth, so it is not listed as untouched');
 eq(restoreCompletionMessage(3).includes('Net Worth'), true, 'v3 message names net worth as untouched');
 eq(restoreCompletionMessage(2).includes('Funds'), true, 'v2 message names funds');
+eq(restoreCompletionMessage(2).includes('and refunds'), true, 'the list joins its last item with "and" rather than a trailing comma');
 eq(restoreCompletionMessage(2).includes('Net Worth'), true, 'v2 message names net worth too');
 
 // ── report ───────────────────────────────────────────────────────────────────

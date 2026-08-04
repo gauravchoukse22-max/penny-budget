@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Surface } from '../Surface';
+import { Button, Chip } from '../Button';
 import { SectionLabel } from './common';
 import { AmountText } from '../AmountText';
 import { useBudget } from '../../context/BudgetContext';
@@ -73,26 +74,26 @@ export function Watchlist() {
             Pick up to {WATCHLIST_MAX} categories to keep an eye on.
           </Text>
           <View style={styles.chipWrap}>
-            {categories.map((c) => {
-              const on = watched.includes(c.id);
-              return (
-                <Pressable
-                  key={c.id}
-                  onPress={() => toggleWatched(c.id)}
-                  style={[
-                    styles.chip,
-                    { backgroundColor: on ? hexToRgba(c.color, 0.16) : theme.fieldBackground, borderColor: on ? c.color : 'transparent' },
-                  ]}
-                >
-                  <Text style={[styles.chipText, { color: on ? theme.label : theme.secondaryLabel }]}>{c.name}</Text>
-                </Pressable>
-              );
-            })}
+            {categories.map((c) => (
+              <Chip
+                key={c.id}
+                label={c.name}
+                selected={watched.includes(c.id)}
+                onPress={() => toggleWatched(c.id)}
+                size="sm"
+                selectedColor={c.color}
+              />
+            ))}
           </View>
           {watched.length > 0 && (
-            <Pressable onPress={() => setPicking(false)} hitSlop={8} style={{ marginTop: spacing.md }}>
-              <Text style={[styles.editLink, { color: theme.accent }]}>Done</Text>
-            </Pressable>
+            <Button
+              label="Done"
+              onPress={() => setPicking(false)}
+              variant="ghost"
+              size="sm"
+              style={styles.editLink}
+              accessibilityLabel="Done choosing watchlist categories"
+            />
           )}
         </View>
       ) : (
@@ -134,9 +135,7 @@ export function Watchlist() {
               </View>
             );
           })}
-          <Pressable onPress={() => setPicking(true)} hitSlop={8}>
-            <Text style={[styles.editLink, { color: theme.accent }]}>Edit watchlist</Text>
-          </Pressable>
+          <Button label="Edit watchlist" onPress={() => setPicking(true)} variant="ghost" size="sm" style={styles.editLink} />
         </View>
       )}
     </Surface>
@@ -147,13 +146,11 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   hint: { fontSize: 12, marginTop: spacing.xs },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
-  chip: { paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.pill, borderWidth: 1 },
-  chipText: { fontSize: 13, fontWeight: '600' },
   watchTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   watchName: { flex: 1, fontSize: 15, marginRight: spacing.md },
   watchAmounts: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   avgText: { fontSize: 11, marginLeft: spacing.xs },
   track: { height: 6, borderRadius: radius.pill, overflow: 'visible' },
   avgTick: { position: 'absolute', top: -2, width: 2, height: 10, borderRadius: 1, opacity: 0.5 },
-  editLink: { fontSize: 13, fontWeight: '600' },
+  editLink: { alignSelf: 'flex-start', marginTop: spacing.sm },
 });

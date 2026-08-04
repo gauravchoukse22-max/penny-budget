@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, Switch, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useTheme, spacing, radius } from '../../theme/colors';
+import { Button, IconButton } from '../Button';
 import { INSIGHT_CARD_INFO, type InsightCardPref } from '../../lib/insights-layout';
 
 /**
@@ -49,9 +49,7 @@ export function EditInsightsSheet({
       <View style={[styles.sheet, { backgroundColor: theme.secondaryBackground }]}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: theme.label }]}>Customize Insights</Text>
-          <Pressable onPress={onClose} hitSlop={10}>
-            <Text style={[styles.done, { color: theme.accent }]}>Done</Text>
-          </Pressable>
+          <Button label="Done" onPress={onClose} variant="ghost" size="sm" accessibilityLabel="Done customizing insights" />
         </View>
         <Text style={[styles.subtitle, { color: theme.tertiaryLabel }]}>
           Choose which cards show, and in what order.
@@ -66,12 +64,18 @@ export function EditInsightsSheet({
                 style={[styles.row, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.separator }]}
               >
                 <View style={styles.arrows}>
-                  <Pressable onPress={() => move(i, -1)} disabled={i === 0} hitSlop={6} style={styles.arrowBtn}>
-                    <Ionicons name="chevron-up" size={18} color={i === 0 ? theme.separator : theme.secondaryLabel} />
-                  </Pressable>
-                  <Pressable onPress={() => move(i, 1)} disabled={i === prefs.length - 1} hitSlop={6} style={styles.arrowBtn}>
-                    <Ionicons name="chevron-down" size={18} color={i === prefs.length - 1 ? theme.separator : theme.secondaryLabel} />
-                  </Pressable>
+                  <IconButton
+                    icon="chevron-up"
+                    onPress={() => move(i, -1)}
+                    disabled={i === 0}
+                    accessibilityLabel={`Move ${info.title} up`}
+                  />
+                  <IconButton
+                    icon="chevron-down"
+                    onPress={() => move(i, 1)}
+                    disabled={i === prefs.length - 1}
+                    accessibilityLabel={`Move ${info.title} down`}
+                  />
                 </View>
                 <View style={styles.rowText}>
                   <Text style={[styles.rowTitle, { color: p.visible ? theme.label : theme.secondaryLabel }]}>{info.title}</Text>
@@ -101,12 +105,9 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 18, fontWeight: '700' },
-  done: { fontSize: 16, fontWeight: '600' },
   subtitle: { fontSize: 13, marginTop: 4, marginBottom: spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, gap: spacing.md },
   arrows: { flexDirection: 'row', gap: 2 },
-  // 30pt visual, padded by hitSlop — small enough to stay off the text.
-  arrowBtn: { width: 26, height: 30, alignItems: 'center', justifyContent: 'center' },
   rowText: { flex: 1 },
   rowTitle: { fontSize: 15, fontWeight: '600' },
   rowDesc: { fontSize: 12, marginTop: 2 },

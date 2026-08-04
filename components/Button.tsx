@@ -24,8 +24,11 @@ import { useTheme, radius, spacing, type Theme } from '../theme/colors';
 export type ButtonVariant = 'primary' | 'tonal' | 'glass' | 'ghost' | 'destructive';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
-/** Heights chosen so every size clears the 44pt minimum touch target. `sm`
- * looks smaller than 44 but its padding keeps the box legal. */
+/** `md` and `lg` clear Apple's 44pt minimum on their own. `sm` is 36 and does
+ * NOT — horizontal padding widens the box but never makes it taller — so both
+ * Button and IconButton add hitSlop to close the gap. An earlier version of
+ * this comment claimed padding made `sm` legal; it does not, and a 36pt row of
+ * icons was genuinely hard to hit. */
 const SIZES: Record<ButtonSize, { height: number; paddingH: number; fontSize: number; icon: number; gap: number }> = {
   sm: { height: 36, paddingH: spacing.md, fontSize: 14, icon: 15, gap: 6 },
   md: { height: 46, paddingH: spacing.lg, fontSize: 15, icon: 17, gap: 8 },
@@ -49,7 +52,9 @@ function paletteFor(variant: ButtonVariant, theme: Theme): Palette {
       return { background: theme.glassFill, border: theme.glassBorder, foreground: theme.systemRed, glass: true };
     case 'ghost':
       // No fill at all — for text actions inside dense rows, where a filled
-      // box would add visual weight the row can't afford.
+      // box would add visual weight the row can't afford. Always accent; a
+      // quieter or destructive text action recolours via `labelStyle`, which is
+      // the supported escape hatch rather than a new variant per colour.
       return { background: 'transparent', border: 'transparent', foreground: theme.accent, glass: false };
   }
 }
@@ -101,6 +106,9 @@ export function Button({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: inert, busy: loading }}
+      // Vertical only: padding already gives `sm` enough width, but nothing
+      // gives it height. See the note on SIZES.
+      hitSlop={{ top: Math.max(0, (44 - s.height) / 2), bottom: Math.max(0, (44 - s.height) / 2), left: 0, right: 0 }}
       style={[
         styles.base,
         {
@@ -159,12 +167,22 @@ export interface ChipProps {
   onPress: () => void;
   icon?: React.ComponentProps<typeof Ionicons>['name'];
   size?: Extract<ButtonSize, 'sm' | 'md'>;
+  /**
+   * Fill to use when selected, instead of the accent.
+   *
+   * For chips that stand for a thing which already HAS a colour — a category, a
+   * card. Collapsing those to one accent made every selected chip identical and
+   * threw away the colour the user recognises the category by, which is a real
+   * cue, not decoration.
+   */
+  selectedColor?: string;
   style?: StyleProp<ViewStyle>;
 }
 
-export function Chip({ label, selected, onPress, icon, size = 'md', style }: ChipProps) {
+export function Chip({ label, selected, onPress, icon, size = 'md', selectedColor, style }: ChipProps) {
   const theme = useTheme();
   const s = SIZES[size];
+  const fill = selectedColor ?? theme.accent;
   const foreground = selected ? theme.onAccent : theme.secondaryLabel;
 
   return (
@@ -180,7 +198,7 @@ export function Chip({ label, selected, onPress, icon, size = 'md', style }: Chi
           height: s.height,
           paddingHorizontal: s.paddingH,
           borderRadius: radius.pill,
-          backgroundColor: selected ? theme.accent : theme.glassFill,
+          backgroundColor: selected ? fill : theme.glassFill,
           borderColor: selected ? 'transparent' : theme.glassBorder,
           borderWidth: StyleSheet.hairlineWidth,
         },
@@ -207,7 +225,8 @@ export interface IconButtonProps {
   /** Required: an icon alone tells a screen reader nothing. */
   accessibilityLabel: string;
   size?: ButtonSize;
-  variant?: Extract<ButtonVariant, 'glass' | 'tonal' | 'ghost' | 'destructive'>;
+  /** `primary` is the opaque accent circle — the floating action button. */
+  variant?: Extract<ButtonVariant, 'glass' | 'tonal' | 'ghost' | 'destructive' | 'primary'>;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }
@@ -233,6 +252,12 @@ export function IconButton({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled }}
+      // A square 36pt button is BELOW Apple's 44pt minimum, and unlike Button
+      // there is no label padding to make up the difference — the box is the
+      // icon. hitSlop extends the touch area without changing the layout, so a
+      // dense row keeps its height and the target is still legal. Computed per
+      // size so md and lg, which already clear 44, gain nothing they don't need.
+      hitSlop={Math.max(0, (44 - s.height) / 2)}
       style={[
         styles.base,
         {

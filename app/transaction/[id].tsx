@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,11 @@ import { SplitEditor } from '../../components/SplitEditor';
 import { Button } from '../../components/Button';
 import { formatCurrency } from '../../lib/format';
 import { validateSplits, type SplitPart } from '../../lib/transaction-splits';
+import { TagChips, TagPicker } from '../../components/TagPicker';
+import { ReceiptField } from '../../components/ReceiptField';
+import { RefundField } from '../../components/RefundBadge';
+import { clearTagsForTransaction, listTagIdsForTransaction, listTags, setTransactionTags, type Tag } from '../../features/tags';
+import { clearRefundClaim } from '../../features/refunds';
 import type { Transaction } from '../../lib/models';
 
 // Matches the add-transaction screen so both screens' buttons are the same
@@ -63,6 +68,21 @@ export default function EditTransactionScreen() {
   // from this screen would not show until the user navigated away and back.
   const [splits, setSplits] = useState<SplitPart[]>([]);
   const [splitEditorOpen, setSplitEditorOpen] = useState(false);
+  // Tags are held as a draft and written on Save, like every other field here.
+  // Writing them on each tap would leave a cancelled edit with the tags applied
+  // anyway — the one part of the screen that ignored the Save button.
+  const [tagIds, setTagIds] = useState<string[]>([]);
+  // onClose can be invoked in the same tick as the last onChange, in which case
+  // its closure still holds the PREVIOUS render's tagIds and would write a
+  // selection one toggle out of date. The ref always holds what the user
+  // actually chose.
+  const tagIdsRef = useRef<string[]>([]);
+  const applyTagIds = useCallback((ids: string[]) => {
+    tagIdsRef.current = ids;
+    setTagIds(ids);
+  }, []);
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [tagPickerOpen, setTagPickerOpen] = useState(false);
 
   useEffect(() => {
     if (transaction) {
@@ -74,6 +94,30 @@ export default function EditTransactionScreen() {
       setCardId(transaction.cardId);
       setSplits(transaction.splits ?? []);
     }
+  }, [transaction?.id]);
+
+  // Two loaders, deliberately separate. The VOCABULARY (every tag that exists)
+  // has to be re-read whenever the picker creates or deletes one; the
+  // SELECTION must not be, because it is an unsaved draft — re-reading it on
+  // picker close would silently throw away everything the user just picked and
+  // put the stored tags back.
+  const loadVocabulary = useCallback(async () => {
+    setAllTags(await listTags());
+  }, []);
+
+  useEffect(() => {
+    loadVocabulary();
+  }, [loadVocabulary]);
+
+  useEffect(() => {
+    if (!transaction?.id) return;
+    let alive = true;
+    listTagIdsForTransaction(transaction.id).then((ids) => {
+      if (alive) applyTagIds(ids);
+    });
+    return () => {
+      alive = false;
+    };
   }, [transaction?.id]);
 
   if (!transaction) {
@@ -88,6 +132,11 @@ export default function EditTransactionScreen() {
 
   const parsedAmount = parseMoneyInput(amount);
   const canSave = parsedAmount !== null && parsedAmount > 0 && !!cardId;
+
+  // Resolved against the vocabulary rather than stored on the draft: a tag
+  // deleted from the picker disappears from here immediately instead of
+  // lingering as a chip with no row behind it.
+  const selectedTags = tagIds.flatMap((id) => allTags.find((t) => t.id === id) ?? []);
 
   const save = async () => {
     if (!canSave || !cardId || parsedAmount === null) return;
@@ -111,11 +160,26 @@ export default function EditTransactionScreen() {
     }
 
     await editTransaction(transaction.id, { amount: signedAmount, date, categoryId, cardId, note: note.trim() || null });
+    // After the transaction write, so a failure there does not leave the tags
+    // pointing at a row that was never updated.
+    await setTransactionTags(transaction.id, tagIdsRef.current);
     router.back();
   };
 
   const confirmDelete = async () => {
     if (await confirmAction({ title: 'Delete transaction?', message: 'This cannot be undone.', confirmLabel: 'Delete', destructive: true })) {
+      // Swept BEFORE the transaction goes, while the join rows and the claim are
+      // still readable and can be journaled individually. Foreign keys are not
+      // enforced here so nothing cascades, and lib/queries.ts deleteTransaction
+      // knows nothing about either table — an orphaned join row would keep
+      // counting toward its tag's total, and an orphaned claim would sit in the
+      // outstanding total with no transaction left to open. features/tags.ts and
+      // features/refunds.ts each carry a sweep for the delete paths that cannot
+      // reach this line (bulk delete, and a tombstone arriving from the other
+      // phone), but doing it here keeps the common case immediate rather than
+      // waiting for the next read to notice.
+      await clearTagsForTransaction(transaction.id);
+      await clearRefundClaim(transaction.id);
       await removeTransaction(transaction.id);
       router.back();
     }
@@ -242,6 +306,48 @@ export default function EditTransactionScreen() {
         onChangeText={setNote}
       />
 
+      {/* Tags sit below the category picker, not beside it, because they answer
+          a different question — the category is what KIND of spending this is,
+          the tag is what it was FOR. Putting them side by side invites the user
+          to treat them as alternatives. */}
+      <Text style={[styles.label, { color: theme.secondaryLabel }]}>Tags</Text>
+      <View style={styles.tagRow}>
+        {selectedTags.length > 0 ? (
+          <TagChips tags={selectedTags} style={styles.tagChips} />
+        ) : (
+          <Text style={{ color: theme.tertiaryLabel, fontSize: 13, flex: 1 }}>
+            None — tag this to group it across categories
+          </Text>
+        )}
+        <Button
+          label={selectedTags.length > 0 ? 'Edit' : 'Add'}
+          icon="pricetags-outline"
+          variant="glass"
+          size="sm"
+          onPress={() => setTagPickerOpen(true)}
+        />
+      </View>
+
+      <Text style={[styles.label, { color: theme.secondaryLabel }]}>Refund</Text>
+      {/* Writes immediately rather than on Save, unlike the fields above. A
+          claim is its own record with its own id, not a property of this form,
+          and the outstanding total it feeds should not depend on the user
+          remembering to press Save on a screen they opened to check something
+          else. */}
+      <RefundField
+        transactionId={transaction.id}
+        transactionAmount={transaction.amount}
+        currency={settings.currency}
+        onChanged={refresh}
+      />
+
+      <Text style={[styles.label, { color: theme.secondaryLabel }]}>Receipt</Text>
+      {/* Only on this screen, never on Add: attaching copies a file onto disk
+          keyed by the transaction id, and on the add screen there is no id yet.
+          Writing the file first and inventing an id would leave an orphaned
+          image behind every time someone backs out of adding a transaction. */}
+      <ReceiptField transactionId={transaction.id} onChanged={refresh} />
+
       <View style={styles.actions}>
         <Pressable
           disabled={!canSave}
@@ -282,6 +388,32 @@ export default function EditTransactionScreen() {
           await refresh();
         }}
       />
+
+      <TagPicker
+        visible={tagPickerOpen}
+        onClose={async () => {
+          setTagPickerOpen(false);
+          // Only the vocabulary — the picker can create and delete tags, so the
+          // list of what EXISTS is stale by the time it closes. The selection is
+          // not re-read; it is the draft the user just made.
+          await loadVocabulary();
+          // Persist the selection NOW rather than leaving it to Save Changes.
+          //
+          // The split editor on this same screen writes immediately, so leaving
+          // tags as form state gave one screen two rules: a split survived
+          // backing out and a tag silently did not. The chips render the moment
+          // the picker closes, which makes the loss invisible until the user
+          // comes back and finds them gone. The transaction already exists here
+          // (unlike the add screen, which has no id until it saves), so there is
+          // nothing to wait for.
+          //
+          // save() still calls this — it is idempotent, and the tags must land
+          // after the transaction write there rather than before it.
+          await setTransactionTags(transaction.id, tagIdsRef.current);
+        }}
+        selectedTagIds={tagIds}
+        onChange={applyTagIds}
+      />
     </ScrollView>
   );
 }
@@ -304,6 +436,8 @@ const styles = StyleSheet.create({
   cardChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.md, marginRight: 8 },
   cardChipText: { color: '#FFF', fontWeight: '600' },
   noteInput: { padding: 12, borderRadius: radius.sm, fontSize: 15 },
+  tagRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  tagChips: { flex: 1 },
   actions: { gap: spacing.md, marginTop: spacing.xl },
   // Both buttons carry the same border box — without it the outlined Delete
   // button sat 3pt taller than the filled Save button.

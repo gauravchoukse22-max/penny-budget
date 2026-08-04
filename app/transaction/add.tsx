@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,12 @@ import { CategoryIcon } from '../../components/CategoryIcon';
 import { PressableScale } from '../../components/PressableScale';
 import { suggestCategory } from '../../features/smart-categorizer';
 import { tapLight, success } from '../../lib/haptics';
+import { TagChips, TagPicker } from '../../components/TagPicker';
+import { Button } from '../../components/Button';
+import { listTags, setTransactionTags, type Tag } from '../../features/tags';
+import { setRefundClaim } from '../../features/refunds';
+import { updateLoggingStreak } from '../../features/streaks-and-gamification';
+import { createTransaction } from '../../lib/queries';
 import type { SmartSuggestion } from '../../features/models';
 
 // The design rule for this screen: the common case is typing ONE number and
@@ -33,7 +39,7 @@ function yesterdayIso(): string {
 export default function AddTransactionScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { categories, cards, transactions, settings, addTransaction } = useBudget();
+  const { categories, cards, transactions, settings, refresh } = useBudget();
 
   // Most-used first, and most-used is also the DEFAULT — the point of knowing
   // what the user reaches for is not having to ask again.
@@ -59,6 +65,25 @@ export default function AddTransactionScreen() {
   const [cardId, setCardId] = useState<string | null>(sortedCards[0]?.id ?? null);
   const [suggestion, setSuggestion] = useState<SmartSuggestion | null>(null);
   const [isRefund, setIsRefund] = useState(false);
+  const [tagIds, setTagIds] = useState<string[]>([]);
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  // "I'll be getting this back" — captured at the moment of purchase, which is
+  // when the user actually knows it. The AMOUNT is not asked for here: it
+  // defaults to the full charge, and the partial case is edited on the detail
+  // screen. Asking everyone for a number to serve the minority would cost the
+  // screen its one-number-and-Save shape.
+  const [awaitingRefund, setAwaitingRefund] = useState(false);
+
+  const loadVocabulary = useCallback(async () => {
+    setAllTags(await listTags());
+  }, []);
+
+  useEffect(() => {
+    loadVocabulary();
+  }, [loadVocabulary]);
+
+  const selectedTags = tagIds.flatMap((id) => allTags.find((t) => t.id === id) ?? []);
 
   const suggestFromNote = async () => {
     const text = note.trim();
@@ -100,12 +125,41 @@ export default function AddTransactionScreen() {
   const save = async (addAnother: boolean) => {
     if (!canSave || !cardId || parsedAmount === null) return;
     const signedAmount = (isRefund ? -1 : 1) * parsedAmount;
-    await addTransaction({ amount: signedAmount, date, categoryId, cardId, note: note.trim() || null });
+
+    // createTransaction directly rather than the context's addTransaction,
+    // which returns void — tags and a refund claim both need the new row's id,
+    // and there is no way to get it back from the context helper. The streak
+    // update and the refresh below are what addTransaction does around the same
+    // call; they are mirrored here on purpose, and this screen is the only
+    // caller that needs the id. If BudgetContext.addTransaction ever starts
+    // returning the created transaction, this should go back to using it.
+    const created = await createTransaction({
+      amount: signedAmount,
+      date,
+      categoryId,
+      cardId,
+      note: note.trim() || null,
+    });
+    if (tagIds.length > 0) await setTransactionTags(created.id, tagIds);
+    if (awaitingRefund) {
+      // Defaults to the whole charge — the amount is refined on the detail
+      // screen when it is a partial refund.
+      await setRefundClaim(created.id, { expectedAmount: Math.abs(signedAmount) });
+    }
+    await updateLoggingStreak();
+    await refresh();
+
     success();
     if (addAnother) {
       setAmount('');
       setNote('');
       setIsRefund(false);
+      // Tags deliberately SURVIVE "Save & add another": the whole reason to add
+      // several in a row is that they belong together — three receipts from the
+      // same trip get the same tag. The refund flag does NOT survive, because
+      // "I'm getting this one back" is a fact about a single purchase and
+      // carrying it over would silently inflate the outstanding total.
+      setAwaitingRefund(false);
     } else {
       router.back();
     }
@@ -312,6 +366,55 @@ export default function AddTransactionScreen() {
         </Pressable>
       )}
 
+      {/* Below the note, above Save: optional, and the screen still reads as
+          "type a number and save" for the user who ignores both. */}
+      <Text style={[styles.label, { color: theme.secondaryLabel }]}>Tags</Text>
+      <View style={styles.tagRow}>
+        {selectedTags.length > 0 ? (
+          <TagChips tags={selectedTags} style={{ flex: 1 }} />
+        ) : (
+          <Text style={{ color: theme.tertiaryLabel, fontSize: 13, flex: 1 }}>Optional — group this across categories</Text>
+        )}
+        <Button
+          label={selectedTags.length > 0 ? 'Edit' : 'Add'}
+          icon="pricetags-outline"
+          variant="glass"
+          size="sm"
+          onPress={() => setTagPickerOpen(true)}
+        />
+      </View>
+
+      {/* Not shown on a refund/credit: that transaction IS money coming back,
+          so offering to track it as still-owed would be self-contradictory and
+          would let the user put a credit they already have into the outstanding
+          total. */}
+      {!isRefund && (
+        <Pressable
+          onPress={() => {
+            tapLight();
+            setAwaitingRefund((r) => !r);
+          }}
+          style={[
+            styles.awaitingToggle,
+            {
+              backgroundColor: awaitingRefund ? theme.systemAmber : theme.fieldBackground,
+            },
+          ]}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: awaitingRefund }}
+          accessibilityLabel="I'm expecting a refund for this"
+        >
+          <Ionicons
+            name={awaitingRefund ? 'hourglass' : 'hourglass-outline'}
+            size={15}
+            color={awaitingRefund ? '#FFF' : theme.secondaryLabel}
+          />
+          <Text style={{ color: awaitingRefund ? '#FFF' : theme.secondaryLabel, fontSize: 13, fontWeight: '600' }}>
+            {awaitingRefund ? "Expecting this back" : "I'm expecting this back"}
+          </Text>
+        </Pressable>
+      )}
+
       <View style={styles.actions}>
         <PressableScale
           disabled={!canSave}
@@ -335,6 +438,16 @@ export default function AddTransactionScreen() {
           <Text style={{ color: theme.accent, fontWeight: '600', fontSize: 15 }}>Save & add another</Text>
         </Pressable>
       </View>
+
+      <TagPicker
+        visible={tagPickerOpen}
+        onClose={async () => {
+          setTagPickerOpen(false);
+          await loadVocabulary();
+        }}
+        selectedTagIds={tagIds}
+        onChange={setTagIds}
+      />
     </ScrollView>
   );
 }
@@ -403,6 +516,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.75)',
   },
   noteInput: { padding: 12, borderRadius: radius.sm, fontSize: 15 },
+  tagRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Matches refundToggle's shape so the two optional switches on this screen
+  // read as the same kind of control, but left-aligned rather than centred —
+  // it belongs to the fields above it, not to the amount at the top.
+  awaitingToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    marginTop: spacing.lg,
+  },
   suggestionChip: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.sm, borderWidth: 1, marginTop: 8 },
   actions: { marginTop: spacing.xxl, gap: spacing.md },
   saveButton: { height: ACTION_HEIGHT, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },

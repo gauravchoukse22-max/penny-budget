@@ -237,11 +237,30 @@ export async function restoreAllTables(backup: BackupData): Promise<void> {
  * a reassurance into a changelog.
  */
 export function restoreCompletionMessage(version: number): string {
-  if (version >= NET_WORTH_BACKUP_VERSION) return 'Data restored. Please close and reopen the app.';
-  if (version >= FUNDS_BACKUP_VERSION) {
-    return 'Data restored. This backup predates Net Worth, so your assets and liabilities were left exactly as they are. Please close and reopen the app.';
-  }
-  return 'Data restored. This backup predates the Funds grid and Net Worth, so those were left exactly as they are. Please close and reopen the app.';
+  // Names everything an older file left ALONE, because the user just accepted a
+  // dialog saying "this replaces ALL current data" and that is now not quite
+  // what happened. Built by listing what the version predates rather than as a
+  // message per version: with five gates there are too many combinations to
+  // hand-write, and the ones nobody thought about are exactly the ones that
+  // would silently go unmentioned.
+  const untouched: string[] = [];
+  if (version < FUNDS_BACKUP_VERSION) untouched.push('the Funds grid');
+  if (version < NET_WORTH_BACKUP_VERSION) untouched.push('Net Worth');
+  if (version < SPLITS_BACKUP_VERSION) untouched.push('split transactions');
+  if (version < SHARED_SETTINGS_BACKUP_VERSION) untouched.push('shared budget settings');
+  // Two entries, not one "tags and refunds": the list joins with "and", and a
+  // compound item makes it read "…, shared budget settings and tags and refunds".
+  if (version < TAGS_REFUNDS_BACKUP_VERSION) untouched.push('tags', 'refunds');
+
+  if (untouched.length === 0) return 'Data restored. Please close and reopen the app.';
+
+  const list =
+    untouched.length === 1
+      ? untouched[0]
+      : `${untouched.slice(0, -1).join(', ')} and ${untouched[untouched.length - 1]}`;
+  return `Data restored. This backup predates ${list}, so ${
+    untouched.length === 1 ? 'that was' : 'those were'
+  } left exactly as ${untouched.length === 1 ? 'it is' : 'they are'}. Please close and reopen the app.`;
 }
 
 /** Validates a parsed backup's shape/version before any data is touched. */
