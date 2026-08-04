@@ -587,6 +587,22 @@ export async function listUncategorizedTransactions(): Promise<Transaction[]> {
   return db.getAllAsync<Transaction>('SELECT * FROM transactions WHERE categoryId IS NULL ORDER BY date DESC');
 }
 
+/**
+ * Every month that has at least one transaction, as "YYYY-MM", oldest first.
+ *
+ * Feeds the month picker's dots. Without them the picker is a blind grid: a
+ * statement that imported into the wrong year leaves rows in a month nobody
+ * would think to look at, and a dot is the only thing that says "something is
+ * over here".
+ */
+export async function listMonthsWithTransactions(): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ ym: string }>(
+    "SELECT DISTINCT substr(date, 1, 7) AS ym FROM transactions ORDER BY ym ASC"
+  );
+  return rows.map((r) => r.ym);
+}
+
 export async function listAllTransactions(): Promise<Transaction[]> {
   const db = await getDb();
   return db.getAllAsync<Transaction>('SELECT * FROM transactions ORDER BY date DESC, createdAt DESC');

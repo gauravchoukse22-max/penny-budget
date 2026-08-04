@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, type StyleProp, type ViewStyle } from 'react-native';
+import { MonthPickerSheet } from './MonthPickerSheet';
 import { Ionicons } from '@expo/vector-icons';
 import { useBudget } from '../context/BudgetContext';
 import { useTheme, spacing, radius, type } from '../theme/colors';
@@ -37,6 +38,7 @@ type Props = {
 export function MonthSwitcher({ onChange, style }: Props) {
   const theme = useTheme();
   const { selectedMonth, setSelectedMonth, goToPrevMonth, goToNextMonth } = useBudget();
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const thisMonth = currentYearMonth();
   const isCurrentMonth = selectedMonth === thisMonth;
@@ -60,6 +62,17 @@ export function MonthSwitcher({ onChange, style }: Props) {
     onChange?.(direction);
   };
 
+  const openPicker = () => {
+    selection();
+    setPickerOpen(true);
+  };
+  const jumpTo = (ym: string) => {
+    if (ym === selectedMonth) return;
+    const direction = ym < selectedMonth ? -1 : 1;
+    setSelectedMonth(ym);
+    onChange?.(direction);
+  };
+
   return (
     <View style={[styles.row, style]}>
       <Pressable
@@ -72,15 +85,21 @@ export function MonthSwitcher({ onChange, style }: Props) {
         <Ionicons name="chevron-back" size={20} color={theme.secondaryLabel} />
       </Pressable>
 
-      <Text
-        style={[type.headline, { color: theme.label }]}
-        accessibilityRole="header"
+      {/* Tapping the month opens a grid to jump straight to one. The arrows
+          only ever move a month at a time, which makes anything further than
+          last month tedious and another YEAR effectively unreachable. */}
+      <Pressable
+        onPress={openPicker}
+        hitSlop={8}
+        accessibilityRole="button"
         // Announced on its own rather than left to the arrows' labels, so the
         // month you are looking at is readable without moving off it.
-        accessibilityLabel={`Showing ${formatMonthLabel(selectedMonth)}`}
+        accessibilityLabel={`Showing ${formatMonthLabel(selectedMonth)}. Tap to go to another month.`}
+        style={styles.label}
       >
-        {formatMonthLabel(selectedMonth)}
-      </Text>
+        <Text style={[type.headline, { color: theme.label }]}>{formatMonthLabel(selectedMonth)}</Text>
+        <Ionicons name="chevron-down" size={14} color={theme.secondaryLabel} />
+      </Pressable>
 
       <Pressable
         onPress={goNext}
@@ -107,6 +126,13 @@ export function MonthSwitcher({ onChange, style }: Props) {
           <Text style={[styles.todayText, { color: theme.accent }]}>This month</Text>
         </Pressable>
       )}
+
+      <MonthPickerSheet
+        visible={pickerOpen}
+        selectedMonth={selectedMonth}
+        onSelect={jumpTo}
+        onClose={() => setPickerOpen(false)}
+      />
     </View>
   );
 }
@@ -122,6 +148,9 @@ const styles = StyleSheet.create({
   // 44pt — Apple's minimum tap target, and the same reason PressableScale sizes
   // its own box. A chevron glyph on its own is about 20pt and misses taps.
   arrow: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  // Row so the chevron sits beside the month name and the whole thing reads as
+  // one tappable control rather than a label with a stray glyph next to it.
+  label: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 44 },
   // Absolute so showing and hiding it cannot nudge the centred month label.
   today: {
     position: 'absolute',

@@ -32,6 +32,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       'The review screen has a Cancel button. Getting to it and deciding not to import used to leave you stuck there, with importing as the only way out.',
       'Search results show the date, and opening one works whatever month it is from — tapping a result from another month used to say "Transaction not found".',
       'The date pickers in Search stay open while you pick. Changing month closed them before you could get to a day.',
+      'Tap the month name at the top of any tab to jump straight to a month. A grid of the twelve months opens with arrows for the year, so a month last winter is two taps instead of eight, and another year is reachable at all. Months you have transactions in are marked with a dot, so you can see where your data is without visiting a single month.',
+      'The "Got it" button on this screen now closes it. It did nothing at all when the screen opened by itself on launch, and swiping the sheet down was the only way past it.',
       'Insights and Home now agree. Insights was leaving out the savings you had ticked off on Budget, so its cash flow was higher than Home\'s "left to spend" for the same month. The savings rate was measuring what was left over rather than what you put away; it now counts the transfers you actually ticked.',
     ],
   },

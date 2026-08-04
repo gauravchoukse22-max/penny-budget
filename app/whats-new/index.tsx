@@ -18,6 +18,20 @@ export default function WhatsNewScreen() {
     markChangelogSeen();
   }, []);
 
+  /**
+   * "Got it" used to call router.back() alone, and on launch that does nothing.
+   * This screen is pushed by the root layout the moment the app is ready, which
+   * can land it as the only entry in the navigation history — and back() on an
+   * empty history is a no-op, so the button was dead. Verified on the simulator:
+   * the sheet scrolled, the tap registered, and it would not close. It was
+   * escapable only by swiping the sheet down, which is not something to rely on
+   * a first-launch user discovering.
+   */
+  const dismiss = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)');
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.groupedBackground }]} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -48,7 +62,7 @@ export default function WhatsNewScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { borderTopColor: theme.separator }]}>
-        <Pressable style={[styles.button, { backgroundColor: theme.accent }]} onPress={() => router.back()}>
+        <Pressable style={[styles.button, { backgroundColor: theme.accent }]} onPress={dismiss}>
           <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 16 }}>Got it</Text>
         </Pressable>
       </View>
