@@ -181,6 +181,15 @@ export default function HomeScreen() {
             </GradientCard>
           </View>
 
+          {/* Quick access to the screens that left the tab bar. Deliberately
+              flat (accentTint, no gradient) so the surplus hero stays the
+              loudest thing on this screen. */}
+          <View style={styles.quickRow}>
+            <QuickLink icon="pie-chart-outline" label="Budget" onPress={() => router.push('/(tabs)/budget')} />
+            <QuickLink icon="card-outline" label="Cards" onPress={() => router.push('/(tabs)/cards')} />
+            <QuickLink icon="bar-chart-outline" label="Insights" onPress={() => router.push('/(tabs)/insights')} />
+          </View>
+
           <Surface>
             <Text style={[styles.sectionTitle, { color: theme.label }]}>Budget Health</Text>
             {categorySummaries.length === 0 ? (
@@ -247,6 +256,21 @@ export default function HomeScreen() {
   );
 }
 
+function QuickLink({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      style={[styles.quickCard, { backgroundColor: theme.accentTint }]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Ionicons name={icon} size={18} color={theme.accent} />
+      <Text style={{ color: theme.label, fontSize: 13, fontWeight: '600' }}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 110 },
@@ -264,6 +288,8 @@ const styles = StyleSheet.create({
   breakdownToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   formula: { fontSize: 12, color: 'rgba(255,255,255,0.8)' },
   statsRow: { flexDirection: 'row', gap: spacing.md },
+  quickRow: { flexDirection: 'row', gap: spacing.md },
+  quickCard: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: radius.md },
   statCard: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: spacing.md },
   statLabel: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
   statHint: { fontSize: 10, color: 'rgba(255,255,255,0.75)' },

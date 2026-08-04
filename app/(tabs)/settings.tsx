@@ -205,6 +205,14 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={[type.title1, { color: theme.label }]}>Settings</Text>
 
+        {/* Budget, Cards and Insights moved out of the tab bar; this hub is
+            their new front door, so it sits above every other section. */}
+        <View style={styles.hubRow}>
+          <HubCard icon="pie-chart" label="Budget" onPress={() => router.push('/(tabs)/budget')} />
+          <HubCard icon="card" label="Cards" onPress={() => router.push('/(tabs)/cards')} />
+          <HubCard icon="bar-chart" label="Insights" onPress={() => router.push('/(tabs)/insights')} />
+        </View>
+
         <Surface>
           <Text style={[styles.sectionTitle, { color: theme.label }]}>Currency</Text>
           <View style={styles.row}>
@@ -410,6 +418,21 @@ export default function SettingsScreen() {
   );
 }
 
+function HubCard({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      style={[styles.hubCard, { backgroundColor: theme.accentTint }]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Ionicons name={icon} size={26} color={theme.accent} />
+      <Text style={{ color: theme.label, fontSize: 13, fontWeight: '700' }}>{label}</Text>
+    </Pressable>
+  );
+}
+
 function SettingsLink({ label, detail, onPress }: { label: string; detail?: string; onPress: () => void }) {
   const theme = useTheme();
   return (
@@ -427,6 +450,8 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 60 },
   sectionTitle: { fontSize: 17, fontWeight: '700', marginBottom: 10 },
+  hubRow: { flexDirection: 'row', gap: spacing.md },
+  hubCard: { flex: 1, alignItems: 'center', gap: 8, paddingVertical: spacing.lg, borderRadius: radius.lg },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.md },
   hint: { fontSize: 12, marginTop: 10 },
