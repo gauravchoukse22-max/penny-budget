@@ -106,13 +106,15 @@ Money, Simplifi, PocketGuard, and the one-time-purchase indies. Split by whether
 the gap is closable WITHOUT bank linking — the ones that need a bank feed are
 deliberate non-goals and belong in marketing copy, not this list.
 
+**SHIPPED in builds 20–22:** splits, rollover, tags, refund tracker, receipts
+(Files-only until expo-image-picker lands), goal target dates, debt payoff,
+net worth trend, shared household currency, import learning.
+
 **Lower priority, none started:**
-- [ ] **Multi-currency.** MoneyCoach and Buddy have it; real data-model surgery
-      here. Blocked behind the currency-sync bug below — fix that first.
-- [ ] **Tags** (cross-category labels, YNAB flags / Simplifi tags), **receipt
-      photo attachments**, **refund tracker** (Simplifi's, small and
-      distinctive), **Apple Watch app**. Split transactions SHIPPED in build 20.
-- [ ] **Rollover** — moved up to the Next list; it is the top remaining gap.
+- [ ] **Multi-currency.** MoneyCoach and Buddy have it; real data-model surgery.
+      UNBLOCKED now that currency syncs via shared_settings — but still a big
+      job: every stored amount needs a currency and a rate at entry time.
+- [ ] **Apple Watch app.**
 - [ ] **Home-screen widgets** — designed in `docs/WidgetDesign.md` (5 widgets,
       recommended first is "Left to Spend" small), then **dropped by Gary on
       2026-08-03**. The doc stands if it ever comes back; note it is the first
