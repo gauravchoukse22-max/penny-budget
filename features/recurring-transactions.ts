@@ -5,7 +5,17 @@ import type { RecurringTransaction } from './models';
 
 export async function listRecurringTransactions(): Promise<RecurringTransaction[]> {
   const db = await getDb();
-  return db.getAllAsync<RecurringTransaction>('SELECT * FROM recurring_transactions ORDER BY dayOfMonth ASC');
+  const rows = await db.getAllAsync<RecurringTransaction>(
+    'SELECT * FROM recurring_transactions ORDER BY dayOfMonth ASC'
+  );
+  // SQLite has no boolean: `active` comes back as the NUMBER 0 or 1, while the
+  // type says boolean, so nothing type-checks the difference. React Native's
+  // Switch wants a real boolean and renders `1` as OFF — so every active bill
+  // showed a disabled switch while quietly posting every month, which is the
+  // worst combination: the screen said one thing and the app did another.
+  // Coerced here rather than at each call site; features/bill-reminders.ts
+  // already did its own `!!r.active` and was the only place that got it right.
+  return rows.map((r) => ({ ...r, active: !!r.active }));
 }
 
 export async function createRecurringTransaction(input: Omit<RecurringTransaction, 'id' | 'nextPostDate'>): Promise<RecurringTransaction> {

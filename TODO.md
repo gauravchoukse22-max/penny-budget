@@ -62,6 +62,30 @@ verification and Android.
       versionCode verified. vc13 was cut and superseded before upload, so it was
       deleted (same rule as vc7: never leave an ambiguous number lying around).
 
+### RESUME HERE — paused mid-verification 2026-08-04
+The Recurring Bills "Add a Bill" form was rebuilt to match Add Transaction
+(big centred amount, colour-disc category chips, mini wallet-card chips, and
+"Repeats on" chips — The 1st / The 15th / Last day / Other — standing where the
+date chips stand). It also gained the same name-based category suggestion.
+VERIFIED on the simulator: typed an amount, picked The 15th, named it Netflix,
+saved, and the row read "Netflix · Day 15 · next 2026-08-15 · $15.50".
+
+**One fix is built but NOT yet seen working.** `listRecurringTransactions`
+returned SQLite's NUMBER 0/1 for `active` while the type said boolean, so
+`<Switch value={1}>` rendered OFF on every bill that was actually posting —
+the screen said one thing and the app did another. The loader now coerces with
+`!!r.active`. tsc is clean and the simulator build succeeded, but the app was
+never relaunched to confirm the switch now reads ON. **Do that first:** open
+Recurring Bills and check the Netflix row's switch is on.
+
+Also worth a look while there: that row wraps ("Day 15 · next 2026-08-15" runs
+to two lines) because the amount, switch and delete button crowd the name
+column. Cosmetic, not wrong.
+
+Nothing else is in flight. iOS 22 and Android vc14 are archived and still the
+builds to upload — this recurring work is NOT in them, so it needs a build 23 /
+vc15 once the switch is confirmed.
+
 ### Watch out: columns that exist and do nothing
 FOUR features looked shipped because their column was already in the schema and
 nothing read it: `categories.rolloverEnabled`, `transactions.receiptUri`,
