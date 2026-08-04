@@ -4,7 +4,7 @@ import { MonthPickerSheet } from './MonthPickerSheet';
 import { Ionicons } from '@expo/vector-icons';
 import { useBudget } from '../context/BudgetContext';
 import { useTheme, spacing, radius, type } from '../theme/colors';
-import { formatMonthLabel } from '../lib/format';
+import { formatMonthLabel, formatShortMonth } from '../lib/format';
 import { currentYearMonth } from '../lib/db';
 import { addMonths } from '../lib/queries';
 import { selection } from '../lib/haptics';
@@ -111,10 +111,10 @@ export function MonthSwitcher({ onChange, style }: Props) {
         <Ionicons name="chevron-forward" size={20} color={theme.secondaryLabel} />
       </Pressable>
 
-      {/* Only while you are away from it. Stepping back six months one tap at a
-          time is the tedious part of a month switcher, and a permanently
-          visible "This month" on the month you are already on is a dead
-          control. */}
+      {/* Only while you are away from the current month — on it, a jump-back
+          button is a dead control. Labelled with an arrow and the month it goes
+          TO, because "This month" on a screen showing March read as a claim
+          about March rather than a way back to August. */}
       {!isCurrentMonth && (
         <Pressable
           onPress={goToday}
@@ -123,7 +123,8 @@ export function MonthSwitcher({ onChange, style }: Props) {
           accessibilityLabel={`Back to ${formatMonthLabel(thisMonth)}`}
           style={[styles.today, { backgroundColor: theme.accentTint }]}
         >
-          <Text style={[styles.todayText, { color: theme.accent }]}>This month</Text>
+          <Ionicons name="return-up-back" size={13} color={theme.accent} />
+          <Text style={[styles.todayText, { color: theme.accent }]}>{formatShortMonth(thisMonth)}</Text>
         </Pressable>
       )}
 
@@ -155,6 +156,9 @@ const styles = StyleSheet.create({
   today: {
     position: 'absolute',
     right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: spacing.md,
     paddingVertical: 5,
     borderRadius: radius.pill,

@@ -8,6 +8,14 @@ type Props = PressableProps & {
   /** Fire a light haptic on press-in. */
   haptic?: boolean;
   style?: StyleProp<ViewStyle>;
+  /**
+   * Layout for the CONTENT inside the touch box. The inner view defaults to a
+   * centred row, which silently re-laid-out any button whose children were
+   * stacked — the add-transaction category grid rendered its icon BESIDE its
+   * label, overflowing 72pt items into each other. Pass the content's own
+   * layout here when it isn't a row.
+   */
+  contentStyle?: StyleProp<ViewStyle>;
   children: React.ReactNode;
 };
 
@@ -25,7 +33,7 @@ type Props = PressableProps & {
  * The Animated.View carries only the transform, so it scales the content
  * inside an unchanged box.
  */
-export function PressableScale({ activeScale = 0.96, haptic = false, style, children, onPressIn, onPressOut, ...rest }: Props) {
+export function PressableScale({ activeScale = 0.96, haptic = false, style, contentStyle, children, onPressIn, onPressOut, ...rest }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
 
   const springTo = (value: number) =>
@@ -45,7 +53,7 @@ export function PressableScale({ activeScale = 0.96, haptic = false, style, chil
       }}
       {...rest}
     >
-      <Animated.View style={[styles.inner, { transform: [{ scale }] }]}>{children}</Animated.View>
+      <Animated.View style={[styles.inner, contentStyle, { transform: [{ scale }] }]}>{children}</Animated.View>
     </Pressable>
   );
 }

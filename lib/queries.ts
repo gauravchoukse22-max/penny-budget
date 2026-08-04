@@ -672,6 +672,31 @@ export async function computeSurplus(yearMonth: string): Promise<{ salary: numbe
     listTransferStatus(yearMonth),
     resolveSavingsGoalAmounts(yearMonth),
   ]);
+  return computeSurplusFrom(salary, transactions, goals, transferStatus, goalAmounts);
+}
+
+// ---------- Pure computation over already-loaded data ----------
+//
+// The month-scoped numbers used to be five independent async functions, and
+// every one of them re-read the same rows: a single context refresh ran
+// listTransactionsForMonth FOUR times for one month, plus listCategories,
+// listSavingsGoals, listTransferStatus and resolveSavingsGoalAmounts twice
+// each. On Insights it was worse — the six-month trend called computeSurplus
+// per month, so switching month fired roughly fifty SQLite round-trips, each
+// one an async bridge hop, before anything could redraw.
+//
+// The computations themselves are trivial arithmetic. Splitting them out as
+// pure functions lets a caller that already holds the rows — the context's
+// refresh does — do the work without going back to the database. The async
+// wrappers above stay for callers that only want one number.
+
+export function computeSurplusFrom(
+  salary: number,
+  transactions: Transaction[],
+  goals: SavingsGoal[],
+  transferStatus: Map<string, boolean>,
+  goalAmounts: Map<string, number>
+): { salary: number; spend: number; savings: number; surplus: number } {
   const spend = sumAmount(transactions);
   const savings = totalTransferredSavings(goals, transferStatus, goalAmounts);
   return { salary, spend, savings, surplus: salary - spend - savings };
@@ -686,6 +711,14 @@ export async function computeCategorySummaries(yearMonth: string): Promise<Categ
     listTransactionsForMonth(yearMonth),
     resolveCategoryLimits(yearMonth),
   ]);
+  return computeCategorySummariesFrom(categories, transactions, limitOverrides);
+}
+
+export function computeCategorySummariesFrom(
+  categories: Category[],
+  transactions: Transaction[],
+  limitOverrides: Map<string, number>
+): CategorySpendSummary[] {
   const spendByCategory = new Map<string, number>();
   for (const t of transactions) {
     if (!t.categoryId) continue;
@@ -706,7 +739,10 @@ export async function computeCategorySummaries(yearMonth: string): Promise<Categ
 
 /** 5.4 Card totals for the month. */
 export async function computeCardTotals(yearMonth: string): Promise<Map<string, number>> {
-  const transactions = await listTransactionsForMonth(yearMonth);
+  return computeCardTotalsFrom(await listTransactionsForMonth(yearMonth));
+}
+
+export function computeCardTotalsFrom(transactions: Transaction[]): Map<string, number> {
   const totals = new Map<string, number>();
   for (const t of transactions) {
     totals.set(t.cardId, (totals.get(t.cardId) ?? 0) + t.amount);
@@ -724,15 +760,59 @@ export function addMonths(yearMonth: string, delta: number): string {
   return shiftYearMonth(yearMonth, delta);
 }
 
-/** 5.5 Trend series for the last N months (oldest first). */
+/** 5.5 Trend series for the last N months (oldest first).
+ *
+ * One read of the whole range and one read of the goals, not one computeSurplus
+ * per month. The loop version issued five queries per point — thirty for the
+ * six-month chart — every time the month changed on Insights, on top of the
+ * context's own refresh, all of it before the screen could redraw. */
 export async function computeTrendSeries(endYearMonth: string, months = 6): Promise<TrendPoint[]> {
-  const points: TrendPoint[] = [];
-  for (let i = months - 1; i >= 0; i--) {
-    const ym = shiftYearMonth(endYearMonth, -i);
-    const { spend, surplus } = await computeSurplus(ym);
-    points.push({ yearMonth: ym, totalSpend: spend, surplus });
+  const startYearMonth = shiftYearMonth(endYearMonth, -(months - 1));
+  const [goals, rangeTransactions] = await Promise.all([
+    listSavingsGoals(),
+    listTransactionsBetweenMonths(startYearMonth, endYearMonth),
+  ]);
+
+  const byMonth = new Map<string, Transaction[]>();
+  for (const t of rangeTransactions) {
+    const ym = t.date.slice(0, 7);
+    const bucket = byMonth.get(ym);
+    if (bucket) bucket.push(t);
+    else byMonth.set(ym, [t]);
   }
-  return points;
+
+  const yearMonths: string[] = [];
+  for (let i = months - 1; i >= 0; i--) yearMonths.push(shiftYearMonth(endYearMonth, -i));
+
+  // The remaining per-month reads (salary, which goals were ticked, and their
+  // amounts that month) genuinely differ per month, but they can all go out at
+  // once instead of six sequential round trips.
+  const perMonth = await Promise.all(
+    yearMonths.map(async (ym) => {
+      const [salary, transfers, goalAmounts] = await Promise.all([
+        resolveSalaryForMonth(ym),
+        listTransferStatus(ym),
+        resolveSavingsGoalAmounts(ym),
+      ]);
+      return { ym, salary, transfers, goalAmounts };
+    })
+  );
+
+  return perMonth.map(({ ym, salary, transfers, goalAmounts }) => {
+    const { spend, surplus } = computeSurplusFrom(salary, byMonth.get(ym) ?? [], goals, transfers, goalAmounts);
+    return { yearMonth: ym, totalSpend: spend, surplus };
+  });
+}
+
+/** Every transaction from the first day of `startYearMonth` to the last of
+ * `endYearMonth`, inclusive. String comparison works because dates are stored
+ * as YYYY-MM-DD. */
+export async function listTransactionsBetweenMonths(startYearMonth: string, endYearMonth: string): Promise<Transaction[]> {
+  const db = await getDb();
+  return db.getAllAsync<Transaction>(
+    'SELECT * FROM transactions WHERE date >= ? AND date <= ? ORDER BY date DESC, createdAt DESC',
+    [`${startYearMonth}-01`, `${endYearMonth}-31`]
+  );
 }
 
 /** 5.6 Month-over-month category movers. Compares each category's spend in

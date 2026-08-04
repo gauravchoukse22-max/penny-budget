@@ -147,27 +147,32 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [transferStatus, setTransferStatus] = useState<Map<string, boolean>>(new Map());
   const [savingsGoalAmounts, setSavingsGoalAmounts] = useState<Map<string, number>>(new Map());
 
+  // Read each row set ONCE, then compute. This used to call computeSurplus,
+  // computeCategorySummaries and computeCardTotals alongside the raw lists, and
+  // every one of those re-queried the same month — four reads of
+  // listTransactionsForMonth per refresh, and duplicate reads of categories,
+  // goals, transfers and goal amounts. All of it ran on every month change,
+  // ahead of any redraw.
   const refresh = useCallback(async () => {
-    const [s, c, cat, goals, tx, surplusData, catSummaries, totals, transfers, goalAmounts] = await Promise.all([
+    const [s, c, cat, goals, tx, transfers, goalAmounts, salary, limitOverrides] = await Promise.all([
       q.getAppSettings(),
       q.listCards(),
       q.listCategories(),
       q.listSavingsGoals(),
       q.listTransactionsForMonth(selectedMonth),
-      q.computeSurplus(selectedMonth),
-      q.computeCategorySummaries(selectedMonth),
-      q.computeCardTotals(selectedMonth),
       q.listTransferStatus(selectedMonth),
       q.resolveSavingsGoalAmounts(selectedMonth),
+      q.resolveSalaryForMonth(selectedMonth),
+      q.resolveCategoryLimits(selectedMonth),
     ]);
     setSettings(s);
     setCards(c);
     setCategories(cat);
     setSavingsGoals(goals);
     setTransactions(tx);
-    setSurplus(surplusData);
-    setCategorySummaries(catSummaries);
-    setCardTotals(totals);
+    setSurplus(q.computeSurplusFrom(salary, tx, goals, transfers, goalAmounts));
+    setCategorySummaries(q.computeCategorySummariesFrom(cat, tx, limitOverrides));
+    setCardTotals(q.computeCardTotalsFrom(tx));
     setTransferStatus(transfers);
     setSavingsGoalAmounts(goalAmounts);
   }, [selectedMonth]);
@@ -571,51 +576,103 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
 
   const uncategorizedCount = useMemo(() => transactions.filter((t) => !t.categoryId).length, [transactions]);
 
-  const value: BudgetContextValue = {
-    ready,
-    selectedMonth,
-    setSelectedMonth,
-    goToPrevMonth,
-    goToNextMonth,
-    settings,
-    cards,
-    categories,
-    savingsGoals,
-    transactions,
-    uncategorizedCount,
-    surplus,
-    categorySummaries,
-    cardTotals,
-    transferStatus,
-    savingsGoalAmounts,
-    refresh,
-    updateSettings,
-    addCard,
-    editCard,
-    removeCard,
-    addCategory,
-    editCategory,
-    removeCategory,
-    addSavingsGoal,
-    editSavingsGoal,
-    removeSavingsGoal,
-    setGoalTransferred,
-    setCategoryLimitForSelectedMonth,
-    setSavingsGoalAmountForSelectedMonth,
-    addTransaction,
-    editTransaction,
-    removeTransaction,
-    categorizeTransaction,
-    categorizeAllFromNote,
-    setSalaryForSelectedMonth,
-    syncNow,
-    createHousehold: createAndJoinHousehold,
-    joinHousehold: joinExistingHousehold,
-    connectToHousehold,
-    startDeviceSync,
-    pauseSharing,
-    leaveHousehold: leaveCurrentHousehold,
-  };
+  // MEMOISED, and it has to be. Every screen in the app reads this one context,
+  // so a fresh object here re-renders all of them — the whole tab tree, every
+  // list row, every chart — on any render of this provider, whether or not the
+  // data those screens use actually changed. That is the "buttons feel laggy"
+  // symptom: a tap's visual feedback queues behind a full re-render of the app.
+  // The action callbacks below are all useCallback'd so this list is stable.
+  const value: BudgetContextValue = useMemo(
+    () => ({
+      ready,
+      selectedMonth,
+      setSelectedMonth,
+      goToPrevMonth,
+      goToNextMonth,
+      settings,
+      cards,
+      categories,
+      savingsGoals,
+      transactions,
+      uncategorizedCount,
+      surplus,
+      categorySummaries,
+      cardTotals,
+      transferStatus,
+      savingsGoalAmounts,
+      refresh,
+      updateSettings,
+      addCard,
+      editCard,
+      removeCard,
+      addCategory,
+      editCategory,
+      removeCategory,
+      addSavingsGoal,
+      editSavingsGoal,
+      removeSavingsGoal,
+      setGoalTransferred,
+      setCategoryLimitForSelectedMonth,
+      setSavingsGoalAmountForSelectedMonth,
+      addTransaction,
+      editTransaction,
+      removeTransaction,
+      categorizeTransaction,
+      categorizeAllFromNote,
+      setSalaryForSelectedMonth,
+      syncNow,
+      createHousehold: createAndJoinHousehold,
+      joinHousehold: joinExistingHousehold,
+      connectToHousehold,
+      startDeviceSync,
+      pauseSharing,
+      leaveHousehold: leaveCurrentHousehold,
+    }),
+    [
+      ready,
+      selectedMonth,
+      goToPrevMonth,
+      goToNextMonth,
+      settings,
+      cards,
+      categories,
+      savingsGoals,
+      transactions,
+      uncategorizedCount,
+      surplus,
+      categorySummaries,
+      cardTotals,
+      transferStatus,
+      savingsGoalAmounts,
+      refresh,
+      updateSettings,
+      addCard,
+      editCard,
+      removeCard,
+      addCategory,
+      editCategory,
+      removeCategory,
+      addSavingsGoal,
+      editSavingsGoal,
+      removeSavingsGoal,
+      setGoalTransferred,
+      setCategoryLimitForSelectedMonth,
+      setSavingsGoalAmountForSelectedMonth,
+      addTransaction,
+      editTransaction,
+      removeTransaction,
+      categorizeTransaction,
+      categorizeAllFromNote,
+      setSalaryForSelectedMonth,
+      syncNow,
+      createAndJoinHousehold,
+      joinExistingHousehold,
+      connectToHousehold,
+      startDeviceSync,
+      pauseSharing,
+      leaveCurrentHousehold,
+    ]
+  );
 
   return <BudgetContext.Provider value={value}>{children}</BudgetContext.Provider>;
 }

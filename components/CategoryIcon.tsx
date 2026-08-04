@@ -20,7 +20,23 @@ export const CATEGORY_ICON_CHOICES = [
   'ellipsis-horizontal-circle',
 ] as const;
 
-export function CategoryIcon({ icon, color, size = 22 }: { icon: string; color: string; size?: number }) {
+export function CategoryIcon({
+  icon,
+  color,
+  size = 22,
+  plain = false,
+}: {
+  icon: string;
+  color: string;
+  size?: number;
+  /**
+   * Just the glyph, tinted `color`, no disc behind it. For rendering inside a
+   * surface that already has its own fill — a selected chip passing white got
+   * a white disc with a white glyph on it: a blank circle.
+   */
+  plain?: boolean;
+}) {
+  if (plain) return <Ionicons name={icon as any} size={size} color={color} />;
   const boxSize = size * 1.9;
   return (
     <View

@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius, type } from '../../theme/colors';
-import { currencySymbol } from '../../lib/format';
+import { currencySymbol, formatShortDate } from '../../lib/format';
 import { parseMoneyInput } from '../../lib/parse-number';
 import { DatePickerField, toIsoDate } from '../../components/DatePickerField';
 import { CategoryIcon } from '../../components/CategoryIcon';
@@ -13,13 +13,21 @@ import { suggestCategory } from '../../features/smart-categorizer';
 import { tapLight, success } from '../../lib/haptics';
 import type { SmartSuggestion } from '../../features/models';
 
-// Both action buttons and the empty-state button share one height so the pair
-// reads as a set; 52 matches the stepper buttons in NumberEditorSheet and
-// clears Apple's 44pt minimum tap target.
+// The design rule for this screen: the common case is typing ONE number and
+// tapping Save. Category, card and date all pre-select to the likeliest answer
+// (most-used category, most-used card, today), so every control below the
+// amount is a correction, not a requirement. That is why each picker is a
+// single compact row instead of a grid — a row you usually don't touch has no
+// business taking a third of the screen.
+
 const ACTION_HEIGHT = 52;
 
 function todayIso(): string {
   return toIsoDate(new Date());
+}
+
+function yesterdayIso(): string {
+  return toIsoDate(new Date(Date.now() - 86400000));
 }
 
 export default function AddTransactionScreen() {
@@ -27,8 +35,8 @@ export default function AddTransactionScreen() {
   const router = useRouter();
   const { categories, cards, transactions, settings, addTransaction } = useBudget();
 
-  // Surface the categories the user reaches for most, so the common picks sit
-  // up top instead of in creation order.
+  // Most-used first, and most-used is also the DEFAULT — the point of knowing
+  // what the user reaches for is not having to ask again.
   const sortedCategories = useMemo(() => {
     const counts = new Map<string, number>();
     for (const t of transactions) {
@@ -37,11 +45,18 @@ export default function AddTransactionScreen() {
     return [...categories].sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0));
   }, [categories, transactions]);
 
+  const sortedCards = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of transactions) counts.set(t.cardId, (counts.get(t.cardId) ?? 0) + 1);
+    return [...cards].sort((a, b) => (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0));
+  }, [cards, transactions]);
+
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [date, setDate] = useState(todayIso());
-  const [categoryId, setCategoryId] = useState<string | null>(categories[0]?.id ?? null);
-  const [cardId, setCardId] = useState<string | null>(cards[0]?.id ?? null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [categoryId, setCategoryId] = useState<string | null>(sortedCategories[0]?.id ?? null);
+  const [cardId, setCardId] = useState<string | null>(sortedCards[0]?.id ?? null);
   const [suggestion, setSuggestion] = useState<SmartSuggestion | null>(null);
   const [isRefund, setIsRefund] = useState(false);
 
@@ -96,6 +111,9 @@ export default function AddTransactionScreen() {
     }
   };
 
+  const isToday = date === todayIso();
+  const isYesterday = date === yesterdayIso();
+
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.groupedBackground }}
@@ -109,6 +127,8 @@ export default function AddTransactionScreen() {
       // presentation and left the Save buttons under the keyboard.
       automaticallyAdjustKeyboardInsets
     >
+      {/* Amount + type. The +/− toggle sits with the number it signs, so the
+          state it controls is visible in one glance: green +12.34 is a refund. */}
       <View style={styles.amountRow}>
         <Text style={[styles.currencySymbol, { color: isRefund ? theme.systemGreen : theme.secondaryLabel }]}>
           {isRefund ? '+' : currencySymbol(settings.currency)}
@@ -121,85 +141,135 @@ export default function AddTransactionScreen() {
           value={amount}
           onChangeText={setAmount}
           autoFocus
+          accessibilityLabel="Amount"
         />
       </View>
+      <Pressable
+        onPress={() => {
+          tapLight();
+          setIsRefund((r) => !r);
+        }}
+        style={[styles.refundToggle, { backgroundColor: isRefund ? theme.systemGreen : theme.fieldBackground }]}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: isRefund }}
+        accessibilityLabel="This is a refund or credit"
+      >
+        <Ionicons name={isRefund ? 'arrow-down-circle' : 'arrow-up-circle-outline'} size={15} color={isRefund ? '#FFF' : theme.secondaryLabel} />
+        <Text style={{ color: isRefund ? '#FFF' : theme.secondaryLabel, fontSize: 13, fontWeight: '600' }}>
+          {isRefund ? 'Refund / credit' : 'Expense'}
+        </Text>
+      </Pressable>
 
-      <View style={styles.typeRow}>
-        <Pressable
-          onPress={() => {
-            tapLight();
-            setIsRefund(false);
-          }}
-          style={[styles.typeChip, { backgroundColor: !isRefund ? theme.accent : theme.fieldBackground }]}
-        >
-          <Text style={{ color: !isRefund ? '#FFF' : theme.secondaryLabel, fontWeight: '700' }}>Expense</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => {
-            tapLight();
-            setIsRefund(true);
-          }}
-          style={[styles.typeChip, { backgroundColor: isRefund ? theme.systemGreen : theme.fieldBackground }]}
-        >
-          <Text style={{ color: isRefund ? '#FFF' : theme.secondaryLabel, fontWeight: '700' }}>Refund / Credit</Text>
-        </Pressable>
-      </View>
-
+      {/* One row per decision, defaults already made. */}
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Category</Text>
-      <View style={styles.grid}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
         {sortedCategories.map((c) => {
           const selected = categoryId === c.id;
           return (
             <PressableScale
               key={c.id}
               haptic
-              activeScale={0.92}
+              activeScale={0.94}
               onPress={() => setCategoryId(c.id)}
-              style={styles.gridItem}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              style={[
+                styles.chip,
+                { backgroundColor: selected ? c.color : theme.fieldBackground },
+              ]}
             >
-              <View style={[styles.iconWrap, { backgroundColor: selected ? c.color : theme.fieldBackground }]}>
-                <CategoryIcon icon={c.icon} color={selected ? '#FFFFFF' : c.color} size={22} />
-                {selected && (
-                  <View style={styles.checkBadge}>
-                    <Ionicons name="checkmark-circle" size={18} color={c.color} />
-                  </View>
-                )}
-              </View>
-              <Text
-                style={[styles.gridLabel, { color: selected ? theme.label : theme.secondaryLabel, fontWeight: selected ? '700' : '400' }]}
-                numberOfLines={1}
-              >
+              <CategoryIcon plain icon={c.icon} color={selected ? '#FFFFFF' : c.color} size={15} />
+              <Text style={[styles.chipText, { color: selected ? '#FFFFFF' : theme.label }]} numberOfLines={1}>
                 {c.name}
               </Text>
             </PressableScale>
           );
         })}
-      </View>
-
-      <Text style={[styles.label, { color: theme.secondaryLabel }]}>Card</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cardRow}>
-        {cards.map((c) => {
-          const selected = cardId === c.id;
-          return (
-            <PressableScale
-              key={c.id}
-              haptic
-              activeScale={0.94}
-              onPress={() => setCardId(c.id)}
-              style={[
-                styles.cardChip,
-                { backgroundColor: c.color, opacity: selected ? 1 : 0.5, borderWidth: 2, borderColor: selected ? '#FFFFFF' : 'transparent' },
-              ]}
-            >
-              {selected && <Ionicons name="checkmark" size={15} color="#FFFFFF" style={{ marginRight: 5 }} />}
-              <Text style={styles.cardChipText}>{c.name}</Text>
-            </PressableScale>
-          );
-        })}
       </ScrollView>
 
+      {/* A single card needs no picker at all — the row only exists once there
+          is a choice to make. */}
+      {cards.length > 1 && (
+        <>
+          <Text style={[styles.label, { color: theme.secondaryLabel }]}>Card</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {sortedCards.map((c) => {
+              const selected = cardId === c.id;
+              return (
+                <PressableScale
+                  key={c.id}
+                  haptic
+                  activeScale={0.94}
+                  onPress={() => setCardId(c.id)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor: selected ? theme.accent : theme.fieldBackground,
+                    },
+                  ]}
+                >
+                  <View style={[styles.cardDot, { backgroundColor: c.color }]} />
+                  <Text style={[styles.chipText, { color: selected ? theme.onAccent : theme.label }]} numberOfLines={1}>
+                    {c.name}
+                  </Text>
+                </PressableScale>
+              );
+            })}
+          </ScrollView>
+        </>
+      )}
+
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Date</Text>
-      <DatePickerField value={date} onChange={setDate} />
+      <View style={styles.chipRow}>
+        <Pressable
+          onPress={() => {
+            tapLight();
+            setDate(todayIso());
+            setShowDatePicker(false);
+          }}
+          style={[styles.chip, { backgroundColor: isToday ? theme.accent : theme.fieldBackground }]}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: isToday }}
+        >
+          <Text style={[styles.chipText, { color: isToday ? theme.onAccent : theme.label }]}>Today</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            tapLight();
+            setDate(yesterdayIso());
+            setShowDatePicker(false);
+          }}
+          style={[styles.chip, { backgroundColor: isYesterday ? theme.accent : theme.fieldBackground }]}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: isYesterday }}
+        >
+          <Text style={[styles.chipText, { color: isYesterday ? theme.onAccent : theme.label }]}>Yesterday</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            tapLight();
+            setShowDatePicker((s) => !s);
+          }}
+          style={[
+            styles.chip,
+            { backgroundColor: !isToday && !isYesterday ? theme.accent : theme.fieldBackground },
+          ]}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: !isToday && !isYesterday }}
+        >
+          <Ionicons
+            name="calendar-outline"
+            size={14}
+            color={!isToday && !isYesterday ? theme.onAccent : theme.secondaryLabel}
+          />
+          <Text style={[styles.chipText, { color: !isToday && !isYesterday ? theme.onAccent : theme.label }]}>
+            {!isToday && !isYesterday ? formatShortDate(date) : 'Other'}
+          </Text>
+        </Pressable>
+      </View>
+      {showDatePicker && <DatePickerField value={date} onChange={setDate} />}
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Note</Text>
       <TextInput
@@ -232,57 +302,72 @@ export default function AddTransactionScreen() {
           disabled={!canSave}
           accessibilityRole="button"
           accessibilityState={{ disabled: !canSave }}
-          style={[styles.actionButton, styles.actionPrimary, { backgroundColor: theme.accent }, !canSave && styles.actionDisabled]}
+          style={[styles.saveButton, { backgroundColor: theme.accent }, !canSave && styles.actionDisabled]}
           onPress={() => save(false)}
         >
           <Text style={[type.headline, { color: theme.onAccent }]}>Save</Text>
         </PressableScale>
-        <PressableScale
+        {/* Secondary path as a text button — one obvious Save, not two
+            equal-weight boxes competing for the tap. */}
+        <Pressable
           disabled={!canSave}
           accessibilityRole="button"
           accessibilityState={{ disabled: !canSave }}
-          style={[
-            styles.actionButton,
-            { backgroundColor: theme.accentTint, borderColor: theme.accent },
-            !canSave && styles.actionDisabled,
-          ]}
           onPress={() => save(true)}
+          style={[styles.saveAnother, !canSave && styles.actionDisabled]}
+          hitSlop={8}
         >
-          <Text style={[type.headline, { color: theme.accent }]}>Save & Add Another</Text>
-        </PressableScale>
+          <Text style={{ color: theme.accent, fontWeight: '600', fontSize: 15 }}>Save & add another</Text>
+        </Pressable>
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.xl, gap: 8, paddingBottom: 60 },
+  content: { padding: spacing.xl, paddingBottom: 60 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl, gap: spacing.sm },
   emptyTitle: { fontSize: 20, fontWeight: '700', marginTop: spacing.md },
   emptyBody: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  amountRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
+  amountRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: spacing.sm },
   currencySymbol: { fontSize: 32, fontWeight: '400', marginRight: 4 },
-  amountInput: { fontSize: 52, fontWeight: '700', minWidth: 140, textAlign: 'center' },
-  typeRow: { flexDirection: 'row', gap: 8, justifyContent: 'center', marginBottom: spacing.md },
-  typeChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: radius.md },
-  label: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.lg, marginBottom: spacing.sm },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  gridItem: { alignItems: 'center', width: 72 },
-  iconWrap: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center' },
-  checkBadge: { position: 'absolute', top: -2, right: -2, backgroundColor: '#FFFFFF', borderRadius: 9 },
-  gridLabel: { fontSize: 11, marginTop: 5, textAlign: 'center' },
-  cardRow: { flexDirection: 'row' },
-  cardChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: radius.md, marginRight: 8 },
-  cardChipText: { color: '#FFF', fontWeight: '600' },
+  amountInput: { fontSize: 56, fontWeight: '700', minWidth: 140, textAlign: 'center' },
+  refundToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
+    marginTop: 2,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
+  },
+  chipRow: { flexDirection: 'row', gap: spacing.sm },
+  // One height for every chip on the screen; 40pt + vertical hitSlop from the
+  // row spacing keeps taps easy without the rows growing into panels.
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+  },
+  chipText: { fontSize: 14, fontWeight: '600' },
+  cardDot: { width: 10, height: 10, borderRadius: 5 },
   noteInput: { padding: 12, borderRadius: radius.sm, fontSize: 15 },
   suggestionChip: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.sm, borderWidth: 1, marginTop: 8 },
-  // Stacked rather than side by side: "Save & Add Another" wrapped to two lines
-  // at half width, which is what made the pair look like mismatched shapes.
-  actions: { gap: spacing.md, marginTop: spacing.xl },
-  // Both buttons carry the same border box — without it the outlined one sat
-  // 3pt taller than the filled one.
-  actionButton: { height: ACTION_HEIGHT, borderRadius: radius.md, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  actionPrimary: { borderColor: 'transparent' },
+  actions: { marginTop: spacing.xxl, gap: spacing.md },
+  saveButton: { height: ACTION_HEIGHT, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  saveAnother: { alignSelf: 'center', paddingVertical: 6 },
   actionDisabled: { opacity: 0.4 },
   emptyButton: {
     height: ACTION_HEIGHT,

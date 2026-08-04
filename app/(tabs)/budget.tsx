@@ -159,6 +159,9 @@ export default function BudgetScreen() {
                     haptic
                     onPress={() => setEditor({ kind: 'limit', id: s.category.id, name: s.category.name, value: s.category.monthlyLimit })}
                     style={styles.categoryRight}
+                    // Amount stacked over its remaining label — without this the
+                    // scale wrapper's default row lays them side by side.
+                    contentStyle={styles.categoryRightContent}
                   >
                     <AmountText amount={s.spend} currency={settings.currency} size={14} weight="semibold" />
                     {s.category.monthlyLimit > 0 ? (
@@ -680,6 +683,7 @@ const styles = StyleSheet.create({
   categoryTapArea: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   categoryMiddle: { flex: 1, gap: 6 },
   categoryRight: { alignItems: 'flex-end', gap: 2, paddingLeft: 8 },
+  categoryRightContent: { flexDirection: 'column', alignItems: 'flex-end', gap: 2 },
   categoryName: { fontSize: 14, fontWeight: '500' },
   addRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 10 },
   emptyState: { alignItems: 'center', gap: 8, paddingVertical: spacing.lg },
