@@ -66,7 +66,9 @@ export async function getAppSettings(): Promise<AppSettings> {
     autoLockGraceMinutes: number;
     hideAmounts: number;
     householdId: string | null;
-  }>('SELECT currency, salaryMode, fixedSalary, onboarded, biometricLock, cloudSyncEnabled, autoLockGraceMinutes, hideAmounts, householdId FROM app_settings WHERE id = 1');
+    insightsLayout: string | null;
+    watchedCategories: string | null;
+  }>('SELECT currency, salaryMode, fixedSalary, onboarded, biometricLock, cloudSyncEnabled, autoLockGraceMinutes, hideAmounts, householdId, insightsLayout, watchedCategories FROM app_settings WHERE id = 1');
   return {
     currency: row?.currency ?? 'USD',
     salaryMode: row?.salaryMode ?? 'fixed',
@@ -77,6 +79,8 @@ export async function getAppSettings(): Promise<AppSettings> {
     autoLockGraceMinutes: row?.autoLockGraceMinutes ?? 1,
     hideAmounts: !!row?.hideAmounts,
     householdId: row?.householdId ?? null,
+    insightsLayout: row?.insightsLayout ?? null,
+    watchedCategories: row?.watchedCategories ?? null,
   };
 }
 
@@ -85,7 +89,7 @@ export async function updateAppSettings(patch: Partial<AppSettings>): Promise<vo
   const current = await getAppSettings();
   const next = { ...current, ...patch };
   await db.runAsync(
-    'UPDATE app_settings SET currency = ?, salaryMode = ?, fixedSalary = ?, onboarded = ?, biometricLock = ?, cloudSyncEnabled = ?, autoLockGraceMinutes = ?, hideAmounts = ?, householdId = ? WHERE id = 1',
+    'UPDATE app_settings SET currency = ?, salaryMode = ?, fixedSalary = ?, onboarded = ?, biometricLock = ?, cloudSyncEnabled = ?, autoLockGraceMinutes = ?, hideAmounts = ?, householdId = ?, insightsLayout = ?, watchedCategories = ? WHERE id = 1',
     [
       next.currency,
       next.salaryMode,
@@ -96,6 +100,8 @@ export async function updateAppSettings(patch: Partial<AppSettings>): Promise<vo
       next.autoLockGraceMinutes ?? 1,
       next.hideAmounts ? 1 : 0,
       next.householdId ?? null,
+      next.insightsLayout ?? null,
+      next.watchedCategories ?? null,
     ]
   );
 

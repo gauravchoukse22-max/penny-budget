@@ -120,6 +120,13 @@ export type AppSettings = {
   cloudSyncEnabled: boolean;
   /** The household this device co-edits, or null if sharing is off. */
   householdId: string | null;
+  /** JSON: Insights card order + visibility (see lib/insights-layout.ts).
+   * Null until the user first customizes — the default layout applies.
+   * Device-local: app_settings deliberately never syncs. */
+  insightsLayout: string | null;
+  /** JSON: category ids the Insights Watchlist card tracks (max 3).
+   * Device-local for the same reason. */
+  watchedCategories: string | null;
 };
 
 export type BudgetStatus = 'green' | 'amber' | 'red';

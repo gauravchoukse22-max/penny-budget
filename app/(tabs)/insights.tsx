@@ -1,116 +1,101 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBudget } from '../../context/BudgetContext';
-import { useTheme, spacing, radius, type as typeScale, hexToRgba } from '../../theme/colors';
+import { useTheme, spacing, radius, type as typeScale } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
-import { AmountText } from '../../components/AmountText';
-import { LineChart } from '../../components/charts/LineChart';
-import { computeTrendSeries, computeCategoryMovers } from '../../lib/queries';
-import { currentYearMonth } from '../../lib/db';
-import type { TrendPoint, CategoryMover } from '../../lib/models';
 import { MonthSwitcher } from '../../components/MonthSwitcher';
-import { formatMonthLabel } from '../../lib/format';
-import { getHistoricalCategoryProjections, detectAnomalies } from '../../features/predictive-engine';
-import { loadFundGrid } from '../../features/funds';
-import { generateMonthlySummary } from '../../features/streaks-and-gamification';
-import type { CategoryProjection, AnomalyAlert, MonthlySummary } from '../../features/models';
+import { detectAnomalies } from '../../features/predictive-engine';
+import type { AnomalyAlert } from '../../features/models';
+import {
+  parseInsightsLayout,
+  serializeInsightsLayout,
+  type InsightCardId,
+  type InsightCardPref,
+} from '../../lib/insights-layout';
+import { MonthHeadline } from '../../components/insights/MonthHeadline';
+import { MoneyMap } from '../../components/insights/MoneyMap';
+import { BiggestChanges } from '../../components/insights/BiggestChanges';
+import { RecurringWatch } from '../../components/insights/RecurringWatch';
+import { Watchlist } from '../../components/insights/Watchlist';
+import { Outlook } from '../../components/insights/Outlook';
+import { SpendingTrend } from '../../components/insights/SpendingTrend';
+import { WhereItGoes } from '../../components/insights/WhereItGoes';
+import { EditInsightsSheet } from '../../components/insights/EditInsightsSheet';
+
+/**
+ * Review Night — the monthly review, as a stack of self-contained cards the
+ * user curates. Each card lives in components/insights/ and pulls its own data
+ * (month-scoped cards key off selectedMonth via useBudget), so this screen's
+ * only jobs are the header, the anomaly notices, and rendering the cards the
+ * saved layout asks for, in the order it asks for them.
+ *
+ * The layout itself is the user's: the Edit button opens a sheet with a
+ * show/hide switch and reorder arrows per card, persisted as JSON in
+ * app_settings.insightsLayout (device-local on purpose — see
+ * lib/insights-layout.ts).
+ */
+
+// Every card the layout can name, mapped to its component. A saved id missing
+// from this map can't happen post-parse (unknown ids are dropped), so render
+// is a straight lookup.
+const CARD_COMPONENTS: Record<InsightCardId, React.ComponentType> = {
+  headline: MonthHeadline,
+  'money-map': MoneyMap,
+  'biggest-changes': BiggestChanges,
+  'recurring-watch': RecurringWatch,
+  watchlist: Watchlist,
+  outlook: Outlook,
+  'spending-trend': SpendingTrend,
+  'where-it-goes': WhereItGoes,
+};
 
 export default function InsightsScreen() {
   const theme = useTheme();
-  const router = useRouter();
-  const { selectedMonth, categories, categorySummaries, cardTotals, cards, settings, surplus } = useBudget();
-  const [trend, setTrend] = useState<TrendPoint[]>([]);
-  const [movers, setMovers] = useState<CategoryMover[]>([]);
-  const [projections, setProjections] = useState<CategoryProjection[]>([]);
+  const { selectedMonth, settings, surplus, categorySummaries, updateSettings } = useBudget();
+  const [editOpen, setEditOpen] = useState(false);
+
+  // Anomaly notices stay on the screen, above the cards: they are alerts, not
+  // review material, so they are not part of the customizable card set.
   const [anomalies, setAnomalies] = useState<AnomalyAlert[]>([]);
-  const [summary, setSummary] = useState<MonthlySummary | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  // Funds aren't month-scoped, so they refresh on focus rather than with the
-  // month selector — including after a trip to the Funds screen.
-  const [fundsTotal, setFundsTotal] = useState<number | null>(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadFundGrid().then(({ funds, grid }) => setFundsTotal(funds.length === 0 ? null : grid.grandTotal));
-    }, [])
-  );
-
-  // The forecast projects the rest of the *current* month from spend-to-date;
-  // it's meaningless for a past or future month, so only compute it when the
-  // selected month is the live one.
-  const isCurrentMonth = selectedMonth === currentYearMonth();
-
   useEffect(() => {
-    computeTrendSeries(selectedMonth, 6).then(setTrend);
-    computeCategoryMovers(selectedMonth).then(setMovers);
-    if (isCurrentMonth) getHistoricalCategoryProjections(3).then(setProjections);
-    else setProjections([]);
-    detectAnomalies(selectedMonth).then(setAnomalies);
-    generateMonthlySummary(selectedMonth).then(setSummary);
+    let alive = true;
+    detectAnomalies(selectedMonth).then((a) => alive && setAnomalies(a));
     setDismissed(new Set());
-  }, [selectedMonth, isCurrentMonth]);
-
-  const categoryById = new Map(categories.map((c) => [c.id, c]));
-
-  // ── Cash flow + savings rate (the headline numbers) ──────────────────────
-  // `net` must be the SAME number Home calls "Left to spend", which is
-  // salary − spend − savings you have ticked as transferred. This screen used
-  // to compute income − spend and ignore the transfers entirely, so the two
-  // tabs disagreed about the same month and neither said why.
-  const income = surplus.salary;
-  const spent = surplus.spend;
-  const saved = surplus.savings;
-  const net = surplus.surplus;
-  const hasIncome = income > 0;
-  // A savings rate is the share of income you actually put away — the goals
-  // ticked off on Budget. It was previously (income − spend) / income, which
-  // is the leftover rate: it called money still sitting in the account
-  // "saved", and it moved when a transfer was ticked in the wrong direction.
-  const savingsRate = hasIncome ? Math.round((saved / income) * 100) : null;
-  const netColor = !hasIncome ? theme.label : net >= 0 ? theme.positiveMuted : theme.negativeMuted;
-
-  // ── Spend trend delta vs 6-month average ─────────────────────────────────
-  const trendValues = trend.map((t) => t.totalSpend);
-  const trendAvg = trendValues.length ? trendValues.reduce((a, b) => a + b, 0) / trendValues.length : 0;
-  const trendDeltaPct = trendAvg > 0 ? ((spent - trendAvg) / trendAvg) * 100 : null;
-
-  // ── Biggest month-over-month movers ──────────────────────────────────────
-  const topMovers = movers.filter((m) => Math.abs(m.delta) >= 1).slice(0, 4);
-
-  // ── Where the money goes (ranked spend, folds in budget vs actual) ───────
-  const breakdown = categorySummaries.filter((s) => s.spend > 0);
-  const breakdownTotal = breakdown.reduce((sum, s) => sum + s.spend, 0);
-  const maxCategorySpend = Math.max(...breakdown.map((s) => s.spend), 1);
-
-  // ── Month-end outlook (reframed forecast) ────────────────────────────────
-  const outlook = projections
-    .filter((p) => p.budgetLimit > 0)
-    .map((p) => ({
-      name: categoryById.get(p.categoryId)?.name ?? 'Category',
-      projected: p.projectedFinalSpend,
-      limit: p.budgetLimit,
-      status: p.status,
-    }));
-  const outlookConcerns = outlook.filter((o) => o.status !== 'on_track');
-
-  // ── By-card totals (folds in the old card-usage donut) ───────────────────
-  const byCard = cards
-    .map((c) => ({ name: c.name, total: cardTotals.get(c.id) ?? 0 }))
-    .filter((v) => v.total > 0)
-    .sort((a, b) => b.total - a.total);
-
+    return () => {
+      alive = false;
+    };
+  }, [selectedMonth]);
   const visibleAnomalies = anomalies.filter((a) => !dismissed.has(a.transactionId));
-  const hasAnyData = spent > 0 || income > 0 || breakdown.length > 0;
+
+  // Derived, not state: the saved JSON is the single source of truth, so the
+  // sheet's edits (which write straight through updateSettings) come back
+  // through settings and re-render both the sheet and the cards.
+  const prefs = useMemo(() => parseInsightsLayout(settings.insightsLayout), [settings.insightsLayout]);
+  const savePrefs = (next: InsightCardPref[]) => {
+    updateSettings({ insightsLayout: serializeInsightsLayout(next) });
+  };
+
+  const hasAnyData = surplus.spend > 0 || surplus.salary > 0 || categorySummaries.some((s) => s.spend > 0);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.groupedBackground }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={[typeScale.title1, { color: theme.label }]}>Insights</Text>
-        {/* Replaces a plain month caption. The month was already readable here;
-            what was missing was being able to change it without going Home. */}
+        <View style={styles.titleRow}>
+          <Text style={[typeScale.title1, { color: theme.label }]}>Insights</Text>
+          <Pressable
+            onPress={() => setEditOpen(true)}
+            hitSlop={8}
+            style={[styles.editButton, { backgroundColor: theme.fieldBackground }]}
+            accessibilityRole="button"
+            accessibilityLabel="Customize which insight cards show"
+          >
+            <Ionicons name="options-outline" size={15} color={theme.secondaryLabel} />
+            <Text style={[styles.editText, { color: theme.secondaryLabel }]}>Edit</Text>
+          </Pressable>
+        </View>
         <MonthSwitcher />
 
         {visibleAnomalies.map((a) => (
@@ -127,247 +112,26 @@ export default function InsightsScreen() {
             <View style={styles.emptyState}>
               <Ionicons name="sparkles-outline" size={26} color={theme.tertiaryLabel} />
               <Text style={[styles.emptyText, { color: theme.secondaryLabel }]}>
-                Log some spending to see your cash flow, trends and category movers here.
+                Log some spending to see your monthly review here.
               </Text>
             </View>
           </Surface>
         )}
 
-        {/* Cash flow */}
-        <Surface>
-          <SectionLabel title="Cash Flow" />
-          <View style={styles.netRow}>
-            <Text style={[styles.netSign, { color: netColor }]}>{net >= 0 ? '+' : '−'}</Text>
-            <AmountText amount={Math.abs(net)} currency={settings.currency} size={40} weight="semibold" color={netColor} />
-          </View>
-          <Text style={[styles.netCaption, { color: theme.tertiaryLabel }]}>
-            {/* Names the month rather than saying "this month". With a switcher
-                on the screen the caption is read as a claim about which month
-                the number covers, and on any past month that claim was wrong. */}
-            {hasIncome
-              ? saved > 0
-                ? `Income minus spending and savings transferred in ${formatMonthLabel(selectedMonth)}`
-                : `Income minus spending in ${formatMonthLabel(selectedMonth)}`
-              : `Spending in ${formatMonthLabel(selectedMonth)} — set income to see net cash flow`}
-          </Text>
-
-          <View style={[styles.divider, { backgroundColor: theme.separator }]} />
-
-          <View style={styles.statTrio}>
-            <StatCell label="Income">
-              <AmountText amount={income} currency={settings.currency} size={16} weight="semibold" color={theme.label} />
-            </StatCell>
-            <View style={[styles.trioSep, { backgroundColor: theme.separator }]} />
-            <StatCell label="Spent">
-              <AmountText amount={spent} currency={settings.currency} size={16} weight="semibold" color={theme.label} />
-            </StatCell>
-            <View style={[styles.trioSep, { backgroundColor: theme.separator }]} />
-            <StatCell label="Saved">
-              <AmountText amount={saved} currency={settings.currency} size={16} weight="semibold" color={theme.label} />
-            </StatCell>
-            <View style={[styles.trioSep, { backgroundColor: theme.separator }]} />
-            <StatCell label="Savings Rate">
-              <Text
-                style={[
-                  styles.trioValue,
-                  { color: savingsRate === null ? theme.tertiaryLabel : savingsRate >= 0 ? theme.positiveMuted : theme.negativeMuted },
-                ]}
-              >
-                {savingsRate === null ? '—' : `${savingsRate}%`}
-              </Text>
-            </StatCell>
-          </View>
-        </Surface>
-
-        {/* Category movers */}
-        {topMovers.length > 0 && (
-          <Surface>
-            <SectionLabel title="Biggest Changes" right="vs Last Month" />
-            <View style={{ marginTop: spacing.xs }}>
-              {topMovers.map((m, i) => (
-                <View
-                  key={m.category.id}
-                  style={[styles.moverRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.separator }]}
-                >
-                  <Text style={[styles.moverName, { color: theme.label }]} numberOfLines={1}>
-                    {m.category.name}
-                  </Text>
-                  <View style={styles.moverRight}>
-                    <AmountText amount={m.current} currency={settings.currency} size={14} color={theme.secondaryLabel} />
-                    {m.percentChange === null ? (
-                      <Text style={[styles.newTag, { color: theme.tertiaryLabel }]}>NEW</Text>
-                    ) : (
-                      <DeltaTag pct={m.percentChange} theme={theme} compact />
-                    )}
-                  </View>
-                </View>
-              ))}
-            </View>
-          </Surface>
-        )}
-
-        {/* Where it goes */}
-        {breakdown.length > 0 && (
-          <Surface>
-            <SectionLabel title="Where It Goes" />
-            <View style={{ marginTop: spacing.sm, gap: spacing.md }}>
-              {breakdown.map((s) => {
-                const over = s.status === 'red';
-                const share = breakdownTotal > 0 ? Math.round((s.spend / breakdownTotal) * 100) : 0;
-                return (
-                  <Pressable key={s.category.id} onPress={() => router.push(`/category/${s.category.id}`)}>
-                    <View style={styles.breakdownTop}>
-                      <Text style={[styles.breakdownName, { color: theme.label }]} numberOfLines={1}>
-                        {s.category.name}
-                      </Text>
-                      <View style={styles.breakdownAmt}>
-                        {over && <Text style={[styles.overTag, { color: theme.negativeMuted }]}>OVER</Text>}
-                        <AmountText amount={s.spend} currency={settings.currency} size={14} weight="semibold" color={theme.label} />
-                        <Text style={[styles.sharePct, { color: theme.tertiaryLabel }]}>{share}%</Text>
-                      </View>
-                    </View>
-                    <View style={[styles.track, { backgroundColor: theme.neutralTrack }]}>
-                      <View
-                        style={{
-                          width: `${Math.max(3, (s.spend / maxCategorySpend) * 100)}%`,
-                          height: '100%',
-                          borderRadius: radius.pill,
-                          backgroundColor: over ? theme.negativeMuted : hexToRgba(theme.label, 0.55),
-                        }}
-                      />
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </Surface>
-        )}
-
-        {/* Month-end outlook (current month only) */}
-        {isCurrentMonth && outlook.length > 0 && (
-          <Surface>
-            <SectionLabel title="Month-End Outlook" />
-            {outlookConcerns.length === 0 ? (
-              <Text style={[styles.outlookClear, { color: theme.positiveMuted }]}>
-                Every budgeted category is pacing within its limit.
-              </Text>
-            ) : (
-              <View style={{ marginTop: spacing.sm, gap: spacing.md }}>
-                {outlookConcerns.map((o, i) => {
-                  const over = o.status === 'over_budget';
-                  return (
-                    <View key={i}>
-                      <View style={styles.breakdownTop}>
-                        <Text style={[styles.breakdownName, { color: theme.label }]} numberOfLines={1}>
-                          {o.name}
-                        </Text>
-                        <Text style={[styles.outlookStatus, { color: over ? theme.negativeMuted : theme.secondaryLabel }]}>
-                          {over ? 'Trending over' : 'Running high'}
-                        </Text>
-                      </View>
-                      <View style={[styles.track, { backgroundColor: theme.neutralTrack }]}>
-                        <View
-                          style={{
-                            width: `${Math.min(100, (o.projected / o.limit) * 100)}%`,
-                            height: '100%',
-                            borderRadius: radius.pill,
-                            backgroundColor: over ? theme.negativeMuted : hexToRgba(theme.label, 0.45),
-                          }}
-                        />
-                      </View>
-                      <View style={styles.outlookCaptionRow}>
-                        <Text style={[styles.outlookCaption, { color: theme.tertiaryLabel }]}>Pacing to </Text>
-                        <AmountText amount={o.projected} currency={settings.currency} size={12} color={theme.tertiaryLabel} />
-                        <Text style={[styles.outlookCaption, { color: theme.tertiaryLabel }]}> of </Text>
-                        <AmountText amount={o.limit} currency={settings.currency} size={12} color={theme.tertiaryLabel} />
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            )}
-          </Surface>
-        )}
-
-        {/* This month */}
-        {summary && summary.transactionCount > 0 && (
-          <Surface>
-            <SectionLabel title="This Month" />
-            <View style={{ marginTop: spacing.xs }}>
-              <MetaRow label="Transactions" theme={theme}>
-                <Text style={[styles.metaValue, { color: theme.label }]}>{summary.transactionCount}</Text>
-              </MetaRow>
-              {summary.biggestPurchase && (
-                <MetaRow label={summary.biggestPurchase.note || 'Biggest purchase'} theme={theme}>
-                  <AmountText amount={summary.biggestPurchase.amount} currency={settings.currency} size={15} weight="semibold" color={theme.label} />
-                </MetaRow>
-              )}
-              <MetaRow label="On budget" theme={theme} last={byCard.length === 0}>
-                <Text style={[styles.metaValue, { color: theme.label }]}>{summary.budgetScore}%</Text>
-              </MetaRow>
-
-              {byCard.length > 0 && (
-                <>
-                  <Text style={[styles.microLabel, { color: theme.tertiaryLabel, marginTop: spacing.md, marginBottom: spacing.xs }]}>BY CARD</Text>
-                  {byCard.map((c, i) => (
-                    <MetaRow key={i} label={c.name} theme={theme} last={i === byCard.length - 1}>
-                      <AmountText amount={c.total} currency={settings.currency} size={14} color={theme.secondaryLabel} />
-                    </MetaRow>
-                  ))}
-                </>
-              )}
-            </View>
-          </Surface>
-        )}
+        {/* The cards, in the user's saved order. Hidden ones simply don't
+            render; each card also returns null on its own when it has nothing
+            to say, so an enabled card never shows as an empty shell. */}
+        {hasAnyData &&
+          prefs
+            .filter((p) => p.visible)
+            .map((p) => {
+              const Card = CARD_COMPONENTS[p.id];
+              return <Card key={p.id} />;
+            })}
       </ScrollView>
+
+      <EditInsightsSheet visible={editOpen} prefs={prefs} onChange={savePrefs} onClose={() => setEditOpen(false)} />
     </SafeAreaView>
-  );
-}
-
-// ── Small building blocks ──────────────────────────────────────────────────
-
-function SectionLabel({ title, right }: { title: string; right?: string }) {
-  const theme = useTheme();
-  return (
-    <View style={styles.sectionLabelRow}>
-      <Text style={[styles.sectionLabel, { color: theme.secondaryLabel }]}>{title.toUpperCase()}</Text>
-      {right && <Text style={[styles.sectionRight, { color: theme.tertiaryLabel }]}>{right.toUpperCase()}</Text>}
-    </View>
-  );
-}
-
-function StatCell({ label, children }: { label: string; children: React.ReactNode }) {
-  const theme = useTheme();
-  return (
-    <View style={styles.statCell}>
-      <Text style={[styles.microLabel, { color: theme.tertiaryLabel, marginBottom: 4 }]}>{label.toUpperCase()}</Text>
-      {children}
-    </View>
-  );
-}
-
-function MetaRow({ label, children, theme, last }: { label: string; children: React.ReactNode; theme: ReturnType<typeof useTheme>; last?: boolean }) {
-  return (
-    <View style={[styles.metaRow, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.separator }]}>
-      <Text style={[styles.metaLabel, { color: theme.secondaryLabel }]} numberOfLines={1}>
-        {label}
-      </Text>
-      {children}
-    </View>
-  );
-}
-
-function DeltaTag({ pct, theme, label, compact }: { pct: number; theme: ReturnType<typeof useTheme>; label?: string; compact?: boolean }) {
-  // Spending up is the "bad" direction, so up = muted red, down = muted green.
-  const up = pct >= 0;
-  const color = up ? theme.negativeMuted : theme.positiveMuted;
-  return (
-    <View style={styles.deltaRow}>
-      <Text style={[styles.deltaText, { color }]}>
-        {up ? '▲' : '▼'} {Math.abs(Math.round(pct))}%
-      </Text>
-      {label && !compact && <Text style={[styles.deltaLabel, { color: theme.tertiaryLabel }]}>{label}</Text>}
-    </View>
   );
 }
 
@@ -391,61 +155,26 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: 60 },
 
-  fundsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  fundsIcon: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
-  fundsTitle: { fontSize: 15, fontWeight: '600' },
-
-  sectionLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sectionLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 1 },
-  sectionRight: { fontSize: 11, fontWeight: '600', letterSpacing: 0.8 },
-  microLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1 },
-
-  netRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, gap: 4 },
-  netSign: { fontSize: 30, fontWeight: '500', marginRight: 2 },
-  netCaption: { fontSize: 12, marginTop: 2 },
-
-  divider: { height: StyleSheet.hairlineWidth, marginVertical: spacing.lg },
-  statTrio: { flexDirection: 'row', alignItems: 'center' },
-  statCell: { flex: 1 },
-  // Four cells now instead of three (Saved joined Income/Spent/Savings Rate),
-  // so the gap between them tightens to keep the row on one line on a small phone.
-  trioSep: { width: StyleSheet.hairlineWidth, height: 30, marginHorizontal: spacing.sm },
-  trioValue: { fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums'] },
-
-  trendFooter: {
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  editButton: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
   },
-  deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  deltaText: { fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  deltaLabel: { fontSize: 11 },
+  editText: { fontSize: 13, fontWeight: '600' },
 
-  moverRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md },
-  moverName: { flex: 1, fontSize: 15, marginRight: spacing.md },
-  moverRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  newTag: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-
-  breakdownTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  breakdownName: { flex: 1, fontSize: 15, marginRight: spacing.md },
-  breakdownAmt: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  sharePct: { fontSize: 12, width: 34, textAlign: 'right', fontVariant: ['tabular-nums'] },
-  overTag: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  track: { height: 6, borderRadius: radius.pill, overflow: 'hidden' },
-
-  outlookClear: { fontSize: 14, marginTop: spacing.sm, lineHeight: 20 },
-  outlookStatus: { fontSize: 12, fontWeight: '600' },
-  outlookCaptionRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
-  outlookCaption: { fontSize: 12 },
-
-  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md },
-  metaLabel: { flex: 1, fontSize: 15, marginRight: spacing.md },
-  metaValue: { fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums'] },
-
-  notice: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  notice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
   noticeBar: { width: 3, alignSelf: 'stretch', borderRadius: radius.pill },
   noticeText: { flex: 1, fontSize: 13, lineHeight: 18 },
 

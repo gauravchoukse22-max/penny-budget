@@ -153,6 +153,14 @@ still worth a glance.
 
 ### Verified only by typecheck, never run on a device
 These are real risks, not paperwork. Each changed behaviour no agent could observe.
+- [ ] **The rebuilt Insights tab ("Review Night").** Whole screen is new: eight
+      independent cards in `components/insights/`, an Edit sheet that hides and
+      reorders them (persisted in the new `app_settings.insightsLayout` column),
+      and the SVG money map. The recurring-charge detector IS fixture-tested
+      (`node scripts/test-recurring-detect.mjs`, 24 assertions), and tsc is
+      clean, but nothing has rendered on a simulator — the money map's ribbon
+      geometry and the edit sheet's reordering especially need eyes. Check both
+      light/dark and an empty-data install.
 - [ ] **The seeded Cash card.** `features/db-migrations.ts` seeds it once per
       install at the well-known id `penny-cash-card`, stamped in
       `app_settings.cashCardSeededAt`. A fresh install on the iOS simulator

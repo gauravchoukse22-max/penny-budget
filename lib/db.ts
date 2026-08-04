@@ -201,6 +201,16 @@ async function migrateFeatureTables(db: SQLite.SQLiteDatabase): Promise<void> {
   if (!settingsColumnNames.has('householdId')) {
     await db.execAsync('ALTER TABLE app_settings ADD COLUMN householdId TEXT;');
   }
+  // Insights personalization — which cards show / their order, and the
+  // Watchlist card's chosen categories. JSON strings; parsing and defaults live
+  // in lib/insights-layout.ts. Device-local on purpose: app_settings never
+  // syncs, and a reading preference belongs to the phone, not the household.
+  if (!settingsColumnNames.has('insightsLayout')) {
+    await db.execAsync('ALTER TABLE app_settings ADD COLUMN insightsLayout TEXT;');
+  }
+  if (!settingsColumnNames.has('watchedCategories')) {
+    await db.execAsync('ALTER TABLE app_settings ADD COLUMN watchedCategories TEXT;');
+  }
 
   // The Funds grid's tables (funds, fund_accounts, fund_entries) live in
   // features/db-migrations. That module used to export a run-it-yourself

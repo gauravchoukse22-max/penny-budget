@@ -136,6 +136,8 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
     hideAmounts: false,
     cloudSyncEnabled: false,
     householdId: null,
+    insightsLayout: null,
+    watchedCategories: null,
   });
   const [cards, setCards] = useState<Card[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
