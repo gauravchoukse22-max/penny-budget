@@ -11,12 +11,12 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 
 ## Gary only
 
-- [ ] **Upload build 20 to TestFlight.** Xcode Organizer → Distribute App →
+- [ ] **Upload build 21 to TestFlight.** Xcode Organizer → Distribute App →
       App Store Connect → Upload. Needs his Apple ID, so it can never be
       automated. **Pick the archive by its explicit name**, never by the version
-      string: Organizer shows 13–20 all as plain "1.2.0 (n)". The one to upload
-      is named **"PennyBudget 1.2.0 (20)"** (archived 2026-08-04). It supersedes
-      19, which was never uploaded.
+      string: Organizer shows 13–21 all as plain "1.2.0 (n)". The one to upload
+      is named **"PennyBudget 1.2.0 (21)"** (archived 2026-08-04). It supersedes
+      19 and 20, neither of which was uploaded.
       Local signing only has an Apple Development cert; Organizer creates the
       distribution cert on first upload — expected, not an error.
 - [ ] **Delete the stale June 2027 transactions**, then re-import the Chase
@@ -37,30 +37,35 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 ## Claude
 
 ### Next — START HERE in a fresh session
-- [ ] **Category rollover.** The biggest remaining paid-app gap and YNAB's core
-      mechanic: unspent money should carry into next month (budget $600, spend
-      $550, next month starts with $650). `categories.rolloverEnabled` ALREADY
-      EXISTS as a column with a getter/setter in
-      features/streaks-and-gamification.ts, but it is referenced NOWHERE in the
-      budget math or any screen — a dead stub that makes the feature look
-      shipped. Wire it into computeCategorySummariesFrom / resolveCategoryLimits
-      and show the carried balance in the Budget ledger, or delete the column.
-      Decide what overspend does: YNAB carries a negative forward.
-      (This is the third dead column found — see receiptUri and the liabilities
-      loan fields. Grep for a column before concluding the schema lacks it.)
-- [ ] **Tags, receipt photos, refund tracker.** `transactions.receiptUri` is
-      another dead column — it exists and nothing uses it.
-- [ ] **Currency does not sync, which blocks multi-currency.** See below.
-- [ ] **Sweep the remaining screens onto components/Button.tsx.** The system
-      exists and the new screens use it, but ~35 hand-rolled inline button
-      styles remain across the older screens, so buttons still disagree on
-      height, radius and pressed feel.
-- [ ] **Cut Android vc13.** iOS 20 is archived; Android is still on vc12 and has
-      none of this.
-      Bump `versionCode` in BOTH `app.json` and `android/app/build.gradle`, then
-      build from `android/` WITHOUT prebuild (it wipes the signing config) —
-      recipe is in the android memory note. Verify the AAB's SHA-1 and
-      versionCode before handing it over.
+
+Everything on the competitive-gap list is now BUILT. What remains is
+verification and Android.
+
+- [ ] **Walk the screens that have never been run.** Built, typechecked and
+      unit-tested, but never seen working: the import preview (bulk assign +
+      suggestion confirming + rule learning), receipts (see the blocker below),
+      the household Currency section, and the ~75 swept button call sites. The
+      two bugs found in build 21 (tags not persisting on picker close; a null
+      goal target rendering as "funded") were BOTH invisible to types and tests
+      and only turned up by tapping. Assume more of these exist.
+- [ ] **expo-image-picker is NOT installed**, so receipts fall back to
+      expo-document-picker — on iOS that opens Files, not Photos, and a
+      camera-roll photo cannot be attached at all. Adding it is a native module
+      and therefore a full rebuild; do it deliberately, and re-check
+      `Podfile.lock` afterwards (see the pod-install trap below). The swap is
+      confined to `pickReceiptAsset()`.
+- [ ] **Two-phone walk for the shared-currency change.** Create → join → change
+      currency in both directions. The storage path is typechecked only.
+- [ ] **Cut Android vc13.** Still on vc12 with none of this.
+
+### Watch out: columns that exist and do nothing
+FOUR features looked shipped because their column was already in the schema and
+nothing read it: `categories.rolloverEnabled`, `transactions.receiptUri`,
+`liabilities.interestRate` and `liabilities.minimumPayment`. The last two made a
+whole debt-planner design go the wrong way — it concluded the schema could not
+support avalanche ordering and stored rates per-device, which would have meant
+Disha never seeing them. **Grep for a column before concluding it is missing,
+and grep for its READERS before concluding it works.**
 
 ### Done 2026-08-04: the 2026-08-03/04 batch is verified and iOS 19 is archived
 Walked on the iPhone 17 Pro Max simulator against a Release build (embedded
