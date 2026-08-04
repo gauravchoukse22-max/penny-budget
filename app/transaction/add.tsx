@@ -175,10 +175,18 @@ export default function AddTransactionScreen() {
               accessibilityState={{ selected }}
               style={[
                 styles.chip,
+                styles.iconChip,
                 { backgroundColor: selected ? c.color : theme.fieldBackground },
               ]}
             >
-              <CategoryIcon plain icon={c.icon} color={selected ? '#FFFFFF' : c.color} size={15} />
+              {/* The colored disc is the category's identity, so it shows on
+                  every chip, not only the chosen one — the row reads as YOUR
+                  categories instead of grey pills. On a selected chip the disc
+                  inverts (white disc, colored glyph) so it stands out against
+                  its own color instead of dissolving into it. */}
+              <View style={[styles.chipDisc, { backgroundColor: selected ? '#FFFFFF' : c.color }]}>
+                <CategoryIcon plain icon={c.icon} color={selected ? c.color : '#FFFFFF'} size={13} />
+              </View>
               <Text style={[styles.chipText, { color: selected ? '#FFFFFF' : theme.label }]} numberOfLines={1}>
                 {c.name}
               </Text>
@@ -205,14 +213,21 @@ export default function AddTransactionScreen() {
                   accessibilityState={{ selected }}
                   style={[
                     styles.chip,
+                    styles.iconChip,
                     {
                       backgroundColor: selected ? theme.accent : theme.fieldBackground,
                     },
                   ]}
                 >
-                  <View style={[styles.cardDot, { backgroundColor: c.color }]} />
+                  {/* A miniature of the wallet card itself — colour plus the
+                      chip stripe — so picking a card means recognising it, the
+                      way the Cards tab draws it, not decoding a coloured dot. */}
+                  <View style={[styles.cardMini, { backgroundColor: c.color }]}>
+                    <View style={styles.cardMiniStripe} />
+                  </View>
                   <Text style={[styles.chipText, { color: selected ? theme.onAccent : theme.label }]} numberOfLines={1}>
                     {c.name}
+                    {c.lastFour ? <Text style={{ fontWeight: '400', opacity: 0.7 }}>{`  ·${c.lastFour}`}</Text> : null}
                   </Text>
                 </PressableScale>
               );
@@ -362,7 +377,31 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   chipText: { fontSize: 14, fontWeight: '600' },
-  cardDot: { width: 10, height: 10, borderRadius: 5 },
+  // Chips that lead with an icon tighten their left padding so the disc reads
+  // as part of the chip instead of floating inside it.
+  iconChip: { paddingLeft: 8, gap: 7 },
+  chipDisc: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // 8:5 with a hairline "chip" stripe — the same proportions WalletCard draws,
+  // shrunk to chip scale.
+  cardMini: {
+    width: 26,
+    height: 17,
+    borderRadius: 4,
+    justifyContent: 'flex-end',
+    paddingBottom: 3,
+    paddingHorizontal: 4,
+  },
+  cardMiniStripe: {
+    height: 2.5,
+    borderRadius: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.75)',
+  },
   noteInput: { padding: 12, borderRadius: radius.sm, fontSize: 15 },
   suggestionChip: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.sm, borderWidth: 1, marginTop: 8 },
   actions: { marginTop: spacing.xxl, gap: spacing.md },
