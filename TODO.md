@@ -11,16 +11,14 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 
 ## Gary only
 
-- [ ] **Upload build 19 to TestFlight.** Xcode Organizer → Distribute App →
+- [ ] **Upload build 20 to TestFlight.** Xcode Organizer → Distribute App →
       App Store Connect → Upload. Needs his Apple ID, so it can never be
       automated. **Pick the archive by its explicit name**, never by the version
-      string: Organizer shows 13–19 all as plain "1.2.0 (n)". The one to upload
-      is named **"PennyBudget 1.2.0 (19)"** (archived 2026-08-04). It supersedes
-      18 — it has the statement-importer fix Disha is waiting on PLUS the whole
-      2026-08-03/04 batch, and it is the first build where PDF export and bill
-      reminders actually work (their native modules were missing from 18).
-      Local signing only has an Apple Development cert; Organizer will create
-      the distribution cert on first upload — that is expected, not an error.
+      string: Organizer shows 13–20 all as plain "1.2.0 (n)". The one to upload
+      is named **"PennyBudget 1.2.0 (20)"** (archived 2026-08-04). It supersedes
+      19, which was never uploaded.
+      Local signing only has an Apple Development cert; Organizer creates the
+      distribution cert on first upload — expected, not an error.
 - [ ] **Delete the stale June 2027 transactions**, then re-import the Chase
       statement. The first import filed them a year ahead (the year bug, fixed in
       18). On the new build: tap the month name → year arrow to 2027 → June will
@@ -39,8 +37,26 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 ## Claude
 
 ### Next — START HERE in a fresh session
-- [ ] **Cut Android vc13.** iOS 19 is done (archived 2026-08-04, see Gary's
-      list); Android is still on vc12 and has none of the 2026-08-03/04 batch.
+- [ ] **Category rollover.** The biggest remaining paid-app gap and YNAB's core
+      mechanic: unspent money should carry into next month (budget $600, spend
+      $550, next month starts with $650). `categories.rolloverEnabled` ALREADY
+      EXISTS as a column with a getter/setter in
+      features/streaks-and-gamification.ts, but it is referenced NOWHERE in the
+      budget math or any screen — a dead stub that makes the feature look
+      shipped. Wire it into computeCategorySummariesFrom / resolveCategoryLimits
+      and show the carried balance in the Budget ledger, or delete the column.
+      Decide what overspend does: YNAB carries a negative forward.
+      (This is the third dead column found — see receiptUri and the liabilities
+      loan fields. Grep for a column before concluding the schema lacks it.)
+- [ ] **Tags, receipt photos, refund tracker.** `transactions.receiptUri` is
+      another dead column — it exists and nothing uses it.
+- [ ] **Currency does not sync, which blocks multi-currency.** See below.
+- [ ] **Sweep the remaining screens onto components/Button.tsx.** The system
+      exists and the new screens use it, but ~35 hand-rolled inline button
+      styles remain across the older screens, so buttons still disagree on
+      height, radius and pressed feel.
+- [ ] **Cut Android vc13.** iOS 20 is archived; Android is still on vc12 and has
+      none of this.
       Bump `versionCode` in BOTH `app.json` and `android/app/build.gradle`, then
       build from `android/` WITHOUT prebuild (it wipes the signing config) —
       recipe is in the android memory note. Verify the AAB's SHA-1 and
@@ -81,24 +97,13 @@ Money, Simplifi, PocketGuard, and the one-time-purchase indies. Split by whether
 the gap is closable WITHOUT bank linking — the ones that need a bank feed are
 deliberate non-goals and belong in marketing copy, not this list.
 
-**Next up — the one top-5 gap not yet built:**
-- [ ] **Goal target dates + debt payoff planner.** Two features, both pure
-      arithmetic over data already stored, and they pair with the Net Worth
-      screen that just shipped (liabilities are entered there already).
-      (a) Goals answer "funded by March at $200/mo", and the reverse — "to hit
-      it by June you need $340/mo" (YNAB target-by-date, Simplifi fully-funded
-      date). (b) Debt payoff: avalanche vs snowball ordering over the
-      `liabilities` rows, with "paying $50 extra clears this 14 months sooner"
-      (YNAB Loan Planner, PocketGuard Plus). No bank feed, no new dependency.
-      Deferred from the 2026-08-03 batch on purpose: seven screens changed that
-      day and none had rendered yet, so an eighth would have been unverifiable.
-
 **Lower priority, none started:**
 - [ ] **Multi-currency.** MoneyCoach and Buddy have it; real data-model surgery
       here. Blocked behind the currency-sync bug below — fix that first.
-- [ ] **Tags** (cross-category labels, YNAB flags / Simplifi tags), **split
-      transactions**, **receipt photo attachments**, **refund tracker**
-      (Simplifi's, small and distinctive), **Apple Watch app**.
+- [ ] **Tags** (cross-category labels, YNAB flags / Simplifi tags), **receipt
+      photo attachments**, **refund tracker** (Simplifi's, small and
+      distinctive), **Apple Watch app**. Split transactions SHIPPED in build 20.
+- [ ] **Rollover** — moved up to the Next list; it is the top remaining gap.
 - [ ] **Home-screen widgets** — designed in `docs/WidgetDesign.md` (5 widgets,
       recommended first is "Left to Spend" small), then **dropped by Gary on
       2026-08-03**. The doc stands if it ever comes back; note it is the first
