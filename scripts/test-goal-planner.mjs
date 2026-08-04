@@ -102,13 +102,30 @@ eq(currentMonth(new Date(2026, 0, 31)), '2026-01', 'currentMonth zero-pads the m
   eq(f.progress, 1, 'progress is capped at 1');
 }
 
-// A target of zero is what an empty target field parses to — it must read as
-// "nothing to fund", not as a divide-by-zero in the progress bar.
+// ── forward: an open-ended goal ────────────────────────────────────────────
+// savings_goals.targetAmount is nullable and null is a real answer: "just keep
+// saving". It must NOT read as funded — that would draw a full green bar on a
+// goal with nothing to reach — and must not divide by zero in the progress.
+{
+  const f = forecastGoal({ saved: 2500, target: null, monthly: 200, startMonth: '2026-08' });
+  eq(f.status, 'no-target', 'a null target is open-ended, not funded');
+  eq(f.progress, 0, 'an open-ended goal is not 100% done');
+  eq(f.monthsRemaining, null, 'an open-ended goal has no month count');
+  eq(f.completionMonth, null, 'an open-ended goal has no completion month');
+  eq(f.remaining, 0, 'an open-ended goal has nothing outstanding');
+  eq(f.overfunded, 0, 'an open-ended goal is not overfunded');
+}
+// A cleared target field is the same thing as no target.
 {
   const f = forecastGoal({ saved: 0, target: 0, monthly: 200, startMonth: '2026-08' });
-  eq(f.status, 'funded', 'a zero target is trivially funded');
-  eq(f.progress, 1, 'a zero target does not divide by zero');
-  eq(f.overfunded, 0, 'nothing saved against a zero target is not overfunded');
+  eq(f.status, 'no-target', 'a zero target reads as no target, not as trivially funded');
+  eq(f.progress, 0, 'a zero target does not divide by zero');
+}
+{
+  const r = requiredMonthlyForDate({ saved: 2500, target: null, targetMonth: '2027-06', startMonth: '2026-08' });
+  eq(r.status, 'no-target', 'a date costs nothing in particular without a target');
+  eq(r.requiredMonthly, null, 'no per-month figure is invented for an open-ended goal');
+  eq(r.changeFromCurrent, null, 'no increase is invented for an open-ended goal');
 }
 
 // ── forward: nothing going in ──────────────────────────────────────────────

@@ -330,10 +330,17 @@ export async function createSavingsGoal(input: Omit<SavingsGoal, 'id' | 'sortOrd
   const sortOrder = (maxRow?.maxOrder ?? -1) + 1;
   // A new goal starts unlinked: filing money into a fund is opt-in, never a
   // guess from the goal's name.
-  const goal: SavingsGoal = { id: uuid(), sortOrder, targetFundId: null, targetAccountId: null, ...input };
+  const goal: SavingsGoal = {
+    id: uuid(),
+    sortOrder,
+    targetFundId: null,
+    targetAccountId: null,
+    targetAmount: null,
+    ...input,
+  };
   await db.runAsync(
-    'INSERT INTO savings_goals (id, name, monthlyAmount, sortOrder, targetFundId, targetAccountId) VALUES (?, ?, ?, ?, ?, ?)',
-    [goal.id, goal.name, goal.monthlyAmount, goal.sortOrder, goal.targetFundId ?? null, goal.targetAccountId ?? null]
+    'INSERT INTO savings_goals (id, name, monthlyAmount, sortOrder, targetFundId, targetAccountId, targetAmount) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [goal.id, goal.name, goal.monthlyAmount, goal.sortOrder, goal.targetFundId ?? null, goal.targetAccountId ?? null, goal.targetAmount ?? null]
   );
   await queueSyncMutation('CREATE', 'savings_goals', goal.id, goal);
   return goal;
@@ -349,10 +356,13 @@ export async function updateSavingsGoal(id: string, patch: Partial<Omit<SavingsG
     (patch.targetFundId !== undefined ? patch.targetFundId : existing.targetFundId) ?? null;
   const targetAccountId: string | null =
     (patch.targetAccountId !== undefined ? patch.targetAccountId : existing.targetAccountId) ?? null;
-  const next: SavingsGoal = { ...existing, ...patch, targetFundId, targetAccountId };
+  // Same coalescing rule as the link columns above.
+  const targetAmount: number | null =
+    (patch.targetAmount !== undefined ? patch.targetAmount : existing.targetAmount) ?? null;
+  const next: SavingsGoal = { ...existing, ...patch, targetFundId, targetAccountId, targetAmount };
   await db.runAsync(
-    'UPDATE savings_goals SET name = ?, monthlyAmount = ?, sortOrder = ?, targetFundId = ?, targetAccountId = ? WHERE id = ?',
-    [next.name, next.monthlyAmount, next.sortOrder, targetFundId, targetAccountId, id]
+    'UPDATE savings_goals SET name = ?, monthlyAmount = ?, sortOrder = ?, targetFundId = ?, targetAccountId = ?, targetAmount = ? WHERE id = ?',
+    [next.name, next.monthlyAmount, next.sortOrder, targetFundId, targetAccountId, targetAmount, id]
   );
   await queueSyncMutation('UPDATE', 'savings_goals', id, next);
   // Re-run after ANY goal edit, not just a link change: the amount also feeds

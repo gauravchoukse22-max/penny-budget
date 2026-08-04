@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius, type } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
@@ -12,8 +11,8 @@ import { PlannerGoalCard } from '../../components/PlannerGoalCard';
 import { PlannerDebtCard } from '../../components/PlannerDebtCard';
 import { formatCurrency, formatMonthLabel, maskedAmount } from '../../lib/format';
 import { getDb, currentYearMonth } from '../../lib/db';
-import { listSavingsGoals, resolveSavingsGoalAmounts } from '../../lib/queries';
-import { listLiabilities, typeLabel, type Liability } from '../../features/net-worth';
+import { listSavingsGoals, resolveSavingsGoalAmounts, updateSavingsGoal } from '../../lib/queries';
+import { listLiabilities, updateLiability, typeLabel, type Liability } from '../../features/net-worth';
 import type { SavingsGoal } from '../../lib/models';
 import {
   resolveDebts,
@@ -31,44 +30,28 @@ import {
 // scripts/test-goal-planner.mjs and scripts/test-debt-payoff.mjs under plain
 // Node. This file only gathers and renders.
 //
-// ── Two numbers the database does not have ──────────────────────────────────
-// A savings goal stores a monthly amount but NO target amount, and a liability
-// stores a balance but NO interest rate and NO minimum payment. Without a rate
-// there is no avalanche order and no real amortisation. Rather than default a
-// missing rate to 0% — which turns a 24% card into a free loan and reports a
-// payoff years early — this screen asks for the numbers and says what it is
-// missing until it has them.
+// ── Where the numbers come from, and where edits go ─────────────────────────
+// Everything the plan needs is a real column: liabilities.interestRate and
+// .minimumPayment, savings_goals.targetAmount. When one is null the screen asks
+// for it and writes the answer back through updateLiability / updateSavingsGoal,
+// so it is entered once, shows everywhere, and journals to sync like every
+// other write (AGENTS.md rule 2). No planner-local copy of anything exists.
 //
-// ── Why the answers live in AsyncStorage ────────────────────────────────────
-// They should be columns on `savings_goals` and `liabilities`, journaled to
-// sync like every other write (AGENTS.md rule 2). Adding them means a migration
-// in files this change does not own, so for now they are kept per-device, and
-// each field says so. The consequence is real and worth stating: a household's
-// second phone will not see these numbers. Nothing here writes to the database.
-
-const ASSUMPTIONS_KEY = 'pennybudget.plannerAssumptions.v1';
-
-type GoalAssumption = { target?: number; byMonth?: string };
-type DebtAssumption = { apr?: number; minimum?: number };
-
-type Assumptions = {
-  goals: Record<string, GoalAssumption>;
-  debts: Record<string, DebtAssumption>;
-  /** Extra monthly payment being tested against the minimums. */
-  extra?: number;
-  /** Total monthly payment for the no-interest fallback projection. */
-  simpleMonthly?: number;
-  strategy?: Strategy;
-};
-
-const EMPTY: Assumptions = { goals: {}, debts: {} };
+// A null rate is NOT read as 0%. Assuming interest-free would rank a credit
+// card below a car loan and recommend clearing the wrong debt first, so a debt
+// missing a rate is left out of the plan and named until it has one.
+//
+// The what-ifs — the extra payment, the strategy, a goal's "by when?" month —
+// are deliberately NOT stored. They are things the user spins to see an answer,
+// and writing them to the shared budget would turn an experiment into a
+// commitment the other member sees.
 
 /**
  * What each goal has actually banked: the months ticked as transferred, each
  * valued at the amount that month was budgeted at.
  *
- * Read straight from SQLite rather than through lib/queries.ts because that
- * module has no "total saved per goal" query and this change does not own it.
+ * Read straight from SQLite because lib/queries.ts has no "total saved per
+ * goal" query and this change does not own that file.
  * The carry-forward subquery mirrors resolveSavingsGoalAmounts exactly — the
  * newest snapshot at or before the month, falling back to the goal's own
  * monthly amount — so a raise in June does not rewrite what went in in March.
@@ -115,10 +98,14 @@ export default function PlannerScreen() {
   const [monthlyByGoal, setMonthlyByGoal] = useState<Map<string, number>>(new Map());
   const [savedByGoal, setSavedByGoal] = useState<Map<string, number>>(new Map());
   const [liabilities, setLiabilities] = useState<Liability[]>([]);
-  const [assumptions, setAssumptions] = useState<Assumptions>(EMPTY);
-  // Nothing may be written back until the stored copy has been read, or the
-  // first render would persist an empty object over the user's numbers.
-  const loadedRef = useRef(false);
+
+  // What-ifs, not stored data — see the note at the top of the file. $50 is
+  // where every payoff calculator opens; null means the field was cleared, and
+  // the maths then reads it as no extra rather than silently keeping the 50.
+  const [strategy, setStrategy] = useState<Strategy>('avalanche');
+  const [extraInput, setExtraInput] = useState<number | null>(50);
+  const [simpleMonthly, setSimpleMonthly] = useState<number | null>(null);
+  const extra = extraInput ?? 0;
 
   const startMonth = currentYearMonth();
 
@@ -140,53 +127,40 @@ export default function PlannerScreen() {
     }, [load])
   );
 
-  useEffect(() => {
-    AsyncStorage.getItem(ASSUMPTIONS_KEY)
-      .then((raw) => {
-        const parsed = raw ? (JSON.parse(raw) as Partial<Assumptions>) : {};
-        setAssumptions({
-          ...EMPTY,
-          ...parsed,
-          goals: parsed.goals ?? {},
-          debts: parsed.debts ?? {},
-          // $50 is the figure every payoff calculator opens with, and an extra
-          // of 0 would make the headline card say nothing on a first visit.
-          extra: parsed.extra ?? 50,
-        });
-      })
-      .catch(() => {
-        // Corrupt or unreadable — start from empty rather than blocking the
-        // screen. The user retypes; nothing budget-critical is stored here.
-      })
-      .finally(() => {
-        loadedRef.current = true;
+  // ── Write-through ─────────────────────────────────────────────────────────
+  // Both go through the existing feature functions rather than new SQL: those
+  // already journal the whole row to sync, and a second write path would be one
+  // more place for a row to diverge silently.
+
+  /** Rewrites the liability's rate or minimum, leaving the rest of the row as
+   * it stands — updateLiability replaces every column, so the untouched fields
+   * are passed back unchanged. */
+  const saveDebtNumbers = useCallback(
+    async (row: Liability, patch: { apr?: number | null; minimum?: number | null }) => {
+      await updateLiability(row.id, {
+        name: row.name,
+        type: row.type,
+        balance: row.balance,
+        note: row.note,
+        interestRate: patch.apr !== undefined ? patch.apr : row.interestRate,
+        minimumPayment: patch.minimum !== undefined ? patch.minimum : row.minimumPayment,
       });
-  }, []);
+      await load();
+    },
+    [load]
+  );
 
-  // Persisting from an effect rather than inside each setter keeps every edit
-  // on one path, and means a burst of edits in one tick can't drop one by
-  // spreading a stale copy.
-  useEffect(() => {
-    if (!loadedRef.current) return;
-    AsyncStorage.setItem(ASSUMPTIONS_KEY, JSON.stringify(assumptions)).catch(() => {
-      // Best effort: the numbers stay correct for this session either way.
-    });
-  }, [assumptions]);
-
-  const setGoalAssumption = (id: string, patch: GoalAssumption) =>
-    setAssumptions((prev) => ({ ...prev, goals: { ...prev.goals, [id]: { ...prev.goals[id], ...patch } } }));
-
-  const setDebtAssumption = (id: string, patch: DebtAssumption) =>
-    setAssumptions((prev) => ({ ...prev, debts: { ...prev.debts, [id]: { ...prev.debts[id], ...patch } } }));
+  /** Null is a real value here: clearing the field makes the goal open-ended
+   * again rather than leaving a stale target behind. */
+  const saveGoalTarget = useCallback(
+    async (goalId: string, targetAmount: number | null) => {
+      await updateSavingsGoal(goalId, { targetAmount });
+      await load();
+    },
+    [load]
+  );
 
   // ── Debt maths ────────────────────────────────────────────────────────────
-
-  const strategy: Strategy = assumptions.strategy ?? 'avalanche';
-  // 0 when the field is empty, not the 50 the screen opens with — a cleared
-  // field has to mean "no extra", or the headline would claim savings from
-  // money the user just said they were not paying.
-  const extra = assumptions.extra ?? 0;
-  const simpleMonthly = assumptions.simpleMonthly ?? null;
 
   const debtInputs: DebtInput[] = useMemo(
     () =>
@@ -194,10 +168,10 @@ export default function PlannerScreen() {
         id: l.id,
         name: l.name,
         balance: l.balance,
-        apr: assumptions.debts[l.id]?.apr ?? null,
-        minimum: assumptions.debts[l.id]?.minimum ?? null,
+        apr: l.interestRate,
+        minimum: l.minimumPayment,
       })),
-    [liabilities, assumptions.debts]
+    [liabilities]
   );
 
   const { resolved, incomplete } = useMemo(() => resolveDebts(debtInputs), [debtInputs]);
@@ -212,8 +186,8 @@ export default function PlannerScreen() {
     [resolved, extra, startMonth]
   );
 
-  // The fallback the schema can actually feed: balances plus one total monthly
-  // payment, no interest. Only offered when no debt has a rate yet.
+  // The answer available before any rate has been entered: balances plus one
+  // total monthly payment, no interest. Only offered while no debt has a rate.
   const simplePlan: PayoffPlan | null = useMemo(
     () =>
       resolved.length === 0 && liabilities.length > 0 && simpleMonthly !== null && simpleMonthly > 0
@@ -269,11 +243,9 @@ export default function PlannerScreen() {
                   saved={savedByGoal.get(g.id) ?? 0}
                   monthly={monthlyByGoal.get(g.id) ?? g.monthlyAmount}
                   currency={currency}
-                  target={assumptions.goals[g.id]?.target ?? null}
-                  targetMonth={assumptions.goals[g.id]?.byMonth ?? null}
+                  target={g.targetAmount ?? null}
                   startMonth={startMonth}
-                  onChangeTarget={(v) => setGoalAssumption(g.id, { target: v ?? undefined })}
-                  onChangeTargetMonth={(m) => setGoalAssumption(g.id, { byMonth: m ?? undefined })}
+                  onChangeTarget={(v) => saveGoalTarget(g.id, v)}
                 />
               ))}
               {note(
@@ -295,7 +267,7 @@ export default function PlannerScreen() {
                   {resolved.length === 0 ? 'Two numbers are missing' : `${incomplete.length} debt${incomplete.length === 1 ? '' : 's'} left out`}
                 </Text>
                 {note(
-                  'Penny stores a balance for each debt, but not its interest rate or minimum payment — so it cannot order by rate or work out real interest on its own. Add both below and the full plan appears.'
+                  'A debt needs its interest rate and minimum payment before it can be ordered or its interest worked out. Guessing them would recommend clearing the wrong debt first, so these are left out until you add both — once, below.'
                 )}
                 <Text style={{ color: theme.secondaryLabel, fontSize: 13 }}>
                   Waiting on: {incomplete.map((d) => d.name).join(', ')}
@@ -350,8 +322,8 @@ export default function PlannerScreen() {
 
                   <PlannerField
                     label="Extra per month"
-                    value={assumptions.extra ?? null}
-                    onChangeValue={(v) => setAssumptions((prev) => ({ ...prev, extra: v ?? undefined }))}
+                    value={extraInput}
+                    onChangeValue={setExtraInput}
                     prefix="$"
                     placeholder="50"
                   />
@@ -371,12 +343,12 @@ export default function PlannerScreen() {
                   <Chip
                     label="Avalanche"
                     selected={strategy === 'avalanche'}
-                    onPress={() => setAssumptions((prev) => ({ ...prev, strategy: 'avalanche' }))}
+                    onPress={() => setStrategy('avalanche')}
                   />
                   <Chip
                     label="Snowball"
                     selected={strategy === 'snowball'}
-                    onPress={() => setAssumptions((prev) => ({ ...prev, strategy: 'snowball' }))}
+                    onPress={() => setStrategy('snowball')}
                   />
                 </View>
                 {note(
@@ -431,7 +403,7 @@ export default function PlannerScreen() {
                 <PlannerField
                   label="Total you can pay each month"
                   value={simpleMonthly}
-                  onChangeValue={(v) => setAssumptions((prev) => ({ ...prev, simpleMonthly: v ?? undefined }))}
+                  onChangeValue={setSimpleMonthly}
                   prefix="$"
                   placeholder="0"
                 />
@@ -454,22 +426,15 @@ export default function PlannerScreen() {
                 balance={l.balance}
                 kind={typeLabel('liability', l.type)}
                 currency={currency}
-                apr={assumptions.debts[l.id]?.apr ?? null}
-                minimum={assumptions.debts[l.id]?.minimum ?? null}
-                onChange={(patch) =>
-                  setDebtAssumption(l.id, {
-                    ...(patch.apr !== undefined ? { apr: patch.apr ?? undefined } : {}),
-                    ...(patch.minimum !== undefined ? { minimum: patch.minimum ?? undefined } : {}),
-                  })
-                }
+                apr={l.interestRate}
+                minimum={l.minimumPayment}
+                onChange={(patch) => saveDebtNumbers(l, patch)}
                 position={positionFor(l.id)}
                 line={lineFor(l.id)}
               />
             ))}
 
-            {note(
-              'Rates and minimums are kept on this device only — Penny has nowhere to store them yet, so the other phone in a shared budget will not see them.'
-            )}
+            {note('Rates and minimums are saved to each debt, so you enter them once and both phones see them.')}
           </>
         )}
       </ScrollView>

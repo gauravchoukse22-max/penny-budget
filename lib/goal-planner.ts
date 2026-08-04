@@ -7,11 +7,11 @@
 // what comes back — same split as lib/over-assign.ts.
 //
 // ── Where the inputs come from ──────────────────────────────────────────────
-// `saved` and `monthly` are real stored data (ticked transfer months, and the
-// goal's monthly amount). `target` is NOT: savings_goals has no target-amount
-// column, only `monthlyAmount`. The screen asks the user for it rather than
-// inventing one, and this module takes it as a plain argument so it stays
-// honest about that either way.
+// All three are stored data: `saved` from the months ticked as transferred,
+// `monthly` and `target` from the goal row (savings_goals.targetAmount).
+// A null target is a real answer, not missing data — an open-ended "just keep
+// saving" goal has no target — so it gets its own status rather than being
+// coerced to 0, which would report the goal as funded and draw a full bar.
 //
 // ── Why every answer is a status, not just a number ─────────────────────────
 // The interesting cases here are the ones that have no number: a zero
@@ -74,6 +74,8 @@ export function currentMonth(now = new Date()): string {
 // ── Forward: when does this goal finish? ────────────────────────────────────
 
 export type GoalForecastStatus =
+  /** The goal is open-ended: no target to be funded by any date. */
+  | 'no-target'
   /** Already at or past the target — nothing left to fund. */
   | 'funded'
   /** A real completion month came back. */
@@ -94,15 +96,18 @@ export interface GoalForecast {
   /** Month the final contribution lands in. Null when there is no finite
    * answer; equal to `startMonth` when the goal is already funded. */
   completionMonth: string | null;
-  /** 0..1 progress toward the target. A target of 0 or less reports 1. */
+  /** 0..1 progress toward the target. 0 when there is no target — an
+   * open-ended goal is not "100% done". */
   progress: number;
 }
 
 export interface GoalForecastInput {
   /** Saved so far. */
   saved: number;
-  /** What the goal is for. A target at or below `saved` means funded. */
-  target: number;
+  /** What the goal is for (savings_goals.targetAmount). Null — or anything at
+   * or below zero, which is what a cleared field means — is an open-ended goal
+   * with no target. A target at or below `saved` means funded. */
+  target: number | null;
   /** Per-month contribution. Zero or negative means the goal is stalled — this
    * is the divide-by-zero that used to render "funded ∞". */
   monthly: number;
@@ -114,15 +119,27 @@ export interface GoalForecastInput {
 
 export function forecastGoal({ saved, target, monthly, startMonth }: GoalForecastInput): GoalForecast {
   const savedCents = cents(saved);
-  const targetCents = cents(target);
+  const targetCents = target === null ? 0 : cents(target);
   const monthlyCents = cents(monthly);
 
+  // No target is its own answer. Reporting it as funded would draw a full green
+  // bar on a goal the user has deliberately left open-ended.
+  if (targetCents <= 0) {
+    return {
+      status: 'no-target',
+      remaining: 0,
+      overfunded: 0,
+      monthsRemaining: null,
+      completionMonth: null,
+      progress: 0,
+    };
+  }
+
   const remainingCents = Math.max(0, targetCents - savedCents);
-  const progress = targetCents <= 0 ? 1 : Math.min(1, Math.max(0, savedCents / targetCents));
+  const progress = Math.min(1, Math.max(0, savedCents / targetCents));
 
   // Funded covers both "reached it" and "the target is smaller than what is
-  // already saved" — including a target of zero, which is what an untouched
-  // target field parses to.
+  // already saved".
   if (remainingCents === 0) {
     return {
       status: 'funded',
@@ -172,6 +189,8 @@ export function forecastGoal({ saved, target, monthly, startMonth }: GoalForecas
 // ── Backward: what does hitting a date cost per month? ──────────────────────
 
 export type GoalRequirementStatus =
+  /** Open-ended goal: no target, so no date costs anything in particular. */
+  | 'no-target'
   /** Already funded — no contribution is required at all. */
   | 'funded'
   /** The date is behind `startMonth`, so no schedule of payments reaches it. */
@@ -197,7 +216,8 @@ export interface GoalRequirement {
 
 export interface GoalRequirementInput {
   saved: number;
-  target: number;
+  /** Null (or zero) is an open-ended goal — see forecastGoal. */
+  target: number | null;
   /** Month the goal should be funded by. */
   targetMonth: string;
   /** Month the next contribution lands in. */
@@ -215,7 +235,18 @@ export function requiredMonthlyForDate({
   monthly = 0,
 }: GoalRequirementInput): GoalRequirement {
   const savedCents = cents(saved);
-  const targetCents = cents(target);
+  const targetCents = target === null ? 0 : cents(target);
+
+  if (targetCents <= 0) {
+    return {
+      status: 'no-target',
+      remaining: 0,
+      monthsAvailable: 0,
+      requiredMonthly: null,
+      changeFromCurrent: null,
+    };
+  }
+
   const remainingCents = Math.max(0, targetCents - savedCents);
 
   if (remainingCents === 0) {

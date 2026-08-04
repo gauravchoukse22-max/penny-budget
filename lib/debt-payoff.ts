@@ -6,17 +6,15 @@
 // runs it under plain Node. The Planner screen gathers the rows and renders
 // what comes back — same split as lib/over-assign.ts.
 //
-// ── What the database can and cannot supply ─────────────────────────────────
-// `liabilities` (features/net-worth.ts) stores id, name, balance, type, note,
-// lastUpdated. There is NO interest rate and NO minimum payment. That means:
-//   * snowball ordering works from stored data alone (it only needs balances);
-//   * avalanche ordering and any real amortisation DO NOT — they need a rate
-//     and a minimum that nothing in the app has ever asked for.
-// So `apr` and `minimum` are `number | null` here, `orderDebts` reports
-// avalanche as unavailable when a rate is missing, and the caller is expected
-// to collect the numbers from the user. Defaulting a missing rate to 0% was
-// considered and rejected: it silently turns a 24% card into a free loan and
-// produces a payoff date years early, which is worse than no answer.
+// ── Why a missing rate is not 0% ────────────────────────────────────────────
+// `liabilities` stores interestRate and minimumPayment, but both are nullable
+// and null means "the user has not told us" — a different thing from zero.
+// So `apr` and `minimum` are `number | null` here and `orderDebts` reports
+// avalanche as UNAVAILABLE when any rate is missing, naming the rows, rather
+// than filling the gap. Defaulting to 0% was considered and rejected: it turns
+// a 24% card into a free loan, ranks it below a car loan, and recommends
+// clearing the wrong debt first — a wrong answer stated confidently, which is
+// worse than no answer. Snowball needs only balances, so it always works.
 // `projectSimplePayoff` is the deliberate, LABELLED exception — see its note.
 
 import { addMonths } from './goal-planner';

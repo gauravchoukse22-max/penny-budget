@@ -9,13 +9,17 @@ import { formatCurrency, formatMonthLabel, maskedAmount } from '../lib/format';
 import type { DebtPayoffLine } from '../lib/debt-payoff';
 import { useBudget } from '../context/BudgetContext';
 
-// One liability in the payoff plan, plus the two numbers the database does not
-// have for it.
+// One liability in the payoff plan, plus its rate and minimum payment.
 //
-// The rate and minimum fields are collapsed once both are filled in: five debts
-// with two always-visible fields each is a screen of inputs and no answer. A
-// debt still missing either number keeps them open, because that row is exactly
-// what is holding the plan back.
+// Both edits write straight back to the liability row, so a rate entered here
+// is the row's rate everywhere and reaches the other household member. Null
+// means "not told us yet" and is deliberately NOT treated as 0% — see
+// lib/debt-payoff.ts.
+//
+// The two fields collapse once both are filled in: five debts with two
+// always-visible fields each is a screen of inputs and no answer. A debt still
+// missing either number keeps them open, because that row is exactly what is
+// holding the plan back.
 
 // Hide amounts has to reach the sentences too. It is a privacy control, and a
 // headline reading "$4,000 still to find" leaks exactly what it was turned on
@@ -29,8 +33,11 @@ type Props = {
   /** "Credit Card", "Auto Loan" — from features/net-worth typeLabel. */
   kind: string;
   currency: string;
+  /** liabilities.interestRate — an APR like 19.99, not a fraction. */
   apr: number | null;
+  /** liabilities.minimumPayment. */
   minimum: number | null;
+  /** Writes the changed field back to the liability row. */
   onChange: (patch: { apr?: number | null; minimum?: number | null }) => void;
   /** 1-based place in the payoff order. Null when this debt isn't in the plan. */
   position: number | null;

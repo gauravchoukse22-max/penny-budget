@@ -235,6 +235,12 @@ export async function applyFeatureMigrations(db: SQLite.SQLiteDatabase): Promise
   // above. It self-heals the moment both devices run this file.
   await addColumnIfMissing(db, 'savings_goals', 'targetFundId', 'TEXT');
   await addColumnIfMissing(db, 'savings_goals', 'targetAccountId', 'TEXT');
+  // What the goal is FOR — "$3,000 emergency fund", not just "$200/month".
+  // Without it the planner has nothing to be funded BY a date, which is the
+  // whole of YNAB's target-by-date and Simplifi's fully-funded date. Nullable
+  // on purpose: an open-ended "just keep saving" goal is legitimate and must
+  // not be forced to invent a number. Same rollout hazard as the two above.
+  await addColumnIfMissing(db, 'savings_goals', 'targetAmount', 'REAL');
   await addColumnIfMissing(
     db,
     'categories',

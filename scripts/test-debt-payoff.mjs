@@ -55,7 +55,7 @@ function ok(cond, label) {
   }
 }
 
-/** A row as the app could store it today: balance only, no rate, no minimum. */
+/** A row whose rate and minimum the user has not filled in yet. */
 const stored = (id, name, balance) => ({ id, name, balance, apr: null, minimum: null });
 /** A row after the user has supplied the two missing numbers. */
 const debt = (id, name, balance, apr, minimum) => ({ id, name, balance, apr, minimum });
@@ -73,15 +73,17 @@ const debt = (id, name, balance, apr, minimum) => ({ id, name, balance, apr, min
   eq(av.debts.map((d) => d.id), ['a', 'b', 'c'], 'avalanche orders highest rate first');
 }
 
-// The schema blocker, pinned: liabilities carry no rate, so avalanche must
-// report itself unavailable and name the rows rather than guessing an order.
+// The product decision, pinned: liabilities.interestRate is nullable and null
+// means "not told us", NOT 0%. Avalanche must report itself unavailable and
+// name the rows rather than guessing an order — assuming 0% would rank a credit
+// card below a car loan and recommend clearing the wrong debt first.
 {
   const debts = [stored('a', 'Card', 5000), stored('b', 'Car', 12000)];
   const av = orderDebts(debts, 'avalanche');
-  eq(av.available, false, 'avalanche is unavailable when no rate is stored');
+  eq(av.available, false, 'avalanche is unavailable when no rate has been entered');
   eq(av.missingIds, ['a', 'b'], 'the rows missing a rate are named');
   const snow = orderDebts(debts, 'snowball');
-  eq(snow.available, true, 'snowball is still available with no rates at all');
+  eq(snow.available, true, 'snowball still works with no rates at all');
   eq(snow.debts.map((d) => d.id), ['a', 'b'], 'snowball still orders by balance');
 }
 {
@@ -216,10 +218,10 @@ const debt = (id, name, balance, apr, minimum) => ({ id, name, balance, apr, min
   ok(MAX_PAYOFF_MONTHS === 600, 'the cap is 50 years');
 }
 
-// ── the no-interest fallback (all the app can store today) ─────────────────
+// ── the no-interest fallback (before any rate has been entered) ────────────
 {
   const plan = projectSimplePayoff([stored('a', 'Card', 100), stored('b', 'Car', 500)], 100, { startMonth: '2026-01' });
-  eq(plan.feasible, true, 'balances and a monthly total are enough for a floor');
+  eq(plan.feasible, true, 'balances and a monthly total are enough for an earliest-possible date');
   eq(plan.months, 6, '$600 at $100/mo is 6 months with no interest');
   eq(plan.lines.map((l) => l.id), ['a', 'b'], 'the fallback is snowball-ordered');
   eq(plan.zeroInterestAssumed, true, 'the fallback flags that it assumed 0%');

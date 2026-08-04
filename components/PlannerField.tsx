@@ -3,20 +3,27 @@ import { View, Text, TextInput, StyleSheet, type StyleProp, type ViewStyle } fro
 import { useTheme, spacing, radius } from '../theme/colors';
 import { parseMoneyInput } from '../lib/parse-number';
 
-// The Planner's one input. It exists because the two things the planner needs
-// most — an interest rate and a minimum payment — are numbers the app has
-// never stored, so this screen has to ask for them, and asking for six of them
-// with hand-rolled TextInputs is where inconsistent parsing creeps in.
+// The Planner's one input, used for the numbers this screen collects — an
+// interest rate, a minimum payment, a goal target — and for its what-if
+// amounts. Asking for six of them with hand-rolled TextInputs is where
+// inconsistent parsing creeps in.
 //
 // Parsing goes through parseMoneyInput like every other money field, so "1,500"
 // is 1500 and "1e9" is rejected rather than partially parsed.
+//
+// ── Why it commits on blur, not on keystroke ────────────────────────────────
+// The rate and minimum are written straight to the liability row, and every
+// such write journals a sync mutation. Firing per keystroke would put six
+// journal entries on the queue for typing "19.99" and ship five half-typed
+// rates to the other phone. So the value is reported when editing ends.
 
 type Props = {
   label: string;
-  /** Current value, or null when unset. Re-seeds the text when it changes from
-   * outside — the stored values arrive from AsyncStorage a frame after mount. */
+  /** Current stored value, or null when unset. Re-seeds the text when it
+   * changes from outside — rows arrive from the database after mount. */
   value: number | null;
-  /** Fired only with a value the field could actually parse. */
+  /** Fired when editing ends, with a parsed value or null for "cleared".
+   * Never fired mid-typing — see the note above. */
   onChangeValue: (value: number | null) => void;
   /** Drawn inside the field, before the number ("$"). */
   prefix?: string;
@@ -45,21 +52,31 @@ export function PlannerField({ label, value, onChangeValue, prefix, suffix, plac
 
   const change = (next: string) => {
     setText(next);
-    if (next.trim() === '') {
+    // Flag junk as it is typed so the field turns red immediately, but report
+    // nothing until editing ends.
+    setInvalid(next.trim() !== '' && parseMoneyInput(next) === null);
+  };
+
+  const commit = () => {
+    if (text.trim() === '') {
       setInvalid(false);
+      if (lastValue.current === null) return;
       lastValue.current = null;
       onChangeValue(null);
       return;
     }
-    const parsed = parseMoneyInput(next);
-    // A half-typed number keeps the last good value rather than clearing it —
-    // reporting null on every unparseable keystroke wipes the plan while the
-    // user is still typing.
-    setInvalid(parsed === null);
-    if (parsed !== null) {
-      lastValue.current = parsed;
-      onChangeValue(parsed);
+    const parsed = parseMoneyInput(text);
+    if (parsed === null) {
+      // Junk left in the field reverts to the stored value rather than wiping
+      // it: "1.2.3" is a typo, not an instruction to clear a rate.
+      setInvalid(false);
+      setText(value === null ? '' : String(value));
+      return;
     }
+    setInvalid(false);
+    if (parsed === lastValue.current) return;
+    lastValue.current = parsed;
+    onChangeValue(parsed);
   };
 
   return (
@@ -79,6 +96,9 @@ export function PlannerField({ label, value, onChangeValue, prefix, suffix, plac
           style={[styles.input, { color: theme.label }]}
           value={text}
           onChangeText={change}
+          onBlur={commit}
+          onSubmitEditing={commit}
+          returnKeyType="done"
           keyboardType="decimal-pad"
           placeholder={placeholder}
           placeholderTextColor={theme.tertiaryLabel}

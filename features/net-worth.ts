@@ -47,6 +47,16 @@ export type Liability = {
   type: LiabilityType;
   note: string | null;
   lastUpdated: string;
+  /**
+   * Annual percentage rate, e.g. 19.99 — NOT a fraction. Null means the user
+   * has not told us, which is a different thing from 0%: the debt planner
+   * refuses avalanche ordering on nulls rather than assuming interest-free,
+   * because assuming 0% quietly ranks a credit card below a car loan and
+   * recommends paying off the wrong debt first.
+   */
+  interestRate: number | null;
+  /** Contractual monthly minimum. Null means unknown, same rule as above. */
+  minimumPayment: number | null;
 };
 
 /** Preset type choices, in display order. Stored value + what the row shows. */
@@ -95,8 +105,13 @@ export async function listAssets(): Promise<Asset[]> {
 
 export async function listLiabilities(): Promise<Liability[]> {
   const db = await getDb();
+  // interestRate and minimumPayment have been columns on this table since it
+  // was created, but nothing ever selected or wrote them — so the debt planner
+  // had no rate to order by and concluded the schema lacked one. Reading them
+  // here is the whole fix; liabilities is already in SYNCABLE_TABLES, so the
+  // numbers reach the other household member for free.
   return db.getAllAsync<Liability>(
-    'SELECT id, name, balance, type, note, lastUpdated FROM liabilities ORDER BY balance DESC, name ASC'
+    'SELECT id, name, balance, type, note, lastUpdated, interestRate, minimumPayment FROM liabilities ORDER BY balance DESC, name ASC'
   );
 }
 
@@ -108,6 +123,9 @@ export type NetWorthEntryInput = {
   /** Entered positive on both sides; liabilities are subtracted in the math. */
   balance: number;
   note?: string | null;
+  /** Liabilities only; ignored on assets. Null clears a previously set value. */
+  interestRate?: number | null;
+  minimumPayment?: number | null;
 };
 
 type NetWorthTable = 'assets' | 'liabilities';
@@ -123,10 +141,19 @@ async function createEntry(table: NetWorthTable, input: NetWorthEntryInput): Pro
     note: note ? note : null,
     lastUpdated: new Date().toISOString(),
   };
-  await db.runAsync(
-    `INSERT INTO ${table} (id, name, balance, type, note, lastUpdated) VALUES (?, ?, ?, ?, ?, ?)`,
-    [entry.id, entry.name, entry.balance, entry.type, entry.note, entry.lastUpdated]
-  );
+  // The loan fields are liabilities-only. Writing them unconditionally would
+  // fail on `assets`, which has no such columns.
+  if (table === 'liabilities') {
+    await db.runAsync(
+      `INSERT INTO liabilities (id, name, balance, type, note, lastUpdated, interestRate, minimumPayment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [entry.id, entry.name, entry.balance, entry.type, entry.note, entry.lastUpdated, input.interestRate ?? null, input.minimumPayment ?? null]
+    );
+  } else {
+    await db.runAsync(
+      `INSERT INTO assets (id, name, balance, type, note, lastUpdated) VALUES (?, ?, ?, ?, ?, ?)`,
+      [entry.id, entry.name, entry.balance, entry.type, entry.note, entry.lastUpdated]
+    );
+  }
   await queueSyncMutation('CREATE', table, entry.id, entry);
   await captureNetWorthSnapshot();
   return entry as Asset | Liability;
@@ -142,17 +169,33 @@ async function createEntry(table: NetWorthTable, input: NetWorthEntryInput): Pro
 async function updateEntry(table: NetWorthTable, id: string, input: NetWorthEntryInput): Promise<void> {
   const db = await getDb();
   const note = input.note?.trim();
-  await db.runAsync(
-    `UPDATE ${table} SET name = ?, balance = ?, type = ?, note = ?, lastUpdated = ? WHERE id = ?`,
-    [
-      input.name.trim(),
-      Math.abs(fromCents(toCents(input.balance))),
-      input.type,
-      note ? note : null,
-      new Date().toISOString(),
-      id,
-    ]
-  );
+  if (table === 'liabilities') {
+    await db.runAsync(
+      `UPDATE liabilities SET name = ?, balance = ?, type = ?, note = ?, lastUpdated = ?, interestRate = ?, minimumPayment = ? WHERE id = ?`,
+      [
+        input.name.trim(),
+        Math.abs(fromCents(toCents(input.balance))),
+        input.type,
+        note ? note : null,
+        new Date().toISOString(),
+        input.interestRate ?? null,
+        input.minimumPayment ?? null,
+        id,
+      ]
+    );
+  } else {
+    await db.runAsync(
+      `UPDATE assets SET name = ?, balance = ?, type = ?, note = ?, lastUpdated = ? WHERE id = ?`,
+      [
+        input.name.trim(),
+        Math.abs(fromCents(toCents(input.balance))),
+        input.type,
+        note ? note : null,
+        new Date().toISOString(),
+        id,
+      ]
+    );
+  }
   const row = await db.getFirstAsync<Record<string, unknown>>(`SELECT * FROM ${table} WHERE id = ?`, [id]);
   if (row) await queueSyncMutation('UPDATE', table, id, row);
   await captureNetWorthSnapshot();

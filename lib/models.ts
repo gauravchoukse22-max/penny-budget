@@ -106,6 +106,12 @@ export type SavingsGoal = {
    */
   targetFundId?: string | null;
   targetAccountId?: string | null;
+  /**
+   * What the goal is FOR — "$3,000 emergency fund". Null is a real answer, not
+   * missing data: an open-ended "just keep saving" goal has no target, and the
+   * planner says "no target set" rather than inventing one.
+   */
+  targetAmount?: number | null;
 };
 
 /** Whether a savings goal's monthly transfer was marked done for a given month. */

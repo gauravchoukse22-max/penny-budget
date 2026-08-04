@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Surface } from './Surface';
 import { ProgressBar } from './ProgressBar';
@@ -13,10 +13,11 @@ import { useBudget } from '../context/BudgetContext';
 // One savings goal, answered in both directions: when the current contribution
 // funds it, and what a chosen date would cost per month.
 //
-// The target amount is a prop rather than something read from the goal because
-// savings_goals has no target column — the screen collects it. A goal with no
-// target still renders: it shows what it can (saved so far, monthly amount) and
-// asks for the one number it is missing.
+// The target comes from savings_goals.targetAmount and edits here write back to
+// it, so setting a target on this screen is the same target the rest of the app
+// sees and the other household member syncs. A null target is not an error: an
+// open-ended goal still renders its saved total and monthly amount, and offers
+// the field rather than nagging about it.
 
 // Hide amounts has to reach the sentences too. It is a privacy control, and a
 // headline reading "$4,000 still to find" leaks exactly what it was turned on
@@ -31,36 +32,30 @@ type Props = {
   /** This month's contribution, as resolved for the current month. */
   monthly: number;
   currency: string;
-  /** Null until the user sets one. */
+  /** savings_goals.targetAmount. Null is an open-ended goal. */
   target: number | null;
-  /** "YYYY-MM" the user wants it funded by, or null for "no date chosen". */
-  targetMonth: string | null;
   /** Month the next contribution lands in. */
   startMonth: string;
+  /** Writes the target back to the goal row. */
   onChangeTarget: (value: number | null) => void;
-  onChangeTargetMonth: (month: string | null) => void;
 };
 
-export function PlannerGoalCard({
-  name,
-  saved,
-  monthly,
-  currency,
-  target,
-  targetMonth,
-  startMonth,
-  onChangeTarget,
-  onChangeTargetMonth,
-}: Props) {
+export function PlannerGoalCard({ name, saved, monthly, currency, target, startMonth, onChangeTarget }: Props) {
   const theme = useTheme();
   const { settings } = useBudget();
   const cash = (n: number) => money(n, currency, settings.hideAmounts);
 
-  const forecast = forecastGoal({ saved, target: target ?? 0, monthly, startMonth });
+  // The "by when?" month is a what-if, not a fact about the goal: the user
+  // spins it to see what a date would cost. Nothing stores it, so it lives here
+  // and resets with the screen — persisting a number the user was only trying
+  // out would make it look like a commitment they had made.
+  const [targetMonth, setTargetMonth] = useState<string | null>(null);
+
+  const forecast = forecastGoal({ saved, target, monthly, startMonth });
   const hasTarget = target !== null && target > 0;
 
   const requirement = targetMonth
-    ? requiredMonthlyForDate({ saved, target: target ?? 0, targetMonth, startMonth, monthly })
+    ? requiredMonthlyForDate({ saved, target, targetMonth, startMonth, monthly })
     : null;
 
   // Green for anything with a date, amber for anything without one. The bar's
@@ -69,8 +64,9 @@ export function PlannerGoalCard({
   const status = forecast.status === 'funded' || forecast.status === 'projected' ? 'green' : 'amber';
 
   const headline = () => {
-    if (!hasTarget) return 'Set a target to see a funded date.';
     switch (forecast.status) {
+      case 'no-target':
+        return 'Open-ended goal. Set a target to see a funded date.';
       case 'funded':
         return forecast.overfunded > 0
           ? `Funded — ${cash(forecast.overfunded)} past target.`
@@ -86,6 +82,7 @@ export function PlannerGoalCard({
 
   const requirementLine = () => {
     if (!requirement || !hasTarget) return null;
+    if (requirement.status === 'no-target') return null;
     if (requirement.status === 'funded') return 'Already funded — nothing more to put in.';
     if (requirement.status === 'past-date')
       return `${formatMonthLabel(targetMonth!)} has already passed. You would need ${cash(requirement.remaining)} now.`;
@@ -124,7 +121,7 @@ export function PlannerGoalCard({
         onChangeValue={onChangeTarget}
         prefix="$"
         placeholder="0"
-        hint="Penny does not store a goal target yet, so this is kept on this device."
+        hint="Saved to the goal, so it shows on every device sharing this budget."
       />
 
       {hasTarget ? (
@@ -136,20 +133,20 @@ export function PlannerGoalCard({
                   icon="chevron-back"
                   accessibilityLabel="Move target month earlier"
                   size="sm"
-                  onPress={() => onChangeTargetMonth(addMonths(targetMonth, -1))}
+                  onPress={() => setTargetMonth(addMonths(targetMonth, -1))}
                 />
                 <Text style={[styles.monthLabel, { color: theme.label }]}>{formatMonthLabel(targetMonth)}</Text>
                 <IconButton
                   icon="chevron-forward"
                   accessibilityLabel="Move target month later"
                   size="sm"
-                  onPress={() => onChangeTargetMonth(addMonths(targetMonth, 1))}
+                  onPress={() => setTargetMonth(addMonths(targetMonth, 1))}
                 />
                 <Button
                   label="Clear"
                   variant="ghost"
                   size="sm"
-                  onPress={() => onChangeTargetMonth(null)}
+                  onPress={() => setTargetMonth(null)}
                   accessibilityLabel="Clear the target date"
                 />
               </View>
@@ -164,7 +161,7 @@ export function PlannerGoalCard({
               // Seeds from the projected date when there is one, so the first
               // tap shows a believable month to step away from rather than an
               // arbitrary "a year from now".
-              onPress={() => onChangeTargetMonth(forecast.completionMonth ?? addMonths(startMonth, 11))}
+              onPress={() => setTargetMonth(forecast.completionMonth ?? addMonths(startMonth, 11))}
             />
           )}
         </View>

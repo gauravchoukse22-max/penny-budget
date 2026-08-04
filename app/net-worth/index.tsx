@@ -10,12 +10,13 @@ import {
   KeyboardAvoidingView,
   ScrollView,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius, type } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
 import { NetWorthTrendCard } from '../../components/NetWorthTrendCard';
+import { Button } from '../../components/Button';
 import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { AmountText } from '../../components/AmountText';
 import { formatCurrency, currencySymbol, maskedAmount } from '../../lib/format';
@@ -48,6 +49,7 @@ type SheetState = { side: Side; existing: Asset | Liability | null } | null;
 
 export default function NetWorthScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const { settings } = useBudget();
 
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -194,6 +196,19 @@ export default function NetWorthScreen() {
 
         {section('Assets', 'asset', assets, summary.assetTotal)}
         {section('Liabilities', 'liability', liabilities, summary.liabilityTotal)}
+
+        {/* The payoff plan reads these exact rows, so the way to it belongs
+            here rather than only in Settings — this is the moment the user is
+            looking at what they owe. */}
+        {liabilities.length > 0 ? (
+          <Button
+            label="Plan how to pay these off"
+            icon="trending-down-outline"
+            variant="tonal"
+            full
+            onPress={() => router.push('/planner?tab=debt')}
+          />
+        ) : null}
 
         <Text style={[styles.footer, { color: theme.tertiaryLabel }]}>
           Net worth is assets minus liabilities. Nothing here affects your budget

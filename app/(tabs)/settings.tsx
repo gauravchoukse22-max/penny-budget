@@ -267,6 +267,12 @@ export default function SettingsScreen() {
             onPress={() => router.push('/net-worth')}
           />
           <View style={[styles.divider, { backgroundColor: theme.separator }]} />
+          <SettingsLink
+            label="Planner"
+            detail="When goals finish, and the fastest way out of debt"
+            onPress={() => router.push('/planner')}
+          />
+          <View style={[styles.divider, { backgroundColor: theme.separator }]} />
           <SettingsLink label="Search Transactions" onPress={() => router.push('/search')} />
         </Surface>
 
