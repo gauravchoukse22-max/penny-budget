@@ -4,6 +4,10 @@ import { queueSyncMutation } from '../features/cloudkit-sync';
 // One-way edge: features/funds.ts owns every fund_entries write (and its
 // journaling) and imports nothing from here, so this cannot become a cycle.
 import { reconcileSavingsGoalEntries } from '../features/funds';
+// Same one-way edge: features/shared-settings.ts reads app_settings straight
+// from the database rather than through getAppSettings, precisely so importing
+// it here cannot become a cycle.
+import { resolveDisplayCurrency, setSharedCurrency } from '../features/shared-settings';
 import {
   CASH_CARD_COLOR,
   CASH_CARD_ID,
@@ -57,7 +61,16 @@ export async function journalRowsAsUpdates(table: string, ids: string[]): Promis
 
 // ---------- Settings ----------
 
-export async function getAppSettings(): Promise<AppSettings> {
+/**
+ * This device's OWN settings row, exactly as stored — nothing resolved.
+ *
+ * The write path must use this, not getAppSettings: getAppSettings hands back
+ * the household's currency when there is one, and updateAppSettings writes the
+ * whole row back, so reading the resolved value there would quietly overwrite
+ * this device's own preference with the shared one. It would then be gone for
+ * good — it is the value the user gets back when they leave the household.
+ */
+export async function getLocalAppSettings(): Promise<AppSettings> {
   const db = await getDb();
   const row = await db.getFirstAsync<{
     currency: string;
@@ -87,9 +100,28 @@ export async function getAppSettings(): Promise<AppSettings> {
   };
 }
 
+/**
+ * The settings the APP should render with.
+ *
+ * Identical to the stored row except for the currency, which is a property of
+ * the BUDGET rather than of the phone — exactly the argument made on
+ * resolveSalaryForMonth below, and the same fix. app_settings deliberately never
+ * syncs (it also holds the biometric lock and the household id), so a household
+ * takes its currency from the shared record whenever one exists and two members
+ * stop seeing $6,000 and £6,000 for the same number. With no household this is
+ * a passthrough and a solo user is completely unaffected.
+ */
+export async function getAppSettings(): Promise<AppSettings> {
+  const local = await getLocalAppSettings();
+  return { ...local, currency: await resolveDisplayCurrency(local.currency, local.householdId) };
+}
+
 export async function updateAppSettings(patch: Partial<AppSettings>): Promise<void> {
   const db = await getDb();
-  const current = await getAppSettings();
+  // getLocalAppSettings, NOT getAppSettings — see the note on it. Reading the
+  // resolved currency here would write the household's value over this device's
+  // own on the next unrelated settings change.
+  const current = await getLocalAppSettings();
   const next = { ...current, ...patch };
   await db.runAsync(
     'UPDATE app_settings SET currency = ?, salaryMode = ?, fixedSalary = ?, onboarded = ?, biometricLock = ?, cloudSyncEnabled = ?, autoLockGraceMinutes = ?, hideAmounts = ?, householdId = ?, insightsLayout = ?, watchedCategories = ? WHERE id = 1',
@@ -113,6 +145,20 @@ export async function updateAppSettings(patch: Partial<AppSettings>): Promise<vo
   // phone that typed it — see resolveSalaryForMonth.
   if (next.householdId && next.salaryMode === 'fixed' && patch.fixedSalary !== undefined) {
     await setMonthlySalary(currentYearMonth(), next.fixedSalary);
+  }
+
+  // Mirror the currency into the shared record, exactly as the salary above is
+  // mirrored and for the same reason: it labels numbers BOTH members read, so
+  // one phone changing it and the other not is the two of them disagreeing
+  // about what the same figure means.
+  //
+  // Guarded on `patch.currency !== undefined` rather than on the value: this
+  // must fire only when the user actually picked a currency. Firing on every
+  // settings write would let a device that had merely joined push its own value
+  // over the household's the next time anything at all changed — the silent
+  // rewrite the join path deliberately refuses to do.
+  if (next.householdId && patch.currency !== undefined) {
+    await setSharedCurrency(next.householdId, next.currency);
   }
 }
 

@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
-import { Link, Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius, type } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
+import { Button } from '../../components/Button';
 import { BANK_LINKING_ENABLED } from '../../lib/feature-flags';
 import { linkBankAccount, syncLinkedBanks, unlinkBank, type LinkedItem } from '../../features/bank-link';
 import { confirmAction, notify } from '../../lib/confirm';
@@ -17,6 +18,7 @@ import { confirmAction, notify } from '../../lib/confirm';
 
 export default function BankScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const { user, isConfigured } = useAuth();
   const { refresh } = useBudget();
   const [items, setItems] = useState<LinkedItem[] | null>(null);
@@ -126,11 +128,7 @@ export default function BankScreen() {
         <Text style={[type.body, { color: theme.secondaryLabel, textAlign: 'center', marginBottom: spacing.lg }]}>
           Sign in to link a bank. Transactions sync privately through your own account.
         </Text>
-        <Link href="/account" asChild>
-          <Pressable style={[styles.primaryBtn, { backgroundColor: theme.accent }]}>
-            <Text style={[type.headline, { color: theme.onAccent }]}>Go to Sign In</Text>
-          </Pressable>
-        </Link>
+        <Button label="Go to Sign In" onPress={() => router.push('/account')} variant="primary" size="lg" />
       </Centered>
     );
   }
@@ -166,9 +164,14 @@ export default function BankScreen() {
                       {(item.accounts ?? []).map((a) => `${a.name}${a.mask ? ` •••• ${a.mask}` : ''}`).join(' · ')}
                     </Text>
                   </View>
-                  <Pressable onPress={() => doUnlink(item)} hitSlop={8} disabled={busy}>
-                    <Text style={[type.subhead, { color: theme.systemRed }]}>Unlink</Text>
-                  </Pressable>
+                  <Button
+                    label="Unlink"
+                    onPress={() => doUnlink(item)}
+                    variant="destructive"
+                    size="sm"
+                    disabled={busy}
+                    accessibilityLabel={`Unlink ${item.institution_name ?? 'this bank'}`}
+                  />
                 </View>
               ))}
             </Surface>
@@ -214,5 +217,4 @@ const styles = StyleSheet.create({
   section: { borderRadius: radius.lg, overflow: 'hidden' },
   itemRow: { flexDirection: 'row', alignItems: 'center', padding: spacing.md },
   actionRow: { flexDirection: 'row', alignItems: 'center', padding: spacing.md },
-  primaryBtn: { paddingVertical: spacing.md, paddingHorizontal: spacing.xl, borderRadius: radius.lg, alignItems: 'center' },
 });

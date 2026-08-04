@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Button, IconButton } from './Button';
 import { useTheme, spacing, radius, type } from '../theme/colors';
 import { currentYearMonth } from '../lib/db';
 import { listMonthsWithTransactions } from '../lib/queries';
@@ -82,33 +82,25 @@ export function MonthPickerSheet({
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.groupedBackground }} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <Text style={[type.headline, { color: theme.label }]}>Go to month</Text>
-          <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
-            <Ionicons name="close" size={24} color={theme.secondaryLabel} />
-          </Pressable>
+          <IconButton icon="close" onPress={onClose} variant="glass" accessibilityLabel="Close" />
         </View>
 
         <View style={styles.yearRow}>
-          <Pressable
+          <IconButton
+            icon="chevron-back"
             onPress={() => setYear((y) => y - 1)}
             disabled={year <= minYear}
-            hitSlop={8}
-            accessibilityRole="button"
+            variant="tonal"
             accessibilityLabel={`Previous year, ${year - 1}`}
-            style={styles.yearArrow}
-          >
-            <Ionicons name="chevron-back" size={20} color={year <= minYear ? theme.tertiaryLabel : theme.accent} />
-          </Pressable>
+          />
           <Text style={[styles.yearLabel, { color: theme.label }]}>{year}</Text>
-          <Pressable
+          <IconButton
+            icon="chevron-forward"
             onPress={() => setYear((y) => y + 1)}
             disabled={year >= maxYear}
-            hitSlop={8}
-            accessibilityRole="button"
+            variant="tonal"
             accessibilityLabel={`Next year, ${year + 1}`}
-            style={styles.yearArrow}
-          >
-            <Ionicons name="chevron-forward" size={20} color={year >= maxYear ? theme.tertiaryLabel : theme.accent} />
-          </Pressable>
+          />
         </View>
 
         <ScrollView contentContainerStyle={styles.grid}>
@@ -151,17 +143,17 @@ export function MonthPickerSheet({
           })}
         </ScrollView>
 
-        <Pressable
+        <Button
+          label="This month"
           onPress={() => {
             selection();
             onSelect(thisMonth);
             onClose();
           }}
-          style={[styles.todayButton, { backgroundColor: theme.accentTint }]}
-          accessibilityRole="button"
-        >
-          <Text style={{ color: theme.accent, fontWeight: '700' }}>This month</Text>
-        </Pressable>
+          variant="tonal"
+          size="lg"
+          style={styles.todayButton}
+        />
       </SafeAreaView>
     </Modal>
   );
@@ -177,7 +169,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
   },
   yearRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xl },
-  yearArrow: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   yearLabel: { fontSize: 20, fontWeight: '700', minWidth: 72, textAlign: 'center', fontVariant: ['tabular-nums'] },
   grid: {
     flexDirection: 'row',
@@ -198,11 +189,5 @@ const styles = StyleSheet.create({
   },
   cellText: { fontSize: 15, fontWeight: '600' },
   dot: { width: 5, height: 5, borderRadius: 2.5 },
-  todayButton: {
-    marginHorizontal: spacing.xl,
-    marginBottom: spacing.lg,
-    paddingVertical: 14,
-    borderRadius: radius.md,
-    alignItems: 'center',
-  },
+  todayButton: { marginHorizontal: spacing.xl, marginBottom: spacing.lg },
 });

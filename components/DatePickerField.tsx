@@ -5,6 +5,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme, spacing, radius, type } from '../theme/colors';
 import { formatDayLabel } from '../lib/format';
 import { DateField } from './DateField';
+import { Button } from './Button';
 import { tapLight } from '../lib/haptics';
 
 // iOS' inline calendar has no intrinsic height inside a sheet — this fits a
@@ -74,19 +75,17 @@ export function DatePickerField({ value, onChange }: { value: string; onChange: 
         <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setOpen(false)}>
           <View style={{ flex: 1, backgroundColor: theme.groupedBackground }}>
             <View style={styles.sheetHeader}>
-              <Pressable onPress={() => setOpen(false)} hitSlop={10}>
-                <Text style={{ color: theme.secondaryLabel, fontSize: 16 }}>Cancel</Text>
-              </Pressable>
+              <Button label="Cancel" onPress={() => setOpen(false)} variant="ghost" size="sm" />
               <Text style={[type.headline, { color: theme.label }]}>Date</Text>
-              <Pressable
-                hitSlop={10}
+              <Button
+                label="Done"
+                variant="primary"
+                size="sm"
                 onPress={() => {
                   onChange(draft);
                   setOpen(false);
                 }}
-              >
-                <Text style={{ color: theme.accent, fontSize: 16, fontWeight: '700' }}>Done</Text>
-              </Pressable>
+              />
             </View>
             <DateTimePicker
               value={new Date(`${draft}T00:00:00`)}

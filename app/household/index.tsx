@@ -405,16 +405,24 @@ export default function SharingScreen() {
             <Text style={{ color: theme.secondaryLabel, fontSize: 14, lineHeight: 20 }}>
               {describeSharedCurrency(currencyState)}
             </Text>
-            {/* Offered only when this device's own preference is not already the
-                one in force — otherwise it is a button that does nothing. */}
-            {currencyState.local !== currencyState.currency && (
+            {/* Shown in the two cases where pressing it would actually change
+                something: this device's own preference is being overridden by
+                the shared one, or the household has no shared currency yet and
+                somebody has to set the first. Hidden when the shared value
+                already IS this device's, where it would be a button that does
+                nothing to a setting people are right to be careful with. */}
+            {(currencyState.local !== currencyState.currency || !currencyState.shared) && (
               <Button
                 label={`Use ${currencyState.local} for everyone`}
                 onPress={doAdoptLocalCurrency}
                 variant="tonal"
                 loading={busy === 'currency'}
                 disabled={!!busy && busy !== 'currency'}
-                accessibilityLabel={`Use ${currencyState.local} for everyone in this shared budget, instead of ${currencyState.currency}`}
+                accessibilityLabel={
+                  currencyState.shared
+                    ? `Use ${currencyState.local} for everyone in this shared budget, instead of ${currencyState.currency}`
+                    : `Set ${currencyState.local} as the currency for everyone in this shared budget`
+                }
               />
             )}
           </GroupedSection>

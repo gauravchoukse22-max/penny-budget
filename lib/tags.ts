@@ -66,7 +66,12 @@ export type TagNameError = 'empty' | 'too-long';
  * should not come back as "portugal". Matching is done on tagNameKey().
  */
 export function normalizeTagName(raw: string): string {
-  return raw.replace(/^#+/, '').replace(/\s+/g, ' ').trim();
+  // Trim BEFORE stripping the hash, not after: a name pasted or typed as
+  // " #vacation" starts with a space, so an anchored ^#+ would not match it and
+  // "#vacation" would survive as a second tag sitting next to "vacation" —
+  // exactly the duplicate this normalisation exists to prevent. Trim again at
+  // the end because "# vacation" leaves a leading space behind.
+  return raw.trim().replace(/^#+/, '').replace(/\s+/g, ' ').trim();
 }
 
 /** The form two names are compared by — case-insensitive, so "Vacation" typed

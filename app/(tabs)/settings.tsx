@@ -452,7 +452,9 @@ export default function SettingsScreen() {
         <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
           <Text style={[type.title2, { color: theme.label, marginBottom: spacing.sm }]}>Currency</Text>
           <Text style={[styles.hint, { color: theme.tertiaryLabel, marginBottom: spacing.md }]}>
-            Changes only the display symbol — does not convert historical amounts.
+            {settings.householdId
+              ? 'Changes only the display symbol — does not convert historical amounts. Currency is part of the shared budget, so this changes it for everyone in it.'
+              : 'Changes only the display symbol — does not convert historical amounts.'}
           </Text>
           <ScrollView>
             {CURRENCIES.map((cur) => {
@@ -462,6 +464,17 @@ export default function SettingsScreen() {
                   key={cur}
                   style={styles.pickerRow}
                   onPress={async () => {
+                    // A confirmation ONLY when someone else is affected. Adding
+                    // one for a solo user would be a dialog in front of a
+                    // preference, which teaches people to tap through dialogs.
+                    if (settings.householdId && cur !== settings.currency) {
+                      const ok = await confirmAction({
+                        title: `Show this budget in ${cur}?`,
+                        message: `Everyone in this shared budget sees amounts in ${cur} from now on, not just this device. Nothing is converted — the numbers stay exactly as they are and only the symbol changes.`,
+                        confirmLabel: `Use ${cur}`,
+                      });
+                      if (!ok) return;
+                    }
                     await updateSettings({ currency: cur });
                     setPickingCurrency(false);
                   }}

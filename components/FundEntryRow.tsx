@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, StyleSheet } from 'react-native';
 import { useTheme, spacing } from '../theme/colors';
+import { IconButton } from './Button';
 import { formatShortDate } from '../lib/format';
 import { AmountText } from './AmountText';
 import type { FundEntry } from '../features/models';
@@ -47,15 +47,12 @@ export function FundEntryRow({ entry, currency, accountName, onDelete }: Props) 
         color={isCredit ? theme.positiveMuted : theme.negativeMuted}
       />
       {onDelete && (
-        <Pressable
+        <IconButton
+          icon="close"
           onPress={() => onDelete(entry)}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel="Remove this entry"
-          style={styles.deleteButton}
-        >
-          <Ionicons name="close-circle" size={20} color={theme.tertiaryLabel} />
-        </Pressable>
+          variant="destructive"
+          accessibilityLabel={`Remove the entry from ${formatShortDate(entry.date)}`}
+        />
       )}
     </View>
   );
@@ -72,5 +69,4 @@ const styles = StyleSheet.create({
   text: { flex: 1, gap: 2 },
   date: { fontSize: 14, fontWeight: '600' },
   detail: { fontSize: 13, lineHeight: 17 },
-  deleteButton: { padding: 2 },
 });

@@ -4,18 +4,16 @@ import {
   Text,
   StyleSheet,
   Modal,
-  Pressable,
   TextInput,
   Platform,
   KeyboardAvoidingView,
   ScrollView,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme, spacing, radius, type } from '../theme/colors';
 import { formatCurrency, currencySymbol, formatShortDate } from '../lib/format';
 import { parseMoneyExpression } from '../lib/parse-number';
-import { PressableScale } from './PressableScale';
+import { Button, Chip } from './Button';
 import { DatePickerField, toIsoDate } from './DatePickerField';
 import { FundEntryRow } from './FundEntryRow';
 import { SwipeToDelete } from './SwipeToDelete';
@@ -155,15 +153,11 @@ export function FundCellSheet({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
-          <Pressable onPress={onClose} hitSlop={10}>
-            <Text style={{ color: theme.secondaryLabel, fontSize: 16 }}>Cancel</Text>
-          </Pressable>
+          <Button label="Cancel" onPress={onClose} variant="ghost" size="sm" />
           <Text style={[type.headline, { color: theme.label }]} numberOfLines={1}>
             {fundName}
           </Text>
-          <Pressable onPress={commit} hitSlop={10} disabled={!canSave}>
-            <Text style={{ color: canSave ? theme.accent : theme.tertiaryLabel, fontSize: 16, fontWeight: '700' }}>Save</Text>
-          </Pressable>
+          <Button label="Save" onPress={commit} variant="primary" size="sm" disabled={!canSave} />
         </View>
 
         <ScrollView
@@ -176,22 +170,16 @@ export function FundCellSheet({
           </Text>
 
           <View style={styles.segment}>
-            {MODES.map((m) => {
-              const active = mode === m.key;
-              return (
-                <PressableScale
-                  key={m.key}
-                  haptic
-                  onPress={() => setMode(m.key)}
-                  style={[styles.segmentItem, { backgroundColor: active ? theme.accent : theme.fieldBackground }]}
-                >
-                  <Ionicons name={m.icon} size={16} color={active ? theme.onAccent : theme.secondaryLabel} />
-                  <Text style={{ color: active ? theme.onAccent : theme.secondaryLabel, fontWeight: '700', fontSize: 13 }}>
-                    {m.label}
-                  </Text>
-                </PressableScale>
-              );
-            })}
+            {MODES.map((m) => (
+              <Chip
+                key={m.key}
+                label={m.label}
+                icon={m.icon}
+                selected={mode === m.key}
+                onPress={() => setMode(m.key)}
+                style={styles.segmentItem}
+              />
+            ))}
           </View>
 
           <View style={styles.amountArea}>
@@ -224,16 +212,13 @@ export function FundCellSheet({
             {mode !== 'set' && (
               <View style={styles.chipRow}>
                 {quickAdds.map((q) => (
-                  <PressableScale
+                  <Button
                     key={q}
-                    haptic
+                    label={`+${formatCurrency(q, currency).replace(/\.00$/, '')}`}
                     onPress={() => bump(q)}
-                    style={[styles.chip, { backgroundColor: theme.accentTint }]}
-                  >
-                    <Text style={{ color: theme.accent, fontWeight: '700' }}>
-                      +{formatCurrency(q, currency).replace(/\.00$/, '')}
-                    </Text>
-                  </PressableScale>
+                    variant="tonal"
+                    size="sm"
+                  />
                 ))}
               </View>
             )}
@@ -305,25 +290,16 @@ const styles = StyleSheet.create({
   body: { paddingBottom: spacing.xxxl },
   subtitle: { textAlign: 'center', fontSize: 13, paddingHorizontal: spacing.xl },
   segment: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
-  segmentItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    // 48pt floor: Apple asks for 44, Android for 48, and these three sit in a
-    // row where a near-miss silently selects nothing.
-    minHeight: 48,
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
-  },
+  // Three across the row; the height comes from Chip's `md` size, which already
+  // clears the 44pt minimum these three need — they sit side by side, where a
+  // near-miss silently selects nothing.
+  segmentItem: { flex: 1 },
   amountArea: { alignItems: 'center', paddingTop: spacing.xl, gap: spacing.lg },
   inputRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl },
   currency: { fontSize: 30, fontWeight: '400', marginRight: 4 },
   input: { fontSize: 52, fontWeight: '700', minWidth: 140, textAlign: 'center', padding: 0 },
   preview: { fontSize: 15, fontWeight: '600', textAlign: 'center', paddingHorizontal: spacing.xl },
   chipRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', justifyContent: 'center', paddingHorizontal: spacing.xl },
-  chip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill },
   hint: { fontSize: 12, textAlign: 'center', paddingHorizontal: spacing.xxl, lineHeight: 17 },
   card: { marginHorizontal: spacing.lg, marginTop: spacing.lg, padding: spacing.lg, borderRadius: radius.lg },
   fieldLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: spacing.sm },

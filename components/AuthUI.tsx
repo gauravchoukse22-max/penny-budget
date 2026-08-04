@@ -4,13 +4,13 @@ import {
   Text,
   TextInput,
   Pressable,
-  ActivityIndicator,
   StyleSheet,
   AccessibilityInfo,
   Platform,
   type TextInputProps,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Button } from './Button';
 import { useTheme, spacing, radius, type } from '../theme/colors';
 import { evaluatePassword } from '../lib/passwordStrength';
 
@@ -160,6 +160,9 @@ export function InfoNote({ message, tone = 'info' }: { message: string; tone?: '
   );
 }
 
+// The auth screens keep their own two names — every account screen calls these
+// — but the buttons themselves are now the app's one Button, so an auth screen
+// and a budget screen can no longer disagree about what a button is.
 export function PrimaryButton({
   title,
   onPress,
@@ -171,23 +174,7 @@ export function PrimaryButton({
   loading?: boolean;
   disabled?: boolean;
 }) {
-  const theme = useTheme();
-  const isDisabled = disabled || loading;
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={isDisabled}
-      accessibilityRole="button"
-      accessibilityState={{ disabled: isDisabled, busy: loading }}
-      style={[styles.primary, { backgroundColor: theme.accent, opacity: isDisabled ? 0.5 : 1 }]}
-    >
-      {loading ? (
-        <ActivityIndicator color={theme.onAccent} />
-      ) : (
-        <Text style={{ color: theme.onAccent, fontWeight: '600', fontSize: 16 }}>{title}</Text>
-      )}
-    </Pressable>
-  );
+  return <Button label={title} onPress={onPress} variant="primary" size="lg" loading={loading} disabled={disabled} full />;
 }
 
 export function TextButton({
@@ -198,14 +185,18 @@ export function TextButton({
 }: {
   title: string;
   onPress: () => void;
+  /** Overrides the label colour only — used for the destructive text actions. */
   color?: string;
   align?: 'center' | 'left';
 }) {
-  const theme = useTheme();
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" hitSlop={8} style={{ paddingVertical: 8, minHeight: 44, justifyContent: 'center' }}>
-      <Text style={{ color: color ?? theme.accent, fontWeight: '600', fontSize: 15, textAlign: align }}>{title}</Text>
-    </Pressable>
+    <Button
+      label={title}
+      onPress={onPress}
+      variant="ghost"
+      style={align === 'left' ? styles.textButtonLeft : undefined}
+      labelStyle={color ? { color } : undefined}
+    />
   );
 }
 
@@ -245,7 +236,7 @@ export function OrDivider() {
 }
 
 const styles = StyleSheet.create({
-  primary: { minHeight: 50, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', paddingVertical: 14 },
+  textButtonLeft: { alignSelf: 'flex-start' },
   orRow: { flexDirection: 'row', alignItems: 'center', marginVertical: spacing.xs },
   orLine: { flex: 1, height: StyleSheet.hairlineWidth },
   orText: { marginHorizontal: 12, fontSize: 13, fontWeight: '600' },

@@ -27,6 +27,7 @@ import {
   StrengthMeter,
   OrDivider,
 } from '../../components/AuthUI';
+import { Button, IconButton } from '../../components/Button';
 import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { useSensitiveScreen } from '../../features/privacy-screen';
 import { isValidEmail, evaluatePassword, MIN_PASSWORD_LENGTH } from '../../lib/passwordStrength';
@@ -269,9 +270,7 @@ export default function AccountScreen() {
           </Pressable>
         </GroupedSection>
 
-        <Pressable style={[styles.outlineButton, { borderColor: theme.separator }]} onPress={signOut}>
-          <Text style={{ color: theme.label, fontWeight: '600' }}>Sign Out</Text>
-        </Pressable>
+        <Button label="Sign Out" onPress={signOut} variant="glass" size="lg" full />
         <Text style={[styles.centerFootnote, { color: theme.tertiaryLabel }]}>Your budget data stays on this device.</Text>
       </ScrollView>
     );
@@ -288,9 +287,7 @@ export default function AccountScreen() {
       {sessionEndedMessage && (
         <View style={[styles.banner, { backgroundColor: theme.accentTint }]}>
           <Text style={{ color: theme.label, flex: 1 }}>{sessionEndedMessage}</Text>
-          <Pressable onPress={clearSessionEndedMessage} hitSlop={8} accessibilityLabel="Dismiss">
-            <Ionicons name="close" size={18} color={theme.secondaryLabel} />
-          </Pressable>
+          <IconButton icon="close" onPress={clearSessionEndedMessage} variant="glass" accessibilityLabel="Dismiss" />
         </View>
       )}
 
@@ -408,7 +405,6 @@ const styles = StyleSheet.create({
   identityRow: { flexDirection: 'row', alignItems: 'center' },
   actionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11 },
   divider: { height: StyleSheet.hairlineWidth },
-  outlineButton: { paddingVertical: 14, borderRadius: radius.md, alignItems: 'center', borderWidth: 1.5 },
   centerFootnote: { textAlign: 'center', fontSize: 13, marginTop: -spacing.sm },
   banner: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: spacing.md, borderRadius: radius.md },
   appleButton: { height: 50, width: '100%' },

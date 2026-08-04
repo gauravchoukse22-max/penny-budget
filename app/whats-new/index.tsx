@@ -1,10 +1,11 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme, spacing, radius, type } from '../../theme/colors';
+import { useTheme, spacing, type } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
+import { Button } from '../../components/Button';
 import { CHANGELOG } from '../../lib/changelog';
 import { markChangelogSeen } from '../../features/whats-new';
 
@@ -62,9 +63,7 @@ export default function WhatsNewScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { borderTopColor: theme.separator }]}>
-        <Pressable style={[styles.button, { backgroundColor: theme.accent }]} onPress={dismiss}>
-          <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 16 }}>Got it</Text>
-        </Pressable>
+        <Button label="Got it" onPress={dismiss} variant="primary" size="lg" full />
       </View>
     </SafeAreaView>
   );
@@ -82,5 +81,4 @@ const styles = StyleSheet.create({
   changeIcon: { marginTop: 1, marginRight: 10 },
   changeText: { flex: 1, fontSize: 14, lineHeight: 20 },
   footer: { padding: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
-  button: { paddingVertical: 15, borderRadius: radius.md, alignItems: 'center' },
 });

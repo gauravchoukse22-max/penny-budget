@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme, spacing, radius } from '../../theme/colors';
 import { GroupedSection, AuthTextField, PrimaryButton, TextButton, InlineError, InfoNote } from '../../components/AuthUI';
+import { Button } from '../../components/Button';
 import { KeyboardAwareScreen } from '../../components/KeyboardAwareScreen';
 import { useSensitiveScreen } from '../../features/privacy-screen';
 import { stepUpReauth } from '../../features/biometrics';
@@ -213,14 +214,7 @@ export default function SecurityScreen() {
       </GroupedSection>
 
       {/* Danger zone */}
-      <Pressable
-        style={[styles.outlineButton, { borderColor: theme.systemRed }]}
-        onPress={doDelete}
-        disabled={busy}
-        accessibilityRole="button"
-      >
-        <Text style={{ color: theme.systemRed, fontWeight: '600' }}>Delete Account</Text>
-      </Pressable>
+      <Button label="Delete Account" onPress={doDelete} variant="destructive" size="lg" disabled={busy} full />
       <Text style={[styles.centerFootnote, { color: theme.tertiaryLabel }]}>
         Permanently deletes your account and cloud backup. Data on this device is untouched.
       </Text>
@@ -234,6 +228,5 @@ const styles = StyleSheet.create({
   divider: { height: StyleSheet.hairlineWidth },
   statusRow: { flexDirection: 'row', alignItems: 'center' },
   secret: { fontSize: 16, letterSpacing: 2, padding: 12, borderRadius: radius.sm, textAlign: 'center', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
-  outlineButton: { paddingVertical: 14, borderRadius: radius.md, alignItems: 'center', borderWidth: 1.5 },
   centerFootnote: { textAlign: 'center', fontSize: 13, marginTop: -spacing.sm },
 });

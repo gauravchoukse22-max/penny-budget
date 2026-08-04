@@ -251,8 +251,8 @@ import { confirmAction } from '../../lib/confirm';
 | Read/resolve/write + the join decision, all commented | `features/shared-settings.ts` |
 | Seeds the shared currency when a household is CREATED, never when joined | `features/household.ts` (`seedHouseholdFromLocal`) |
 | Tells the user what happened, and the "use mine for everyone" button | `app/household/index.tsx` |
-| `BACKUP_VERSION` 5 → 6, version-gated like splits | `features/backup-restore.ts` |
-| 39 assertions incl. the resolution rule and the wording | `scripts/test-shared-settings.mjs` |
+| Backed up, gated at `BACKUP_VERSION` 6 like splits, so an older file leaves it alone | `features/backup-restore.ts` |
+| 40 assertions incl. the resolution rule and the wording | `scripts/test-shared-settings.mjs` |
 
 **The rule, in one line:** with a household active the shared record wins; with
 no household the local `app_settings` value is used, so solo users are untouched.

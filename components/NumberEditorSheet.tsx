@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useTheme, spacing, radius, type } from '../theme/colors';
+import { View, Text, StyleSheet, Modal, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
+import { useTheme, spacing, type } from '../theme/colors';
 import { formatCurrency, currencySymbol } from '../lib/format';
 import { parseMoneyExpression } from '../lib/parse-number';
-import { PressableScale } from './PressableScale';
+import { Button, IconButton } from './Button';
 import { DismissKeyboard } from './DismissKeyboard';
 import { tapLight, tapMedium, success } from '../lib/haptics';
 
@@ -77,13 +76,9 @@ export function NumberEditorSheet({
       >
         <DismissKeyboard>
         <View style={styles.header}>
-          <Pressable onPress={onClose} hitSlop={10}>
-            <Text style={{ color: theme.secondaryLabel, fontSize: 16 }}>Cancel</Text>
-          </Pressable>
+          <Button label="Cancel" onPress={onClose} variant="ghost" size="sm" />
           <Text style={[type.headline, { color: theme.label }]}>{title}</Text>
-          <Pressable onPress={commit} hitSlop={10} disabled={invalid}>
-            <Text style={{ color: invalid ? theme.tertiaryLabel : theme.accent, fontSize: 16, fontWeight: '700' }}>Save</Text>
-          </Pressable>
+          <Button label="Save" onPress={commit} variant="primary" size="sm" disabled={invalid} />
         </View>
 
         {subtitle ? <Text style={[styles.subtitle, { color: theme.tertiaryLabel }]}>{subtitle}</Text> : null}
@@ -110,32 +105,29 @@ export function NumberEditorSheet({
           </View>
 
           <View style={styles.stepperRow}>
-            <PressableScale
-              haptic
+            <IconButton
+              icon="remove"
               onPress={() => bump(-step)}
-              style={[styles.stepper, { backgroundColor: theme.fieldBackground }]}
-            >
-              <Ionicons name="remove" size={24} color={theme.label} />
-            </PressableScale>
-            <PressableScale
-              haptic
+              size="lg"
+              accessibilityLabel={`Subtract ${formatCurrency(step, currency)}`}
+            />
+            <IconButton
+              icon="add"
               onPress={() => bump(step)}
-              style={[styles.stepper, { backgroundColor: theme.fieldBackground }]}
-            >
-              <Ionicons name="add" size={24} color={theme.label} />
-            </PressableScale>
+              size="lg"
+              accessibilityLabel={`Add ${formatCurrency(step, currency)}`}
+            />
           </View>
 
           <View style={styles.chipRow}>
             {quickAdds.map((q) => (
-              <PressableScale
+              <Button
                 key={q}
-                haptic
+                label={`+${formatCurrency(q, currency).replace(/\.00$/, '')}`}
                 onPress={() => bump(q)}
-                style={[styles.chip, { backgroundColor: theme.accentTint }]}
-              >
-                <Text style={{ color: theme.accent, fontWeight: '700' }}>+{formatCurrency(q, currency).replace(/\.00$/, '')}</Text>
-              </PressableScale>
+                variant="tonal"
+                size="sm"
+              />
             ))}
           </View>
         </View>
@@ -161,7 +153,5 @@ const styles = StyleSheet.create({
   currency: { fontSize: 34, fontWeight: '400', marginRight: 4 },
   input: { fontSize: 60, fontWeight: '700', minWidth: 120, textAlign: 'center', padding: 0 },
   stepperRow: { flexDirection: 'row', gap: spacing.lg },
-  stepper: { width: 64, height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   chipRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', justifyContent: 'center', paddingHorizontal: spacing.xl },
-  chip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill },
 });
