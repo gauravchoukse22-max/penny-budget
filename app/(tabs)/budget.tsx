@@ -19,6 +19,9 @@ import { parseMoneyInput } from '../../lib/parse-number';
 import { listFunds, listFundAccounts, listFundEntries, isSavingsGoalEntry } from '../../features/funds';
 import type { Fund, FundAccount, FundEntry } from '../../features/models';
 import type { CategorySpendSummary, SavingsGoal } from '../../lib/models';
+import { addMonths, resolveCategoryLimits, resolveSavingsGoalAmounts } from '../../lib/queries';
+import { analyseOverAssignment, type Allocation, type Fix, type OverAssignAnalysis } from '../../lib/over-assign';
+import { OverAssignedSheet } from '../../components/OverAssignedSheet';
 
 // What the single money-editor sheet is currently editing.
 type EditorState =
@@ -117,6 +120,73 @@ export default function BudgetScreen() {
   const savingsTotal = sumCents(savingsGoals.map((g) => savingsGoalAmounts.get(g.id) ?? g.monthlyAmount));
   const unassigned = sumCents([salary, -assignedTotal, -savingsTotal]);
 
+  // ── Over-assigned explainer ───────────────────────────────────────────────
+  // Loaded lazily: the previous month's snapshot is a second pair of queries,
+  // and the overwhelming majority of months are not over-assigned, so paying
+  // for it on every render of every month would be waste. Built when the user
+  // taps the red line.
+  const [overAssign, setOverAssign] = useState<OverAssignAnalysis | null>(null);
+  const [overAssignOpen, setOverAssignOpen] = useState(false);
+
+  const openOverAssigned = useCallback(async () => {
+    tapLight();
+    const prevMonth = addMonths(selectedMonth, -1);
+    const [prevLimits, prevGoals] = await Promise.all([
+      resolveCategoryLimits(prevMonth),
+      resolveSavingsGoalAmounts(prevMonth),
+    ]);
+    // A missing row means "no snapshot was ever written at or before last
+    // month" — NOT that the allocation is new. Most categories never get a
+    // category_budgets row at all: their limit lives on the category itself and
+    // a row only appears once the amount is changed for a specific month.
+    //
+    // So absence is reported as UNCHANGED (previousAmount = amount), not as
+    // null/new. Reading it the other way round made every untouched category
+    // announce itself as "new this month" and claim credit for the whole
+    // overage — ten false accusations hiding the two real ones. Under-claiming
+    // is the right failure here: we only assert a change we can actually prove
+    // from a stored snapshot.
+    const allocations: Allocation[] = [
+      ...categorySummaries.map((s) => ({
+        id: s.category.id,
+        name: s.category.name,
+        kind: 'category' as const,
+        amount: s.category.monthlyLimit,
+        previousAmount: prevLimits.get(s.category.id) ?? s.category.monthlyLimit,
+      })),
+      ...savingsGoals.map((g) => {
+        const amount = savingsGoalAmounts.get(g.id) ?? g.monthlyAmount;
+        return {
+          id: g.id,
+          name: g.name,
+          kind: 'goal' as const,
+          amount,
+          previousAmount: prevGoals.get(g.id) ?? amount,
+        };
+      }),
+    ];
+    setOverAssign(analyseOverAssignment(salary, allocations, settings.currency));
+    setOverAssignOpen(true);
+  }, [selectedMonth, categorySummaries, savingsGoals, savingsGoalAmounts, salary, settings.currency]);
+
+  const applyOverAssignFix = useCallback(
+    async (fix: Fix) => {
+      if (fix.kind === 'raise-income' && fix.newIncome != null) {
+        await setSalaryForSelectedMonth(fix.newIncome);
+      } else {
+        // Sequential, not Promise.all: each write journals a sync mutation and
+        // savings-goal writes also reconcile fund entries, so overlapping them
+        // races the outbox against itself.
+        for (const r of fix.reductions) {
+          if (r.kind === 'category') await setCategoryLimitForSelectedMonth(r.id, r.to);
+          else await setSavingsGoalAmountForSelectedMonth(r.id, r.to);
+        }
+      }
+      success();
+    },
+    [setSalaryForSelectedMonth, setCategoryLimitForSelectedMonth, setSavingsGoalAmountForSelectedMonth]
+  );
+
   // The editor edits what saving will actually write: fixed mode writes the
   // every-month salary, variable mode writes this month's row.
   const currentSalary = settings.salaryMode === 'fixed' ? settings.fixedSalary : surplus.salary;
@@ -190,12 +260,29 @@ export default function BudgetScreen() {
                 </View>
               ) : (
                 // Over-allocated. The plan promises money the month doesn't
-                // have, so say it in one sentence rather than a bare negative.
-                <View style={styles.headlineBlock}>
-                  <Text style={{ color: theme.systemRed, fontSize: 20, fontWeight: '700' }}>
-                    assigned {money(-unassigned)} more than income
-                  </Text>
-                </View>
+                // have, so say it in one sentence rather than a bare negative —
+                // and make it the way OUT, because the "Assign the remaining"
+                // call to action below deliberately hides once you go over.
+                // Without this the one moment you most need help was the one
+                // moment the screen offered none.
+                <PressableScale
+                  haptic
+                  onPress={openOverAssigned}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Assigned ${money(-unassigned)} more than income. Show what changed and how to fix it.`}
+                  style={styles.headlineBlock}
+                  contentStyle={styles.overAssignedRow}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.systemRed, fontSize: 20, fontWeight: '700' }}>
+                      assigned {money(-unassigned)} more than income
+                    </Text>
+                    <Text style={{ color: theme.secondaryLabel, fontSize: 13, marginTop: 2 }}>
+                      See what changed and how to fix it
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.systemRed} />
+                </PressableScale>
               )}
 
               <AllocationBar salary={salary} assigned={assignedTotal} savings={savingsTotal} />
@@ -472,6 +559,15 @@ export default function BudgetScreen() {
           </Surface>
         </Pressable>
       </ScrollView>
+
+      <OverAssignedSheet
+        visible={overAssignOpen}
+        onClose={() => setOverAssignOpen(false)}
+        analysis={overAssign}
+        currency={settings.currency}
+        yearMonth={selectedMonth}
+        onApply={applyOverAssignFix}
+      />
 
       <NumberEditorSheet
         visible={!!editor}
@@ -929,6 +1025,7 @@ const styles = StyleSheet.create({
   incomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   incomeAmountRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headlineBlock: { marginTop: spacing.md, gap: 2 },
+  overAssignedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, width: '100%' },
   setSalaryPrompt: {
     flexDirection: 'row',
     alignItems: 'center',
