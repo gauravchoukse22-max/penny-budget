@@ -5,7 +5,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius, type as typeScale } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
+import { Button } from '../../components/Button';
 import { MonthSwitcher } from '../../components/MonthSwitcher';
+import { formatMonthLabel } from '../../lib/format';
+import { exportMonthlyReportPdf } from '../../features/report-export';
 import { detectAnomalies } from '../../features/predictive-engine';
 import type { AnomalyAlert } from '../../features/models';
 import {
@@ -55,6 +58,22 @@ export default function InsightsScreen() {
   const theme = useTheme();
   const { selectedMonth, settings, surplus, categorySummaries, updateSettings } = useBudget();
   const [editOpen, setEditOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const monthLabel = formatMonthLabel(selectedMonth);
+
+  // The PDF used to live in Settings → Data, between Export CSV and Import CSV,
+  // where it read as a file-format chore rather than the summary of the month
+  // you are looking at. Nothing about the export itself changed — only where
+  // it is offered and what it says it gives you.
+  const shareMonthlyReport = async () => {
+    setExporting(true);
+    try {
+      await exportMonthlyReportPdf(selectedMonth);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Anomaly notices stay on the screen, above the cards: they are alerts, not
   // review material, so they are not part of the customizable card set.
@@ -128,6 +147,31 @@ export default function InsightsScreen() {
               const Card = CARD_COMPONENTS[p.id];
               return <Card key={p.id} />;
             })}
+
+        {/* Last card in the stack on purpose: sharing the month is what you do
+            once you've read it. The blurb spells out what lands in the PDF —
+            the old Settings row named only the month, so the only way to find
+            out what you'd get was to generate one and open it. */}
+        {hasAnyData && (
+          <Surface>
+            <Text style={[styles.shareTitle, { color: theme.label }]}>Share {monthLabel}</Text>
+            <Text style={[styles.shareBody, { color: theme.secondaryLabel }]}>
+              A one-page PDF of this month: what came in, what went out, how each category tracked against its
+              budget, totals per card, and your ten largest purchases. Amounts are shown in full even if
+              "Hide amounts" is on — it's your own record.
+            </Text>
+            <Button
+              label={`Create ${monthLabel} PDF`}
+              icon="document-text-outline"
+              variant="tonal"
+              onPress={shareMonthlyReport}
+              loading={exporting}
+              full
+              style={styles.shareButton}
+              accessibilityLabel={`Create a PDF report for ${monthLabel} and open the share sheet`}
+            />
+          </Surface>
+        )}
       </ScrollView>
 
       <EditInsightsSheet visible={editOpen} prefs={prefs} onChange={savePrefs} onClose={() => setEditOpen(false)} />
@@ -177,6 +221,10 @@ const styles = StyleSheet.create({
   },
   noticeBar: { width: 3, alignSelf: 'stretch', borderRadius: radius.pill },
   noticeText: { flex: 1, fontSize: 13, lineHeight: 18 },
+
+  shareTitle: { fontSize: 17, fontWeight: '700' },
+  shareBody: { fontSize: 13, lineHeight: 19, marginTop: 6 },
+  shareButton: { marginTop: spacing.md },
 
   emptyState: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
   emptyText: { fontSize: 14, textAlign: 'center', lineHeight: 20, paddingHorizontal: spacing.md },

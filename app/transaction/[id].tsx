@@ -6,10 +6,14 @@ import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius, type } from '../../theme/colors';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { DatePickerField } from '../../components/DatePickerField';
-import { confirmAction } from '../../lib/confirm';
+import { confirmAction, notify } from '../../lib/confirm';
 import { currencySymbol } from '../../lib/format';
 import { parseMoneyInput } from '../../lib/parse-number';
-import { getTransactionById } from '../../lib/queries';
+import { getTransactionById, setTransactionSplits, listSplitsFor } from '../../lib/queries';
+import { SplitEditor } from '../../components/SplitEditor';
+import { Button } from '../../components/Button';
+import { formatCurrency } from '../../lib/format';
+import { validateSplits, type SplitPart } from '../../lib/transaction-splits';
 import type { Transaction } from '../../lib/models';
 
 // Matches the add-transaction screen so both screens' buttons are the same
@@ -20,7 +24,7 @@ export default function EditTransactionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const router = useRouter();
-  const { transactions, categories, cards, settings, editTransaction, removeTransaction } = useBudget();
+  const { transactions, categories, cards, settings, editTransaction, removeTransaction, refresh } = useBudget();
 
   // The context only holds the SELECTED month. Search spans every month, so
   // opening one of its results used to hit "Transaction not found" for a row
@@ -54,6 +58,11 @@ export default function EditTransactionScreen() {
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [cardId, setCardId] = useState<string | null>(null);
   const [isRefund, setIsRefund] = useState(false);
+  // Splits are held here rather than read off `transaction` on every render:
+  // the context's copy is only refreshed on a month reload, so a split saved
+  // from this screen would not show until the user navigated away and back.
+  const [splits, setSplits] = useState<SplitPart[]>([]);
+  const [splitEditorOpen, setSplitEditorOpen] = useState(false);
 
   useEffect(() => {
     if (transaction) {
@@ -63,6 +72,7 @@ export default function EditTransactionScreen() {
       setDate(transaction.date);
       setCategoryId(transaction.categoryId);
       setCardId(transaction.cardId);
+      setSplits(transaction.splits ?? []);
     }
   }, [transaction?.id]);
 
@@ -82,6 +92,24 @@ export default function EditTransactionScreen() {
   const save = async () => {
     if (!canSave || !cardId || parsedAmount === null) return;
     const signedAmount = (isRefund ? -1 : 1) * parsedAmount;
+
+    // Changing the amount on a split transaction breaks the parts: they were
+    // written to sum to the OLD total, and saving anyway would leave the
+    // difference attributed to nothing — money quietly missing from the
+    // category totals with no error anywhere. Send the user back to the split
+    // rather than guessing how they want the difference absorbed.
+    if (splits.length > 0 && validateSplits(signedAmount, splits).length > 0) {
+      notify(
+        'Update the split first',
+        `The parts add up to ${formatCurrency(
+          splits.reduce((sum, p) => sum + p.amount, 0),
+          settings.currency
+        )}, not ${formatCurrency(signedAmount, settings.currency)}.`
+      );
+      setSplitEditorOpen(true);
+      return;
+    }
+
     await editTransaction(transaction.id, { amount: signedAmount, date, categoryId, cardId, note: note.trim() || null });
     router.back();
   };
@@ -133,18 +161,63 @@ export default function EditTransactionScreen() {
       </View>
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Category</Text>
-      <View style={styles.grid}>
-        {categories.map((c) => (
-          <Pressable key={c.id} onPress={() => setCategoryId(c.id)} style={styles.gridItem}>
-            <View style={[styles.iconWrap, categoryId === c.id && { borderColor: c.color, borderWidth: 2 }]}>
-              <CategoryIcon icon={c.icon} color={c.color} />
-            </View>
-            <Text style={[styles.gridLabel, { color: theme.secondaryLabel }]} numberOfLines={1}>
-              {c.name}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      {splits.length > 0 ? (
+        // A split transaction has no single category, so showing the picker
+        // grid would offer a choice that does nothing — the parts decide where
+        // the money lands. Show the parts instead, and the way back to editing
+        // them.
+        <View style={[styles.splitSummary, { backgroundColor: theme.card }]}>
+          {splits.map((p, i) => {
+            const category = categories.find((c) => c.id === p.categoryId);
+            return (
+              <View key={i} style={styles.splitSummaryRow}>
+                {category ? (
+                  <CategoryIcon icon={category.icon} color={category.color} size={18} />
+                ) : (
+                  <Ionicons name="help-circle-outline" size={18} color={theme.tertiaryLabel} />
+                )}
+                <Text style={{ color: theme.label, fontSize: 15, flex: 1 }} numberOfLines={1}>
+                  {category?.name ?? 'No category'}
+                </Text>
+                <Text style={{ color: theme.secondaryLabel, fontSize: 15, fontWeight: '600' }}>
+                  {formatCurrency(p.amount, settings.currency)}
+                </Text>
+              </View>
+            );
+          })}
+          <Button
+            label="Edit split"
+            icon="git-branch-outline"
+            variant="tonal"
+            size="sm"
+            onPress={() => setSplitEditorOpen(true)}
+            style={{ alignSelf: 'flex-start' }}
+          />
+        </View>
+      ) : (
+        <>
+          <View style={styles.grid}>
+            {categories.map((c) => (
+              <Pressable key={c.id} onPress={() => setCategoryId(c.id)} style={styles.gridItem}>
+                <View style={[styles.iconWrap, categoryId === c.id && { borderColor: c.color, borderWidth: 2 }]}>
+                  <CategoryIcon icon={c.icon} color={c.color} />
+                </View>
+                <Text style={[styles.gridLabel, { color: theme.secondaryLabel }]} numberOfLines={1}>
+                  {c.name}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Button
+            label="Split across categories"
+            icon="git-branch-outline"
+            variant="glass"
+            size="sm"
+            onPress={() => setSplitEditorOpen(true)}
+            style={{ alignSelf: 'flex-start', marginBottom: spacing.md }}
+          />
+        </>
+      )}
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Card</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cardRow}>
@@ -187,12 +260,36 @@ export default function EditTransactionScreen() {
           <Text style={[type.headline, { color: theme.systemRed }]}>Delete Transaction</Text>
         </Pressable>
       </View>
+
+      <SplitEditor
+        visible={splitEditorOpen}
+        onClose={() => setSplitEditorOpen(false)}
+        total={(isRefund ? -1 : 1) * (parsedAmount ?? Math.abs(transaction.amount))}
+        currency={settings.currency}
+        categories={categories}
+        initialParts={splits}
+        onSave={async (parts) => {
+          await setTransactionSplits(transaction.id, parts);
+          // Re-read rather than trusting the draft: setTransactionSplits
+          // rewrites ids by index, and the screen should show what is actually
+          // stored, not what was sent.
+          setSplits(await listSplitsFor(transaction.id));
+          // Splits move money between categories, and the context holds the
+          // category summaries every other screen renders. Without this the
+          // Budget Health bars keep showing the whole amount against the old
+          // single category until the app is restarted — the split looks saved
+          // here and ignored everywhere else.
+          await refresh();
+        }}
+      />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   content: { padding: spacing.xl, gap: 8, paddingBottom: 60 },
+  splitSummary: { borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },
+  splitSummaryRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   amountRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
   currencySymbol: { fontSize: 32, fontWeight: '400', marginRight: 4 },
   amountInput: { fontSize: 52, fontWeight: '700', minWidth: 140, textAlign: 'center' },

@@ -167,6 +167,28 @@ async function migrateFeatureTables(db: SQLite.SQLiteDatabase): Promise<void> {
       id          TEXT PRIMARY KEY NOT NULL,
       syncToken   TEXT
     );
+
+    -- One transaction split across several categories: a Costco run that is
+    -- groceries + household + pharmacy. Parts must sum to the transaction's
+    -- amount in whole cents (lib/transaction-splits.ts owns that rule).
+    --
+    -- A transaction WITH parts ignores its own categoryId for attribution —
+    -- see categoryAmounts(). The column is deliberately left populated anyway
+    -- so a household member on a pre-splits build still files the money
+    -- somewhere sensible instead of dropping it into Uncategorized.
+    --
+    -- No ON DELETE CASCADE on transactionId by design: foreign keys are not
+    -- enforced in this database (see AGENTS.md), so the cascade would never
+    -- fire and relying on it would leave orphaned parts that still count
+    -- toward category totals. lib/queries.ts deletes parts explicitly.
+    CREATE TABLE IF NOT EXISTS transaction_splits (
+      id            TEXT PRIMARY KEY NOT NULL,
+      transactionId TEXT NOT NULL,
+      categoryId    TEXT,
+      amount        REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_splits_transaction ON transaction_splits(transactionId);
+    CREATE INDEX IF NOT EXISTS idx_splits_category ON transaction_splits(categoryId);
   `);
 
   // Self-heal columns added on top of tables that predate the feature set.

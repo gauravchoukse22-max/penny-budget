@@ -10,6 +10,7 @@
 
 import { getDb } from '../lib/db';
 import { uuid } from '../lib/uuid';
+import { merchantRuleId } from '../lib/merchant-token';
 import { queueSyncMutation } from './cloudkit-sync';
 import type { Category } from '../lib/models';
 import type { CategoryRule, SmartSuggestion } from './models';
@@ -54,6 +55,54 @@ export async function addCategoryRule(
   return rule;
 }
 
+/**
+ * Creates the rule for `keyword`, or repoints the existing one at a new
+ * category. Returns the surviving rule, or null for an empty keyword.
+ *
+ * Used by the learning path (a keyword the user never typed, derived from a
+ * statement description), which is why it upserts rather than inserts: the same
+ * merchant turns up on every statement, and an insert-only path would grow one
+ * duplicate rule per import until the arbitrary first match decided the
+ * category. `keyword` is COLLATE NOCASE in the schema, so this finds
+ * "STARBUCKS" when asked for "starbucks".
+ */
+export async function upsertCategoryRule(
+  keyword: string,
+  categoryId: string,
+): Promise<CategoryRule | null> {
+  const kw = keyword.trim();
+  if (!kw) return null;
+  const db = await getDb();
+
+  const existing = await db.getFirstAsync<CategoryRule>(
+    'SELECT * FROM category_rules WHERE keyword = ?',
+    [kw],
+  );
+  if (existing) {
+    if (existing.categoryId === categoryId) return existing;
+    await db.runAsync('UPDATE category_rules SET categoryId = ? WHERE id = ?', [
+      categoryId,
+      existing.id,
+    ]);
+    const updated: CategoryRule = { ...existing, categoryId };
+    await queueSyncMutation('UPDATE', 'category_rules', existing.id, updated);
+    return updated;
+  }
+
+  // Derived id — see merchantRuleId. ON CONFLICT covers the one case a derived
+  // id can collide: two keywords that differ only in punctuation slug to the
+  // same string. Overwriting is the right resolution there, since the row is
+  // then simply the rule for that slug.
+  const rule: CategoryRule = { id: merchantRuleId(kw), keyword: kw, categoryId };
+  await db.runAsync(
+    `INSERT INTO category_rules (id, keyword, categoryId) VALUES (?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET keyword = excluded.keyword, categoryId = excluded.categoryId`,
+    [rule.id, rule.keyword, rule.categoryId],
+  );
+  await queueSyncMutation('CREATE', 'category_rules', rule.id, rule);
+  return rule;
+}
+
 /** Delete a category rule by ID. */
 export async function removeCategoryRule(id: string): Promise<void> {
   const db = await getDb();
@@ -64,8 +113,14 @@ export async function removeCategoryRule(id: string): Promise<void> {
 // ---- Strategy 1: keyword rules --------------------------------------------
 
 /**
- * Check every user-defined keyword rule against `note`.
- * Returns the first matching categoryId, or null.
+ * Check every keyword rule against `note` and return the LONGEST match's
+ * categoryId, or null.
+ *
+ * Longest, not first: import learning writes one rule per merchant token, so
+ * "amazon" and "amazon fresh" can both exist and both match an Amazon Fresh
+ * order. Taking whichever row SQLite happened to return first meant a
+ * correction the user had just made lost at random to an older, broader rule —
+ * the same statement would categorize differently on two devices.
  */
 export async function getCategoryByRule(
   note: string,
@@ -75,12 +130,15 @@ export async function getCategoryByRule(
     'SELECT * FROM category_rules',
   );
   const lower = note.toLowerCase();
+  let best: { keyword: string; categoryId: string } | null = null;
   for (const rule of rules) {
-    if (lower.includes(rule.keyword.toLowerCase())) {
-      return rule.categoryId;
+    const keyword = rule.keyword.toLowerCase();
+    if (!keyword || !lower.includes(keyword)) continue;
+    if (!best || keyword.length > best.keyword.length) {
+      best = { keyword, categoryId: rule.categoryId };
     }
   }
-  return null;
+  return best?.categoryId ?? null;
 }
 
 // ---- Strategy 2: historical frequency --------------------------------------

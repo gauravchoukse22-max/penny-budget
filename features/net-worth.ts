@@ -20,6 +20,7 @@
 
 import { getDb } from '../lib/db';
 import { uuid } from '../lib/uuid';
+import { monthKeyFromDate, snapshotIdFor, type NetWorthSnapshot } from '../lib/net-worth-history';
 import { queueSyncMutation } from './cloudkit-sync';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -127,6 +128,7 @@ async function createEntry(table: NetWorthTable, input: NetWorthEntryInput): Pro
     [entry.id, entry.name, entry.balance, entry.type, entry.note, entry.lastUpdated]
   );
   await queueSyncMutation('CREATE', table, entry.id, entry);
+  await captureNetWorthSnapshot();
   return entry as Asset | Liability;
 }
 
@@ -153,6 +155,7 @@ async function updateEntry(table: NetWorthTable, id: string, input: NetWorthEntr
   );
   const row = await db.getFirstAsync<Record<string, unknown>>(`SELECT * FROM ${table} WHERE id = ?`, [id]);
   if (row) await queueSyncMutation('UPDATE', table, id, row);
+  await captureNetWorthSnapshot();
 }
 
 async function deleteEntry(table: NetWorthTable, id: string): Promise<void> {
@@ -161,6 +164,10 @@ async function deleteEntry(table: NetWorthTable, id: string): Promise<void> {
   // Nothing references these rows, so the delete orphans nothing — this one
   // journal entry is the whole story.
   await queueSyncMutation('DELETE', table, id, { id });
+  // A delete moves net worth as surely as an edit does, so this month's
+  // snapshot has to be re-taken. Deleting the last row records a real zero:
+  // "nothing tracked" is the honest figure, not a gap in the line.
+  await captureNetWorthSnapshot();
 }
 
 export function createAsset(input: NetWorthEntryInput): Promise<Asset> {
@@ -230,4 +237,84 @@ export function computeNetWorth(
     netWorth: fromCents(assetCents - liabilityCents),
     asOf,
   };
+}
+
+// ── History ─────────────────────────────────────────────────────────────────
+//
+// One row per calendar month in `net_worth_snapshots`, written on every balance
+// edit and overwriting that month's row. The schema comment in
+// features/db-migrations.ts carries the full month-vs-edit reasoning; the short
+// version is that the edit sheet saves the whole row on every keystroke-save,
+// so per-edit rows would grow the table without bound and record three points
+// for one corrected typo.
+//
+// This is the only place net worth is ever written down. Everything else in
+// this file derives it at read time, and that stays true: a snapshot is a
+// record of what the derived figure WAS, never a total anything reads back.
+
+/** A stored snapshot row. Shape matches lib/net-worth-history's input. */
+export type NetWorthSnapshotRow = NetWorthSnapshot & { id: string };
+
+export async function listNetWorthSnapshots(): Promise<NetWorthSnapshotRow[]> {
+  const db = await getDb();
+  return db.getAllAsync<NetWorthSnapshotRow>(
+    'SELECT id, yearMonth, assetTotal, liabilityTotal, netWorth, capturedAt FROM net_worth_snapshots ORDER BY yearMonth ASC'
+  );
+}
+
+/**
+ * Record this month's net worth, replacing any figure already recorded for it.
+ *
+ * Called from every write path in this file rather than from the screen: a
+ * balance edited from anywhere — a future quick-edit, a sync-triggered
+ * recompute — has to land in the history, and a screen-level call would miss
+ * it. Not called on launch or on focus, deliberately: a snapshot means "a
+ * balance was confirmed in this month", and taking one just because the app was
+ * opened would stamp a fresh date on numbers nobody has looked at since March.
+ * Months with no edit are carried forward by buildNetWorthSeries and drawn as
+ * unconfirmed, which is the truthful rendering of the same fact.
+ *
+ * Totals are recomputed from the tables rather than passed in, so the snapshot
+ * can never disagree with the rows it summarises.
+ *
+ * KNOWN LIMIT, shared-household: the totals are whatever THIS device can see.
+ * If a co-member added an asset that has not pulled down yet, this device's
+ * snapshot for the month is short by that amount until the next edit re-takes
+ * it. Correcting it would mean re-capturing after every pull, which lives in
+ * cloudkit-sync's pull loop; it is not wrong so much as briefly stale, and the
+ * balances themselves converge normally.
+ */
+export async function captureNetWorthSnapshot(now: Date = new Date()): Promise<void> {
+  const db = await getDb();
+  const [assets, liabilities] = await Promise.all([listAssets(), listLiabilities()]);
+  const summary = computeNetWorth(assets, liabilities);
+
+  const yearMonth = monthKeyFromDate(now);
+  const id = snapshotIdFor(yearMonth);
+  const capturedAt = now.toISOString();
+
+  // Conflict on yearMonth, the natural key. id is a pure function of it, so a
+  // clash on one is always a clash on the other — naming the natural key is
+  // what makes the intent ("one row per month") readable at the call site.
+  await db.runAsync(
+    `INSERT INTO net_worth_snapshots (id, yearMonth, assetTotal, liabilityTotal, netWorth, capturedAt)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (yearMonth) DO UPDATE SET
+       assetTotal = excluded.assetTotal,
+       liabilityTotal = excluded.liabilityTotal,
+       netWorth = excluded.netWorth,
+       capturedAt = excluded.capturedAt`,
+    [id, yearMonth, summary.assetTotal, summary.liabilityTotal, summary.netWorth, capturedAt]
+  );
+
+  // Journaled as UPDATE for the same reason journalUpsert does: the receiving
+  // device may or may not already hold this month's row, and its pull applies
+  // both actions as an INSERT OR REPLACE anyway. Re-read rather than reusing
+  // the values above, so what the co-member applies is exactly the row that
+  // landed here — including any column a later migration adds.
+  const row = await db.getFirstAsync<Record<string, unknown>>(
+    'SELECT * FROM net_worth_snapshots WHERE id = ?',
+    [id]
+  );
+  if (row) await queueSyncMutation('UPDATE', 'net_worth_snapshots', id, row);
 }

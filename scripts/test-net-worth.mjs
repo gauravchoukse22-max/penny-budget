@@ -19,10 +19,18 @@ import { transform } from './lib/strip-types.mjs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
-// Stub everything the pure functions never touch: the db handle, uuid, and
-// the sync journal (net-worth), and expo modules (backup-restore).
+// Stub everything the pure functions never touch: the db handle, uuid, the
+// sync journal and the snapshot helpers (net-worth), and expo modules
+// (backup-restore). lib/net-worth-history is reached only from
+// captureNetWorthSnapshot, which needs a database; its own pure surface is
+// covered by scripts/test-net-worth-history.mjs.
 const netWorth = await import(
-  await transform(join(root, 'features/net-worth.ts'), ['../lib/db', '../lib/uuid', './cloudkit-sync'])
+  await transform(join(root, 'features/net-worth.ts'), [
+    '../lib/db',
+    '../lib/uuid',
+    '../lib/net-worth-history',
+    './cloudkit-sync',
+  ])
 );
 const { computeNetWorth, typeLabel, ASSET_TYPES, LIABILITY_TYPES } = netWorth;
 
@@ -108,7 +116,7 @@ eq(typeLabel('liability', 'from-a-newer-build'), 'Other', 'unknown synced type s
 
 // ── backup format ────────────────────────────────────────────────────────────
 
-eq(BACKUP_VERSION, 4, 'backup format bumped to 4');
+eq(BACKUP_VERSION, 5, 'backup format bumped to 5');
 eq(BACKUP_TABLES.includes('assets'), true, 'backup carries assets');
 eq(BACKUP_TABLES.includes('liabilities'), true, 'backup carries liabilities');
 
@@ -126,13 +134,18 @@ eq(v2.includes('transactions'), true, 'v2 restore still covers core tables');
 // Ordering is dependency order — filtering must preserve it.
 eq(
   v3,
-  BACKUP_TABLES.filter((t) => t !== 'assets' && t !== 'liabilities'),
+  // v3 predates net worth (v4) AND splits (v5), so a v3 file must leave all
+  // three tables alone rather than wiping them.
+  BACKUP_TABLES.filter(
+    (t) => t !== 'assets' && t !== 'liabilities' && t !== 'transaction_splits' && t !== 'net_worth_snapshots'
+  ),
   'v3 filter preserves table order'
 );
 
-// A v4 writer's file round-trips validation; a future v5 file is refused.
-eq(validateBackup({ version: 4, timestamp: 't', tables: {} }).valid, true, 'v4 file validates');
-eq(validateBackup({ version: 5, timestamp: 't', tables: {} }).valid, false, 'newer file refused');
+// A current-version file round-trips validation; anything newer is refused.
+eq(validateBackup({ version: 4, timestamp: 't', tables: {} }).valid, true, 'an older v4 file still validates');
+eq(validateBackup({ version: 5, timestamp: 't', tables: {} }).valid, true, 'v5 file validates');
+eq(validateBackup({ version: 6, timestamp: 't', tables: {} }).valid, false, 'newer file refused');
 eq(validateBackup({ version: 'x', tables: {} }).valid, false, 'junk version refused');
 
 // The completion message tells the user what an old file did NOT replace.

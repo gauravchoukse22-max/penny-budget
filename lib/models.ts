@@ -60,6 +60,13 @@ export type Category = {
 
 export type TransactionSource = 'manual' | 'imported' | 'recurring';
 
+export type TransactionSplit = {
+  id: string;
+  transactionId: string;
+  categoryId: string | null;
+  amount: number;
+};
+
 export type Transaction = {
   id: string;
   amount: number;
@@ -69,6 +76,17 @@ export type Transaction = {
   note: string | null;
   source: TransactionSource;
   createdAt: string;
+  /**
+   * Parts this transaction is split into, when it has any.
+   *
+   * Optional because it is only populated by the loaders that ask for it —
+   * a Transaction read straight off the table has no splits attached, and
+   * `undefined` there means "not loaded", not "no splits". Anything summing
+   * money per category must go through categoryAmounts() in
+   * lib/transaction-splits.ts rather than reading categoryId directly, or a
+   * split transaction gets counted under both its parts AND its own category.
+   */
+  splits?: TransactionSplit[];
 };
 
 export type SavingsGoal = {

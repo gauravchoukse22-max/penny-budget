@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useBudget } from '../../context/BudgetContext';
 import { useTheme, spacing, radius, type } from '../../theme/colors';
 import { Surface } from '../../components/Surface';
+import { NetWorthTrendCard } from '../../components/NetWorthTrendCard';
 import { SwipeToDelete } from '../../components/SwipeToDelete';
 import { AmountText } from '../../components/AmountText';
 import { formatCurrency, currencySymbol, maskedAmount } from '../../lib/format';
@@ -30,12 +31,14 @@ import {
   updateLiability,
   deleteLiability,
   computeNetWorth,
+  listNetWorthSnapshots,
   typeLabel,
   ASSET_TYPES,
   LIABILITY_TYPES,
   type Asset,
   type Liability,
   type NetWorthEntryInput,
+  type NetWorthSnapshotRow,
 } from '../../features/net-worth';
 
 type Side = 'asset' | 'liability';
@@ -49,12 +52,17 @@ export default function NetWorthScreen() {
 
   const [assets, setAssets] = useState<Asset[]>([]);
   const [liabilities, setLiabilities] = useState<Liability[]>([]);
+  const [snapshots, setSnapshots] = useState<NetWorthSnapshotRow[]>([]);
   const [sheet, setSheet] = useState<SheetState>(null);
 
+  // Snapshots are re-read alongside the lists because every write path takes a
+  // new one — reading them separately would leave the trend a save behind the
+  // number above it.
   const load = useCallback(async () => {
-    const [a, l] = await Promise.all([listAssets(), listLiabilities()]);
+    const [a, l, s] = await Promise.all([listAssets(), listLiabilities(), listNetWorthSnapshots()]);
     setAssets(a);
     setLiabilities(l);
+    setSnapshots(s);
   }, []);
 
   useFocusEffect(
@@ -181,6 +189,8 @@ export default function NetWorthScreen() {
             hand — tap a row any time a statement arrives.
           </Text>
         ) : null}
+
+        <NetWorthTrendCard snapshots={snapshots} currency={settings.currency} hasEntries={!empty} />
 
         {section('Assets', 'asset', assets, summary.assetTotal)}
         {section('Liabilities', 'liability', liabilities, summary.liabilityTotal)}

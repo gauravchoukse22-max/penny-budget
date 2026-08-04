@@ -5,7 +5,8 @@ import { documentToRecords } from '../lib/pdf-layout';
 import { listAllTransactions, createTransaction, listCategories } from '../lib/queries';
 import { matchStatementCategory } from '../lib/statement-categories';
 import { listRecurringTransactions } from './recurring-transactions';
-import { suggestCategory } from './smart-categorizer';
+import { suggestCategory, upsertCategoryRule } from './smart-categorizer';
+import { merchantToken } from '../lib/merchant-token';
 import {
   parseStatementRecords,
   findStatementYear,
@@ -29,9 +30,26 @@ import {
 // preview surfaces those instead (result.skipped) so a bad parse is visible,
 // not invisible.
 
+/**
+ * Where a preview row's category came from. `'user'` is the only one the person
+ * chose themselves; the rest are the app's work, and only `'history'` and
+ * `'naive_bayes'` are actually GUESSES — a keyword rule and the issuer's own
+ * category column are both facts, not predictions.
+ */
+export type CategoryOrigin = 'statement' | 'rule' | 'history' | 'naive_bayes' | 'user';
+
 export type StatementPreviewRow = ParsedStatementRow & {
   /** Best-guess category (name resolved by the UI from its category list). */
   categoryId: string | null;
+  /** How `categoryId` was arrived at; null while there is no category. */
+  categoryOrigin: CategoryOrigin | null;
+  /**
+   * True while `categoryId` is an UNCONFIRMED guess. The preview screen used to
+   * render a guess and a deliberate choice identically, so the only way to know
+   * whether a category had been reviewed was to remember doing it — and the
+   * import wrote both without distinction.
+   */
+  suggested: boolean;
   /** Matches an existing transaction (already imported) — default to skipping. */
   duplicate: boolean;
   /** Matches an active recurring bill — already tracked, default to skipping. */
@@ -149,9 +167,16 @@ export async function pickAndParseStatement(): Promise<StatementPickResult> {
     // the issuer's term matches nothing the user has.
     const fromStatement = row.category ? matchStatementCategory(row.category, categories) : null;
     const suggestion = fromStatement ? null : await suggestCategory(row.note);
+    const origin: CategoryOrigin | null = fromStatement ? 'statement' : (suggestion?.source ?? null);
     rows.push({
       ...row,
       categoryId: fromStatement ?? suggestion?.categoryId ?? null,
+      categoryOrigin: origin,
+      // A rule and the issuer's category column don't need confirming: one is
+      // a decision the user already made and the other is the merchant's MCC
+      // code. Marking those "suggested" would bury the handful of rows that
+      // genuinely are a coin-flip under a wall of things to confirm.
+      suggested: origin === 'history' || origin === 'naive_bayes',
       duplicate: existingKeys.has(exactKey),
       recurring: recurringKeys.has(recurringKey),
     });
@@ -197,4 +222,47 @@ export async function commitStatementRows(cardId: string, rows: StatementPreview
   }
 
   return { imported, uncategorized };
+}
+
+/**
+ * Turns a reviewed batch into durable keyword rules, so the same merchants come
+ * back as `source: 'rule'` (confidence 1.0) on the next statement instead of
+ * being guessed again.
+ *
+ * Correcting a row used to teach nothing at all: the fix lived only in that one
+ * transaction, and the next month's statement made the identical wrong guess.
+ *
+ * Only rows the user stood behind are learned from:
+ *   * `'user'`   — they picked the category themselves,
+ *   * `'history'` / `'naive_bayes'` once `suggested` is false — they accepted a
+ *     guess, which is a decision.
+ * `'rule'` rows are skipped (already a rule, and re-learning would add a
+ * narrower duplicate of one that already works), and `'statement'` rows are
+ * skipped because the issuer's category column will be there again next month
+ * anyway — learning from it would write a rule per merchant on the statement.
+ *
+ * Pass EVERY reviewed row, not just the imported ones: a duplicate the user
+ * corrected and then excluded is still a correction worth keeping.
+ */
+export async function learnFromReviewedRows(rows: StatementPreviewRow[]): Promise<number> {
+  // Collapse to one write per merchant first — a phone bill statement has forty
+  // rows for the same merchant, and forty upserts of the same keyword is thirty
+  // nine pointless sync journal entries. Last row wins if one merchant somehow
+  // got two categories in one batch; there is no honest way to pick between
+  // them and the later edit is the more recent intent.
+  const byToken = new Map<string, string>();
+  for (const row of rows) {
+    if (!row.categoryId || row.suggested) continue;
+    const origin = row.categoryOrigin;
+    if (origin !== 'user' && origin !== 'history' && origin !== 'naive_bayes') continue;
+    const token = merchantToken(row.note);
+    if (!token) continue;
+    byToken.set(token, row.categoryId);
+  }
+
+  let learned = 0;
+  for (const [token, categoryId] of byToken) {
+    if (await upsertCategoryRule(token, categoryId)) learned++;
+  }
+  return learned;
 }

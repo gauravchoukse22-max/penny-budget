@@ -10,7 +10,6 @@ import { Surface } from '../../components/Surface';
 import { listAllTransactions } from '../../lib/queries';
 import { exportTransactionsCsv, importTransactionsCsv, importParticularsCsv } from '../../lib/csv';
 import { exportDatabaseToJson, importDatabaseFromJson } from '../../features/backup-restore';
-import { exportMonthlyReportPdf } from '../../features/report-export';
 import { checkBiometricsSupport, authenticateUser } from '../../features/biometrics';
 import { pickAndParseStatement } from '../../features/statement-import';
 import { setPendingImport } from '../../features/import-preview-store';
@@ -107,15 +106,6 @@ export default function SettingsScreen() {
         notify('Import complete', `Imported ${result.imported} transactions, skipped ${result.skipped}.`);
         await refresh();
       }
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const doExportReport = async () => {
-    setBusy(true);
-    try {
-      await exportMonthlyReportPdf(selectedMonth);
     } finally {
       setBusy(false);
     }
@@ -328,16 +318,13 @@ export default function SettingsScreen() {
 
         <Surface>
           <Text style={[styles.sectionTitle, { color: theme.label }]}>Data</Text>
-          {/* Named with the month it will cover: this exports the month you are
-              looking at, not "everything", and a report that silently covered
-              the wrong month would be worse than no report. */}
-          <Pressable style={styles.actionRow} onPress={doExportReport} disabled={busy}>
-            <Ionicons name="document-text-outline" size={20} color={theme.accent} />
-            <Text style={{ color: theme.accent, marginLeft: 10, fontWeight: '600' }}>
-              Export {formatMonthLabel(selectedMonth)} report (PDF)
-            </Text>
-          </Pressable>
-          <View style={[styles.divider, { backgroundColor: theme.separator }]} />
+          {/* The monthly PDF report used to sit at the top of this section,
+              which read as a technical file operation sandwiched between CSV
+              export and CSV import — "Export August 2026 report" next to
+              "Export CSV" looks like two flavours of the same thing. It is
+              actually the shareable summary of the month, so it now lives on
+              Insights, where the month's story already is. What is left here is
+              genuine data portability. */}
           <Pressable style={styles.actionRow} onPress={doExport} disabled={busy}>
             <Ionicons name="download-outline" size={20} color={theme.accent} />
             <Text style={{ color: theme.accent, marginLeft: 10, fontWeight: '600' }}>Export CSV</Text>

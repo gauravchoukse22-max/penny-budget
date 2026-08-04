@@ -158,6 +158,34 @@ export async function applyFeatureMigrations(db: SQLite.SQLiteDatabase): Promise
       lastUpdated     TEXT NOT NULL
     );
 
+    -- Net worth history: one row per calendar MONTH, holding the totals as of
+    -- the last balance edit in that month (features/net-worth.ts
+    -- captureNetWorthSnapshot, lib/net-worth-history.ts).
+    --
+    -- Per-month rather than per-edit. Per-edit was tried on paper first and
+    -- rejected twice over: the edit sheet rewrites the whole row on every
+    -- Save, so correcting a typo three times would plant three points on the
+    -- same afternoon, and the table would then grow without bound on a feature
+    -- whose entire input is a number typed off a monthly statement. Chart
+    -- resolution loses nothing real — the balances themselves only change when
+    -- a statement arrives. What is lost is the intra-month audit trail, which
+    -- nothing asks for: within a month the later edit is a correction of the
+    -- earlier one, not a second fact.
+    --
+    -- id is 'nw-<yearMonth>', derived from the period and never uuid(): both
+    -- phones in a household write August the moment either edits a balance, and
+    -- random ids would make that two rows and two points (AGENTS.md rule 2).
+    -- yearMonth carries the UNIQUE constraint as the natural key; because the
+    -- id is a pure function of it, the two keys can never disagree.
+    CREATE TABLE IF NOT EXISTS net_worth_snapshots (
+      id              TEXT PRIMARY KEY NOT NULL,
+      yearMonth       TEXT NOT NULL UNIQUE,
+      assetTotal      REAL NOT NULL DEFAULT 0,
+      liabilityTotal  REAL NOT NULL DEFAULT 0,
+      netWorth        REAL NOT NULL DEFAULT 0,
+      capturedAt      TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS streaks (
       id              TEXT PRIMARY KEY NOT NULL,
       type            TEXT NOT NULL,

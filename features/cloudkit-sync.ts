@@ -112,6 +112,18 @@ export const SYNCABLE_TABLES = new Set([
   // while a household member is still on an older build.
   'assets',
   'liabilities',
+  // Net worth history (features/net-worth.ts captureNetWorthSnapshot). Same
+  // safety story as the two above: a household member on a build without this
+  // entry skips these records on pull rather than throwing on a table they do
+  // not have, so shipping it does not strand them. Its id is derived from the
+  // month, so both members upsert the SAME row for August instead of each
+  // planting their own point.
+  'net_worth_snapshots',
+  // Split transactions (lib/transaction-splits.ts). Ids are derived from the
+  // parent transaction and the part index, so two members who both open the
+  // same imported row converge on one set of parts instead of doubling every
+  // category total on the second device.
+  'transaction_splits',
 ]);
 
 /**

@@ -10,6 +10,7 @@ import {
   CASH_CARD_NAME,
   CASH_CARD_SORT_ORDER,
 } from './models';
+import { categoryAmounts, splitId, type SplitPart } from './transaction-splits';
 import type {
   AppSettings,
   BudgetStatus,
@@ -21,6 +22,7 @@ import type {
   SavingsGoal,
   SavingsGoalTransfer,
   Transaction,
+  TransactionSplit,
   TrendPoint,
 } from './models';
 
@@ -569,11 +571,22 @@ export async function resolveSalaryForMonth(yearMonth: string): Promise<number> 
 
 // ---------- Transactions ----------
 
+/**
+ * Splits are attached HERE rather than left to each caller.
+ *
+ * Every consumer that sums money per category has to see them, and a caller
+ * that forgets does not fail loudly — it just reports a smaller number for a
+ * split category and a larger one for the parent, which looks exactly like a
+ * real budget. Making the loader responsible costs one extra query per load
+ * and removes the whole class of mistake.
+ */
 export async function listTransactionsForMonth(yearMonth: string): Promise<Transaction[]> {
   const db = await getDb();
-  return db.getAllAsync<Transaction>('SELECT * FROM transactions WHERE date LIKE ? ORDER BY date DESC, createdAt DESC', [
-    `${yearMonth}%`,
-  ]);
+  const rows = await db.getAllAsync<Transaction>(
+    'SELECT * FROM transactions WHERE date LIKE ? ORDER BY date DESC, createdAt DESC',
+    [`${yearMonth}%`]
+  );
+  return attachSplits(rows);
 }
 
 /**
@@ -585,7 +598,9 @@ export async function listTransactionsForMonth(yearMonth: string): Promise<Trans
  */
 export async function getTransactionById(id: string): Promise<Transaction | null> {
   const db = await getDb();
-  return (await db.getFirstAsync<Transaction>('SELECT * FROM transactions WHERE id = ?', [id])) ?? null;
+  const row = (await db.getFirstAsync<Transaction>('SELECT * FROM transactions WHERE id = ?', [id])) ?? null;
+  if (!row) return null;
+  return { ...row, splits: await listSplitsFor(id) };
 }
 
 export async function listUncategorizedTransactions(): Promise<Transaction[]> {
@@ -611,7 +626,11 @@ export async function listMonthsWithTransactions(): Promise<string[]> {
 
 export async function listAllTransactions(): Promise<Transaction[]> {
   const db = await getDb();
-  return db.getAllAsync<Transaction>('SELECT * FROM transactions ORDER BY date DESC, createdAt DESC');
+  const rows = await db.getAllAsync<Transaction>('SELECT * FROM transactions ORDER BY date DESC, createdAt DESC');
+  // Attached for the same reason as listTransactionsForMonth: CSV export and
+  // the backup both read through here, and a split dropped on the way out is a
+  // split lost on the way back in.
+  return attachSplits(rows);
 }
 
 export async function createTransaction(
@@ -651,8 +670,89 @@ export async function updateTransaction(id: string, patch: Partial<Omit<Transact
 
 export async function deleteTransaction(id: string): Promise<void> {
   const db = await getDb();
+  // Parts are deleted explicitly, not by ON DELETE CASCADE: foreign keys are
+  // not enforced in this database (AGENTS.md), so the cascade never fires.
+  // Orphaned parts would keep counting toward category totals forever, with no
+  // transaction left to explain where the money came from.
+  await deleteSplitsFor(id);
   await db.runAsync('DELETE FROM transactions WHERE id = ?', [id]);
   await queueSyncMutation('DELETE', 'transactions', id, { id });
+}
+
+// ---------- Transaction splits ----------
+
+/** Attach each transaction's parts in ONE query rather than one per row — a
+ * month of imported statement rows is hundreds of transactions, and a query
+ * each would make every month change visibly slow. */
+export async function attachSplits(transactions: Transaction[]): Promise<Transaction[]> {
+  if (transactions.length === 0) return transactions;
+  const db = await getDb();
+  const placeholders = transactions.map(() => '?').join(',');
+  const rows = await db.getAllAsync<TransactionSplit>(
+    `SELECT id, transactionId, categoryId, amount FROM transaction_splits WHERE transactionId IN (${placeholders}) ORDER BY id ASC`,
+    transactions.map((t) => t.id)
+  );
+  if (rows.length === 0) return transactions.map((t) => ({ ...t, splits: [] }));
+  const byTransaction = new Map<string, TransactionSplit[]>();
+  for (const r of rows) {
+    const list = byTransaction.get(r.transactionId);
+    if (list) list.push(r);
+    else byTransaction.set(r.transactionId, [r]);
+  }
+  return transactions.map((t) => ({ ...t, splits: byTransaction.get(t.id) ?? [] }));
+}
+
+export async function listSplitsFor(transactionId: string): Promise<TransactionSplit[]> {
+  const db = await getDb();
+  return db.getAllAsync<TransactionSplit>(
+    'SELECT id, transactionId, categoryId, amount FROM transaction_splits WHERE transactionId = ? ORDER BY id ASC',
+    [transactionId]
+  );
+}
+
+async function deleteSplitsFor(transactionId: string): Promise<void> {
+  const db = await getDb();
+  const existing = await listSplitsFor(transactionId);
+  await db.runAsync('DELETE FROM transaction_splits WHERE transactionId = ?', [transactionId]);
+  // Each removal is journalled individually: the sync mirror is keyed per
+  // record, so a bulk delete that journalled nothing would leave the other
+  // device's copies in place and its category totals permanently wrong.
+  for (const s of existing) {
+    await queueSyncMutation('DELETE', 'transaction_splits', s.id, { id: s.id });
+  }
+}
+
+/**
+ * Replace a transaction's parts wholesale.
+ *
+ * Delete-then-insert rather than diffing: ids are derived from the index
+ * (splitId()), so editing a three-way split down to two would otherwise leave
+ * `split-<tx>-2` behind — a part with no row in the editor that still counts
+ * toward a category total. Wholesale replacement makes the stored set exactly
+ * what the user saw.
+ *
+ * Passing an empty array turns a split transaction back into a plain one.
+ *
+ * NOTE: this does NOT validate. Call validateSplits() from
+ * lib/transaction-splits.ts at the call site and refuse to save on errors —
+ * storing parts that do not sum to the total moves money out of the books.
+ */
+export async function setTransactionSplits(transactionId: string, parts: SplitPart[]): Promise<void> {
+  const db = await getDb();
+  await deleteSplitsFor(transactionId);
+  for (const [index, part] of parts.entries()) {
+    const row: TransactionSplit = {
+      id: splitId(transactionId, index),
+      transactionId,
+      categoryId: part.categoryId,
+      amount: part.amount,
+    };
+    await db.runAsync(
+      'INSERT OR REPLACE INTO transaction_splits (id, transactionId, categoryId, amount) VALUES (?, ?, ?, ?)',
+      [row.id, row.transactionId, row.categoryId, row.amount]
+    );
+    await queueSyncMutation('CREATE', 'transaction_splits', row.id, row);
+  }
 }
 
 // ---------- Core calculations (spec Section 5) ----------
@@ -725,10 +825,16 @@ export function computeCategorySummariesFrom(
   transactions: Transaction[],
   limitOverrides: Map<string, number>
 ): CategorySpendSummary[] {
+  // Attribution goes through categoryAmounts(), never t.categoryId directly:
+  // a split transaction keeps its own categoryId populated for older builds,
+  // so reading the column here would count its money once under each part AND
+  // again under the parent category.
   const spendByCategory = new Map<string, number>();
   for (const t of transactions) {
-    if (!t.categoryId) continue;
-    spendByCategory.set(t.categoryId, (spendByCategory.get(t.categoryId) ?? 0) + t.amount);
+    for (const [categoryId, amount] of categoryAmounts(t)) {
+      if (!categoryId) continue; // uncategorised money is not any category's spend
+      spendByCategory.set(categoryId, (spendByCategory.get(categoryId) ?? 0) + amount);
+    }
   }
   const summaries: CategorySpendSummary[] = categories.map((category) => {
     const monthlyLimit = limitOverrides.get(category.id) ?? category.monthlyLimit;

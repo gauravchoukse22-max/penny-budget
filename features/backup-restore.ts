@@ -15,7 +15,9 @@ import { readPickedFileAsText, downloadOrShareFile } from '../lib/files';
 //   2 — everything below except the Funds grid.
 //   3 — adds funds, fund_accounts, fund_entries and the legacy fund_balances.
 //   4 — adds assets and liabilities (Net Worth).
-export const BACKUP_VERSION = 4;
+//   5 — adds transaction_splits (one transaction across several categories)
+//       and net_worth_snapshots (the net worth trend).
+export const BACKUP_VERSION = 5;
 
 // Parent tables first so a restore inserts them before the rows that reference
 // them. (Deletes run in reverse.) Transient sync state (outbox, sync_meta) is
@@ -35,12 +37,20 @@ export const BACKUP_TABLES = [
   'fund_entries',
   'fund_balances',
   'transactions',
+  // Parts of a split transaction. AFTER transactions: a restore inserts in this
+  // order, and parts whose parent is not in yet would be orphans that still
+  // count toward category totals.
+  'transaction_splits',
   'recurring_transactions',
   'category_rules',
   // Net worth. Standalone rows — nothing references them and they reference
   // nothing, so their position in this order carries no dependency weight.
   'assets',
   'liabilities',
+  // The net worth trend. Left out of the first cut, which meant a restore
+  // silently dropped every historical point — and unlike a balance, history
+  // cannot be re-entered by hand once it is gone.
+  'net_worth_snapshots',
   'streaks',
   'category_budgets',
   'savings_goal_budgets',
@@ -69,6 +79,15 @@ const NET_WORTH_BACKUP_VERSION = 4;
 
 const NET_WORTH_TABLES: ReadonlySet<string> = new Set(['assets', 'liabilities']);
 
+/** The first BACKUP_VERSION whose files carry split transactions. */
+const SPLITS_BACKUP_VERSION = 5;
+
+// Same rule as Funds and Net Worth: a v4 file simply predates splits, it does
+// not assert that the user has none. Wiping the table on restore from an older
+// backup would silently collapse every split transaction back onto its single
+// fallback category and quietly move money between categories.
+const SPLITS_TABLES: ReadonlySet<string> = new Set(['transaction_splits', 'net_worth_snapshots']);
+
 /**
  * The tables a backup of this version is authoritative for — the only ones a
  * restore may wipe.
@@ -92,6 +111,7 @@ export function restorableTables(version: number): readonly string[] {
     // means "I don't know about that", so a restore leaves those rows alone
     // rather than wiping them.
     if (version < NET_WORTH_BACKUP_VERSION && NET_WORTH_TABLES.has(table)) return false;
+    if (version < SPLITS_BACKUP_VERSION && SPLITS_TABLES.has(table)) return false;
     return true;
   });
 }
