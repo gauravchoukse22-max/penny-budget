@@ -84,6 +84,13 @@ function isNoiseWord(word: string, position: number): boolean {
   if (digits >= 3) return true;
   // "st123", "no4" — a short letter stub glued to a number.
   if (/^[a-z]{1,3}\d+$/.test(word)) return true;
+  // Order codes like "rt4uu8": letters and digits INTERLEAVED. Two digits is
+  // enough once they alternate with letters twice — no real word does that,
+  // but Amazon's per-order MKTPL*XXXXXX suffix always does. Learned live: the
+  // first import wrote a rule on "amazon mktpl*rt4uu8 amzn.com/bill", which
+  // could never match the next Amazon purchase because the code is unique per
+  // order — a rule that looks saved and never fires again.
+  if (digits >= 2 && (word.match(/\d[a-z]|[a-z]\d/g) ?? []).length >= 2) return true;
   return false;
 }
 

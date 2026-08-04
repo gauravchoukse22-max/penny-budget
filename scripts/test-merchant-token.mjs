@@ -130,6 +130,21 @@ ok(
   'two branches of one merchant derive one shared rule id'
 );
 
+// ── per-order codes must not survive into a rule ──────────────────────────
+// Learned from a live import: "AMAZON MKTPL*RT4UU8 AMZN.COM/BILL WA" produced
+// the keyword "amazon mktpl*rt4uu8 amzn.com/bill" — RT4UU8 is unique per
+// order, so the rule could never match the NEXT Amazon purchase. A code that
+// interleaves letters and digits is noise even below the 3-digit line.
+token('AMAZON MKTPL*RT4UU8 AMZN.COM/BILL WA', 'amazon mktpl', 'the per-order MKTPL code is cut, leaving a keyword that matches every Amazon purchase');
+token('AMZN MKTP US*2H4DG5', 'amzn mktp us', 'the US* variant cuts at its code too');
+token('UBER *EATS 8005928996 CA', 'uber *eats', 'a real word after the star is kept');
+// The alternation rule must not eat real names with a digit in them.
+token('7-ELEVEN 22193', '7-eleven', '7-eleven still survives');
+// "76 GAS STATION" returns null by long-standing design: a leading pure number
+// is a store/ref number far more often than a brand, and null means "learn
+// nothing", which is harmless. The alternation rule did not change this.
+token('76 GAS STATION', null, 'a leading pure number still learns nothing (pre-existing rule, harmless)');
+
 // ── report ─────────────────────────────────────────────────────────────────
 if (failures.length > 0) console.error(failures.join('\n\n'));
 console.log(`\n${passed} passed, ${failed} failed`);
