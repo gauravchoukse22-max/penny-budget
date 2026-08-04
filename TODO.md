@@ -153,6 +153,19 @@ still worth a glance.
 
 ### Verified only by typecheck, never run on a device
 These are real risks, not paperwork. Each changed behaviour no agent could observe.
+- [ ] **The rebuilt Budget tab (allocation ledger).** The screen now leads with
+      "not yet assigned" = salary − Σ category limits − Σ savings goal amounts
+      (all resolved per selected month), a thin assigned/savings/unassigned bar,
+      salary controls folded into the header, category rows showing the ASSIGNED
+      amount on the right with a small left/over hint, and a new "Assign the
+      rest" sheet with +$25/+$50/+$100 chips writing through
+      setCategoryLimitForSelectedMonth. `tsc` clean and the parser regression
+      suite passes, but nothing has rendered. Needs eyes on: the zero-salary
+      prompt, the over-allocated wording ("assigned $X more than income"), the
+      bar when over-allocated (denominates by the plan, not income), the assign
+      sheet's live remaining number after chip taps, hideAmounts masking in the
+      header/hints/chips, month switching keeping past months' own numbers, and
+      that swipe-to-delete still coexists with the new row layout on Android.
 - [ ] **The rebuilt Insights tab ("Review Night").** Whole screen is new: eight
       independent cards in `components/insights/`, an Edit sheet that hides and
       reorders them (persisted in the new `app_settings.insightsLayout` column),
