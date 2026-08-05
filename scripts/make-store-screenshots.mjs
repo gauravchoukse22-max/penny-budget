@@ -17,10 +17,13 @@ const SIZES = [
 
 const SHOTS = [
   { file: '01-home.png', name: '01-home', caption: 'Know exactly what\'s\nleft to spend', accent: '#22C55E' },
-  { file: '02-transactions.png', name: '02-transactions', caption: 'Every transaction,\nsorted and searchable', accent: '#6C4CF5' },
-  { file: '03-budget.png', name: '03-budget', caption: 'Stay on budget in\nevery category', accent: '#1FAA59' },
-  { file: '04-cards.png', name: '04-cards', caption: 'All your cards,\nnever miss a due date', accent: '#FF9500' },
-  { file: '05-insights.png', name: '05-insights', caption: 'Stay ahead with\nsmart forecasts', accent: '#5856D6' },
+  { file: '03-budget.png', name: '02-budget', caption: 'Unspent money rolls\ninto next month', accent: '#1FAA59' },
+  { file: '08-split.png', name: '03-split', caption: 'Split one receipt\nacross categories', accent: '#6C4CF5' },
+  { file: '05-insights.png', name: '04-insights', caption: 'See where every\ndollar actually went', accent: '#5856D6' },
+  { file: '06-planner.png', name: '05-planner', caption: 'Clear your debt\nmonths sooner', accent: '#FF9500' },
+  { file: '07-networth.png', name: '06-networth', caption: 'Watch your net worth\nclimb over time', accent: '#1FAA59' },
+  { file: '02-transactions.png', name: '07-transactions', caption: 'Every transaction,\nsorted and searchable', accent: '#6C4CF5' },
+  { file: '04-cards.png', name: '08-cards', caption: 'All your cards,\nnever miss a due date', accent: '#5B8DEF' },
 ];
 
 function toDataUri(filePath) {
