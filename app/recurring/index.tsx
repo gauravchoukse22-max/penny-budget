@@ -25,6 +25,19 @@ import { currencySymbol } from '../../lib/format';
 import { parseMoneyInput } from '../../lib/parse-number';
 import { tapLight } from '../../lib/haptics';
 
+/**
+ * "15 Aug" — day and month, no year.
+ *
+ * formatShortDate includes the year, which pushed this past the row's width and
+ * truncated to "Aug 15, 2…" — the year is the one part a monthly bill never
+ * needs, since the next post is always within a month of today.
+ */
+function formatBillDate(iso: string): string {
+  const d = new Date(iso + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
 // The Add-a-Bill form is deliberately the Add Transaction screen's layout with
 // the calendar question swapped: same big centred amount, same colour-disc
 // category chips, same mini wallet-card chips, and "repeats on" chips standing
@@ -212,8 +225,12 @@ export default function RecurringScreen() {
                     <Text style={[styles.rowTitle, { color: theme.label }]} numberOfLines={1}>
                       {item.note}
                     </Text>
-                    <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }}>
-                      Day {item.dayOfMonth} · next {item.nextPostDate}
+                    {/* One line, and a readable date. The raw ISO string plus
+                        the amount, switch and × squeezed the name column until
+                        this wrapped to two lines and pushed the row taller than
+                        every other list in the app. */}
+                    <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }} numberOfLines={1}>
+                      Day {item.dayOfMonth} · next {formatBillDate(item.nextPostDate)}
                     </Text>
                   </View>
                   <AmountText amount={item.amount} currency={settings.currency} size={14} weight="semibold" />
@@ -248,7 +265,7 @@ export default function RecurringScreen() {
                 <Text style={[styles.rowTitle, { color: theme.label }]} numberOfLines={1}>
                   {s.note}
                 </Text>
-                <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }}>
+                <Text style={{ color: theme.tertiaryLabel, fontSize: 12 }} numberOfLines={1}>
                   ~Day {s.dayOfMonth} · {Math.round(s.confidence * 100)}% match
                 </Text>
               </View>
