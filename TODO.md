@@ -11,6 +11,27 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 
 ## Gary only
 
+### SUBMIT 1.2.0 — do these in order, everything is prepared
+Everything to paste lives in `docs/AppStoreSubmission.md`. Screenshots are in
+`docs/store-screenshots/`. The Chase import is confirmed working on the real
+statement, so nothing blocks submission.
+
+1. [ ] Upload **"PennyBudget 1.2.0 (23)"** from Xcode Organizer (if not already
+       done — it may already be in TestFlight from earlier today).
+2. [ ] Create a **demo account** in the app (any email you control), confirm
+       the email, and paste the credentials into the review notes — Apple
+       requires working credentials because the app has account features.
+3. [ ] App Store Connect → the app → **App Privacy**: enter the three data
+       types from the pack (Email, Other Financial Info, User ID — all
+       App Functionality, no tracking).
+4. [ ] **Age rating**: answer everything None/No → 4+.
+5. [ ] **1.2.0 version page**: paste subtitle, promo text, description,
+       keywords and What's New from the pack; set the three URLs; upload the
+       8 screenshots per size; paste the review notes with the demo account.
+6. [ ] Select **build 23**, choose **Manually release this version**, and
+       **Submit for Review**.
+
+
 - [ ] **Upload build 23 to TestFlight.** Xcode Organizer → Distribute App →
       App Store Connect → Upload. Needs his Apple ID, so it can never be
       automated. **Pick the archive by its explicit name**, never by the version
