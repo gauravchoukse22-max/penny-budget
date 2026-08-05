@@ -1,0 +1,221 @@
+# Submit Penny Budget 1.2.0 — follow top to bottom
+
+Every step is: **where to click**, then **what to paste**. Paste blocks are
+fenced — copy the whole block, nothing outside it. Total time ~30 minutes,
+and you can stop after any phase and pick up later.
+
+---
+
+## Phase 0 — Get build 23 into App Store Connect
+
+*Skip this phase if you already uploaded 23 for your TestFlight test.*
+
+1. Open **Xcode** → menu bar → **Window → Organizer**.
+2. In the list, click the archive named exactly **PennyBudget 1.2.0 (23)**.
+   (Several say "1.2.0 (n)" — go by the name, 23 is the one.)
+3. Click **Distribute App** → **App Store Connect** → **Upload** → keep every
+   default → **Upload**.
+4. If Xcode asks to create a distribution certificate, say yes — that's
+   expected on first upload.
+5. Wait for "Upload Successful", then give Apple ~15 minutes to process it.
+   You'll get an email when the build is ready.
+
+---
+
+## Phase 1 — Create the demo account (on your phone, 3 minutes)
+
+Apple's reviewer needs a login that works, because the app has an account
+feature. Do this in Penny Budget on your phone:
+
+1. **Settings tab → Account → Create account**.
+2. Use an email you control but don't mind Apple seeing —
+   e.g. `penny.demo@` your domain, or a spare Gmail.
+3. Pick a password you'll paste later. Write both down.
+4. Open the confirmation email and tap the link — the account must actually
+   log in, Apple checks.
+
+---
+
+## Phase 2 — Open the app in App Store Connect
+
+1. Go to **appstoreconnect.apple.com** and sign in.
+2. **My Apps → Penny Budget**.
+3. In the left sidebar under **iOS App**, click the **blue "+"** (or
+   "+ Version or Platform") and create version:
+
+```
+1.2.0
+```
+
+---
+
+## Phase 3 — App Privacy (left sidebar → App Privacy)
+
+If it asks "Do you collect data from this app?" → **Yes**.
+
+Add exactly **three** data types. For each one, when asked, answer:
+**Linked to the user's identity: Yes · Used for tracking: No ·
+Purpose: App Functionality.**
+
+| Click "Add Data Type", then find | Under section |
+|---|---|
+| **Email Address** | Contact Info |
+| **Other Financial Info** | Financial Info |
+| **User ID** | Identifiers |
+
+Nothing else — no Location, no Usage Data, no Diagnostics. The app has no
+analytics or crash reporting, so declaring more would be false.
+
+Click **Publish** (top right) when the section shows all three.
+
+---
+
+## Phase 4 — Age rating (on the 1.2.0 version page, "Age Rating" → Edit)
+
+Answer **None** or **No** to every single question. Result shows **4+**.
+Click **Done**.
+
+---
+
+## Phase 5 — The 1.2.0 version page (the big form)
+
+Work top to bottom on the version page. Click **Save** (top right) often —
+it never hurts.
+
+### 5a. Screenshots
+
+The files are on your Mac in `Developer/penny-budget/docs/store-screenshots/`.
+In Finder you can drag all 8 at once into each slot, in name order (01 → 08):
+
+- **iPhone 6.9" Display** slot ← drag the 8 files from `iphone-6.9/`
+- **iPhone 6.5" Display** slot ← drag the 8 files from `iphone-6.5/`
+- **iPad 13" Display** slot ← drag the 8 files from `ipad-13/`
+
+### 5b. Promotional Text
+
+```
+New: unspent money rolls into next month, split one receipt across categories, a debt payoff planner, and your net worth over time. All on your phone — no bank login.
+```
+
+### 5c. Description (replace whatever is there)
+
+```
+Everything a $100-a-year budget app does with your bank data — done from your
+statements, on your phone, free.
+
+Penny Budget never asks for your bank login. Import a PDF or CSV statement
+from any bank, review every transaction before it lands, and Penny learns
+your merchants so the next import files itself.
+
+BUDGET LIKE THE BIG APPS
+• Give every dollar a job, and see what's left to spend at a glance
+• Unspent money rolls into next month — a quiet month builds a buffer
+• Overspending carries forward honestly, never swept under the rug
+• Split one receipt across categories: one Costco run, three budgets
+
+SEE WHERE IT ALL GOES
+• The Money Map shows your whole month in one picture
+• Net worth, tracked over time from balances you enter
+• A debt payoff planner that shows what paying $50 extra actually saves
+• Savings goals with real funded-by dates
+
+SHARE WITH YOUR HOUSEHOLD
+• One budget between two phones, no per-seat pricing
+• Recurring bills post themselves and remind you the day before
+
+PRIVATE BY DESIGN
+• Your data stays on your device unless you turn on the optional account
+• No ads, no analytics, no trackers — the privacy label speaks for itself
+• Back up everything to a file you own, restore it anywhere
+
+No subscriptions. No bank linking. No catch.
+```
+
+### 5d. Keywords
+
+```
+budget,budgeting,money,expense,tracker,spending,bills,debt,net worth,envelope,statement,csv,family
+```
+
+### 5e. Support URL
+
+```
+https://gary-labs.com/penny-budget/support/
+```
+
+### 5f. Marketing URL (optional field)
+
+```
+https://gary-labs.com/penny-budget/
+```
+
+### 5g. What's New in This Version
+
+```
+The biggest update yet:
+• Unspent money now rolls into next month (turn it on per category)
+• Split one transaction across several categories
+• Debt payoff planner — see what paying extra actually saves
+• Net worth, now with a trend over time
+• Goal target dates: "funded by March at $200/mo"
+• Statement import learns your merchants and can bulk-assign categories
+• Tags, a refund tracker, and receipt attachments
+• A cleaner look on every screen, in light and dark
+```
+
+### 5h. Subtitle (under "General Information", if editable)
+
+```
+Budget from your statements
+```
+
+### 5i. Privacy Policy URL (App Information page, left sidebar — check it says)
+
+```
+https://gary-labs.com/penny-budget/privacy/
+```
+
+---
+
+## Phase 6 — Build, review notes, submit
+
+Still on the 1.2.0 version page:
+
+1. Scroll to the **Build** section → click **Add Build** (or the ⊕) →
+   select **1.2.0 (23)** → **Done**.
+   *(If no build appears, Apple is still processing — wait for the email.)*
+2. Scroll to **App Review Information**:
+   - **Sign-in required** → check the box, then paste the demo account from
+     Phase 1 into **User name** and **Password**.
+   - **Notes** — paste:
+
+```
+Penny Budget works fully without an account — all budgeting features are
+available immediately after onboarding with no sign-in.
+
+The optional account (Settings → Account) only adds cloud backup and
+household sync — the demo credentials above are for that.
+
+Statement import (Settings → Import Credit Card Statement) parses a PDF or
+CSV bank statement on-device. Nothing is uploaded. Any bank's CSV export
+works if you wish to test it.
+
+Account deletion is in Settings → Account → Security → Delete Account.
+```
+
+3. **Version Release** section → select **Manually release this version**.
+   (You decide when it goes live after approval.)
+4. Click **Save**, then **Add for Review** (top right), then on the summary
+   page **Submit to App Review**.
+
+---
+
+## Done — what happens next
+
+- Status becomes **Waiting for Review**, usually **In Review** within
+  24–48 hours, then **Pending Developer Release** if approved.
+- Apple emails you at every status change. When it says approved, open the
+  version page and click **Release This Version** whenever you're ready.
+- If it's rejected, don't reply to Apple — paste the rejection text to
+  Claude and we'll fix it together. First submissions of big updates
+  sometimes bounce once; it's routine, not a crisis.
