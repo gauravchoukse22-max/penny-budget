@@ -11,13 +11,13 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 
 ## Gary only
 
-- [ ] **Upload build 22 to TestFlight.** Xcode Organizer → Distribute App →
+- [ ] **Upload build 23 to TestFlight.** Xcode Organizer → Distribute App →
       App Store Connect → Upload. Needs his Apple ID, so it can never be
       automated. **Pick the archive by its explicit name**, never by the version
-      string: Organizer shows 13–22 all as plain "1.2.0 (n)". The one to upload
-      is named **"PennyBudget 1.2.0 (22)"** (archived 2026-08-04). It supersedes
-      19–21, none of which was uploaded; 22 adds the per-order-code fix so
-      learned Amazon rules actually fire on the next import.
+      string: Organizer shows 13–23 all as plain "1.2.0 (n)". The one to upload
+      is named **"PennyBudget 1.2.0 (23)"** (archived 2026-08-04). It supersedes
+      19–22, none of which was uploaded. 23 adds the rebuilt Add-a-Bill form
+      and fixes every recurring bill showing a disabled switch while posting.
       Local signing only has an Apple Development cert; Organizer creates the
       distribution cert on first upload — expected, not an error.
 - [ ] **Delete the stale June 2027 transactions**, then re-import the Chase
@@ -57,34 +57,35 @@ verification and Android.
       confined to `pickReceiptAsset()`.
 - [ ] **Two-phone walk for the shared-currency change.** Create → join → change
       currency in both directions. The storage path is typechecked only.
-- [ ] **Gary: upload Android vc14 to Play** once the iOS build is up —
-      `~/Developer/penny-budget-builds/PennyBudget-1.2.0-vc14.aab`, signer and
-      versionCode verified. vc13 was cut and superseded before upload, so it was
-      deleted (same rule as vc7: never leave an ambiguous number lying around).
+- [ ] **Gary: upload Android vc15 to Play** once the iOS build is up —
+      `~/Developer/penny-budget-builds/PennyBudget-1.2.0-vc15.aab`, signer
+      (dc0763…e1eb) and versionCode verified. vc13 and vc14 were cut and
+      superseded before upload, so their files were deleted — never leave an
+      ambiguous number lying around (the vc7 rule).
 
-### RESUME HERE — paused mid-verification 2026-08-04
-The Recurring Bills "Add a Bill" form was rebuilt to match Add Transaction
-(big centred amount, colour-disc category chips, mini wallet-card chips, and
-"Repeats on" chips — The 1st / The 15th / Last day / Other — standing where the
-date chips stand). It also gained the same name-based category suggestion.
-VERIFIED on the simulator: typed an amount, picked The 15th, named it Netflix,
-saved, and the row read "Netflix · Day 15 · next 2026-08-15 · $15.50".
+### Done 2026-08-04: Add a Bill now speaks Add Transaction's language
+The Recurring Bills form was four small grey fields and an icon grid while Add
+Transaction led with a big centred amount and colour-disc chips — adding a bill
+felt like a different app. It now shares the amount header, the category chips,
+the mini wallet-card chips and the name-based category suggestion. Where Add
+Transaction asks WHEN it happened, a bill asks when it REPEATS, so the date chip
+row became The 1st / The 15th / Last day / Other in the same slot. "Last day"
+stores 31 and the scheduler already clamps that to each month's real end.
 
-**One fix is built but NOT yet seen working.** `listRecurringTransactions`
-returned SQLite's NUMBER 0/1 for `active` while the type said boolean, so
-`<Switch value={1}>` rendered OFF on every bill that was actually posting —
-the screen said one thing and the app did another. The loader now coerces with
-`!!r.active`. tsc is clean and the simulator build succeeded, but the app was
-never relaunched to confirm the switch now reads ON. **Do that first:** open
-Recurring Bills and check the Netflix row's switch is on.
+The styles are deliberately copied from `app/transaction/add.tsx`. If that
+screen's visual language changes, change this one with it.
 
-Also worth a look while there: that row wraps ("Day 15 · next 2026-08-15" runs
-to two lines) because the amount, switch and delete button crowd the name
-column. Cosmetic, not wrong.
+**Bug it surfaced, now fixed and confirmed on screen:**
+`listRecurringTransactions` returned SQLite's NUMBER 0/1 for `active` while the
+type claimed boolean, so nothing type-checked the difference and React Native's
+Switch rendered `1` as OFF. Every active bill showed a disabled switch while
+posting every month — the screen said one thing and the app did another.
+`features/bill-reminders.ts` already coerced it and was the only caller that got
+it right; the loader now does it once for everyone.
 
-Nothing else is in flight. iOS 22 and Android vc14 are archived and still the
-builds to upload — this recurring work is NOT in them, so it needs a build 23 /
-vc15 once the switch is confirmed.
+Verified: saved a bill on The 15th, row reads "Netflix · Day 15 · next Aug 15 ·
+$15.50" on ONE line with a green switch, and the "Other" chip reveals the
+day-of-month field.
 
 ### Watch out: columns that exist and do nothing
 FOUR features looked shipped because their column was already in the schema and
