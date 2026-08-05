@@ -32,25 +32,9 @@ statement, so nothing blocks submission.
        **Submit for Review**.
 
 
-- [ ] **Upload build 23 to TestFlight.** Xcode Organizer → Distribute App →
-      App Store Connect → Upload. Needs his Apple ID, so it can never be
-      automated. **Pick the archive by its explicit name**, never by the version
-      string: Organizer shows 13–23 all as plain "1.2.0 (n)". The one to upload
-      is named **"PennyBudget 1.2.0 (23)"** (archived 2026-08-04). It supersedes
-      19–22, none of which was uploaded. 23 adds the rebuilt Add-a-Bill form
-      and fixes every recurring bill showing a disabled switch while posting.
-      Local signing only has an Apple Development cert; Organizer creates the
-      distribution cert on first upload — expected, not an error.
-- [ ] **Delete the stale June 2027 transactions**, then re-import the Chase
-      statement. The first import filed them a year ahead (the year bug, fixed in
-      18). On the new build: tap the month name → year arrow to 2027 → June will
-      have a dot showing it holds transactions. Clear them BEFORE re-importing so
-      the duplicate check isn't comparing against wrongly-dated copies.
-- [ ] **Confirm the statement import actually works on the real Chase PDF.** The
-      parser rewrite has 109 fixtures but has never seen a real bank statement —
-      Gary declined to share the file, so his next in-app import IS the test. If
-      it still imports nothing, the dialog now names which check failed and
-      quotes a line it read; send that text (it contains no amounts).
+- [x] **Chase import confirmed working on the real statement PDF** (Gary,
+      2026-08-04) — the parser's first contact with a real bank survived. The
+      109 fixtures stand validated; keep them ahead of any parser change.
 - [ ] **Android: run the 14-day closed test** with ~12 testers, then apply for
       production access. Google gates production on this for personal accounts.
 - [ ] **Play listing**: Data safety, content rating, store listing copy and
