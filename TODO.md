@@ -44,6 +44,19 @@ statement, so nothing blocks submission.
 
 ### Next — START HERE in a fresh session
 
+- [ ] **Walk the new over-assign warning on the phone.** iOS **build 24** is
+      installed on Gary's device and typechecked with tests green, but the
+      dialog has never been tapped. Five places to try: the Budget tab's number
+      editor (limit / income / goal), Add Category, Add a savings goal, the
+      category screen's limit field (fires on blur), and Finish in the setup
+      wizard. Declining must keep the sheet open with the typed amount.
+- [ ] **Android has the change but no build.** It is pure TS, so it rides the
+      next cut — Android is still on **vc15**, which is waiting to be uploaded.
+      Do NOT bump versionCode until vc15 is up, or vc15 becomes ambiguous
+      (the vc7 rule).
+- [ ] **Build number split:** the repo is now on iOS **24**; the archive being
+      submitted is **23**. 23 does not contain the over-assign warning.
+
 Everything on the competitive-gap list is now BUILT. What remains is
 verification and Android.
 
