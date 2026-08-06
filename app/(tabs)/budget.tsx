@@ -16,6 +16,7 @@ import { formatMonthLabel, formatCurrency } from '../../lib/format';
 import { confirmAction, notify } from '../../lib/confirm';
 import { tapLight, success } from '../../lib/haptics';
 import { parseMoneyInput } from '../../lib/parse-number';
+import { buildAllocation, projectAllocation, confirmOverAllocation } from '../../lib/allocation';
 
 // What the single money-editor sheet is currently editing.
 type EditorState =
@@ -52,8 +53,31 @@ export default function BudgetScreen() {
 
   const currentSalary = settings.salaryMode === 'fixed' ? settings.fixedSalary : surplus.salary;
 
+  // What the month's plan currently commits: every category budget plus every
+  // savings goal, against the salary that has to cover them.
+  const planRows = {
+    salary: currentSalary,
+    categories: categorySummaries.map((s) => ({ id: s.category.id, limit: s.category.monthlyLimit })),
+    savingsGoals: savingsGoals.map((g) => ({ id: g.id, amount: savingsGoalAmounts.get(g.id) ?? g.monthlyAmount })),
+  };
+  const allocation = buildAllocation({
+    salary: planRows.salary,
+    categoryLimits: planRows.categories.map((c) => c.limit),
+    savingsAmounts: planRows.savingsGoals.map((g) => g.amount),
+  });
+
   const saveEditor = async (value: number) => {
-    if (!editor) return;
+    if (!editor) return false;
+    // Check the plan *with this edit applied* before committing it, so raising
+    // a budget (or dropping the salary) past what the salary covers warns first.
+    const change =
+      editor.kind === 'limit'
+        ? ({ kind: 'category', id: editor.id, value } as const)
+        : editor.kind === 'goal'
+        ? ({ kind: 'savings', id: editor.id, value } as const)
+        : ({ kind: 'salary', value } as const);
+    if (!(await confirmOverAllocation(projectAllocation({ ...planRows, change }), settings.currency))) return false;
+
     if (editor.kind === 'limit') {
       await setCategoryLimitForSelectedMonth(editor.id, value);
     } else if (editor.kind === 'salary') {
@@ -62,15 +86,26 @@ export default function BudgetScreen() {
     } else if (editor.kind === 'goal') {
       await setSavingsGoalAmountForSelectedMonth(editor.id, value);
     }
+    return true;
   };
 
   const addGoal = async () => {
     const amount = parseMoneyInput(goalAmount);
     if (!goalName.trim() || amount === null || !(amount > 0)) return;
+    const projected = projectAllocation({ ...planRows, change: { kind: 'savings', id: null, value: amount } });
+    if (!(await confirmOverAllocation(projected, settings.currency))) return;
     await addSavingsGoal({ name: goalName.trim(), monthlyAmount: amount });
     success();
     setGoalName('');
     setGoalAmount('');
+  };
+
+  // New categories go through the same check before they're created.
+  const addCategoryChecked = async (input: { name: string; icon: string; color: string; monthlyLimit: number }) => {
+    const projected = projectAllocation({ ...planRows, change: { kind: 'category', id: null, value: input.monthlyLimit } });
+    if (!(await confirmOverAllocation(projected, settings.currency))) return false;
+    await addCategory(input);
+    return true;
   };
 
   return (
@@ -151,6 +186,29 @@ export default function BudgetScreen() {
               <Ionicons name="pencil" size={14} color={theme.tertiaryLabel} />
             </View>
           </PressableScale>
+
+          <View style={[styles.allocationRow, styles.allocationDivider, { borderTopColor: theme.separator }]}>
+            <Text style={{ color: theme.secondaryLabel, fontSize: 13 }}>Budgets + savings goals</Text>
+            <Text style={{ color: allocation.isOver ? theme.systemRed : theme.label, fontSize: 13, fontWeight: '700' }}>
+              {formatCurrency(allocation.allocated, settings.currency)}
+            </Text>
+          </View>
+          <View style={styles.allocationRow}>
+            <Text style={{ color: theme.secondaryLabel, fontSize: 13 }}>
+              {allocation.isOver ? 'Over your salary by' : 'Left to allocate'}
+            </Text>
+            <Text style={{ color: allocation.isOver ? theme.systemRed : theme.systemGreen, fontSize: 13, fontWeight: '700' }}>
+              {formatCurrency(allocation.isOver ? allocation.overBy : allocation.unallocated, settings.currency)}
+            </Text>
+          </View>
+          {allocation.isOver && currentSalary > 0 && (
+            <View style={[styles.overBanner, { backgroundColor: theme.systemRed + '1A' }]}>
+              <Ionicons name="alert-circle" size={16} color={theme.systemRed} />
+              <Text style={{ color: theme.systemRed, fontSize: 12, flex: 1, lineHeight: 17 }}>
+                Your plan spends more than you earn. Lower a category budget or savings goal, or increase your salary.
+              </Text>
+            </View>
+          )}
         </Surface>
 
         <Surface>
@@ -236,7 +294,7 @@ export default function BudgetScreen() {
         step={editor?.kind === 'salary' ? 100 : 10}
       />
 
-      <AddCategoryModal visible={showAddCategory} onClose={() => setShowAddCategory(false)} onSave={addCategory} usedCount={categorySummaries.length} />
+      <AddCategoryModal visible={showAddCategory} onClose={() => setShowAddCategory(false)} onSave={addCategoryChecked} usedCount={categorySummaries.length} />
     </SafeAreaView>
   );
 }
@@ -276,7 +334,8 @@ function AddCategoryModal({
 }: {
   visible: boolean;
   onClose: () => void;
-  onSave: (input: { name: string; icon: string; color: string; monthlyLimit: number }) => Promise<void>;
+  /** Resolves false when the save was declined (e.g. it would blow the salary). */
+  onSave: (input: { name: string; icon: string; color: string; monthlyLimit: number }) => Promise<boolean>;
   usedCount: number;
 }) {
   const theme = useTheme();
@@ -289,12 +348,15 @@ function AddCategoryModal({
       notify('Name required');
       return;
     }
-    await onSave({
+    const saved = await onSave({
       name: name.trim(),
       icon,
       color: CATEGORY_PALETTE[usedCount % CATEGORY_PALETTE.length],
       monthlyLimit: parseMoneyInput(limit) ?? 0,
     });
+    // Declined at the over-salary warning — keep the sheet open so the amount
+    // can be edited instead of losing what was typed.
+    if (!saved) return;
     success();
     setName('');
     setLimit('');
@@ -372,6 +434,22 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   salaryFieldRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  allocationRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 10,
+    marginTop: 2,
+  },
+  allocationDivider: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 12 },
+  overBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: spacing.sm,
+    borderRadius: radius.sm,
+    marginTop: 10,
+  },
   goalRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   goalAmountField: { minWidth: 74, paddingVertical: 6, paddingHorizontal: 10, borderRadius: radius.sm, alignItems: 'flex-end' },
   hint: { fontSize: 12, marginTop: 6 },

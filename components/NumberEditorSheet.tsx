@@ -10,7 +10,8 @@ import { tapLight, tapMedium, success } from '../lib/haptics';
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onSave: (value: number) => void | Promise<void>;
+  /** Return false to reject the value and leave the sheet open for another edit. */
+  onSave: (value: number) => void | boolean | Promise<void | boolean>;
   title: string;
   subtitle?: string;
   initialValue: number;
@@ -61,7 +62,9 @@ export function NumberEditorSheet({
   const commit = async () => {
     if (invalid) return;
     tapMedium();
-    await onSave(numeric);
+    // A rejected save (e.g. it would push the budget past the salary) keeps the
+    // sheet open with the typed amount intact so it can be adjusted.
+    if ((await onSave(numeric)) === false) return;
     success();
     onClose();
   };

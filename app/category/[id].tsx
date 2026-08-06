@@ -21,13 +21,25 @@ import {
 import type { CategoryRule } from '../../features/models';
 import { confirmAction, notify } from '../../lib/confirm';
 import { parseMoneyInput } from '../../lib/parse-number';
+import { projectAllocation, confirmOverAllocation } from '../../lib/allocation';
 
 export default function CategoryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const router = useRouter();
-  const { categories, categorySummaries, transactions, cards, settings, selectedMonth, setCategoryLimitForSelectedMonth, removeCategory } =
-    useBudget();
+  const {
+    categories,
+    categorySummaries,
+    transactions,
+    cards,
+    settings,
+    selectedMonth,
+    setCategoryLimitForSelectedMonth,
+    removeCategory,
+    savingsGoals,
+    savingsGoalAmounts,
+    surplus,
+  } = useBudget();
 
   const category = categories.find((c) => c.id === id);
   // categorySummaries carries the limit already resolved for selectedMonth (with carry-forward) — the raw `categories` list only has the value from whenever the category was created.
@@ -103,8 +115,22 @@ export default function CategoryDetailScreen() {
   const categoryTransactions = transactions.filter((t) => t.categoryId === category.id);
   const cardById = new Map(cards.map((c) => [c.id, c]));
 
-  const saveLimit = () => {
-    setCategoryLimitForSelectedMonth(category.id, parseMoneyInput(limitDraft) ?? 0);
+  const saveLimit = async () => {
+    const value = parseMoneyInput(limitDraft) ?? 0;
+    if (value === resolvedLimit) return;
+    // Warn when this limit would push every budget + savings goal past the
+    // month's salary; declining reverts the field to the saved amount.
+    const projected = projectAllocation({
+      salary: settings.salaryMode === 'fixed' ? settings.fixedSalary : surplus.salary,
+      categories: categorySummaries.map((s) => ({ id: s.category.id, limit: s.category.monthlyLimit })),
+      savingsGoals: savingsGoals.map((g) => ({ id: g.id, amount: savingsGoalAmounts.get(g.id) ?? g.monthlyAmount })),
+      change: { kind: 'category', id: category.id, value },
+    });
+    if (!(await confirmOverAllocation(projected, settings.currency))) {
+      setLimitDraft(String(resolvedLimit));
+      return;
+    }
+    await setCategoryLimitForSelectedMonth(category.id, value);
   };
 
   const confirmDelete = async () => {

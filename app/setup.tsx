@@ -6,6 +6,7 @@ import { useTheme, CATEGORY_PALETTE, spacing, radius } from '../theme/colors';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { parseMoneyInput } from '../lib/parse-number';
 import { formatCurrency } from '../lib/format';
+import { buildAllocation, confirmOverAllocation } from '../lib/allocation';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR'];
 const STEPS = ['Currency', 'Categories', 'Salary', 'Savings', 'Cards'] as const;
@@ -79,7 +80,22 @@ export default function SetupWizard() {
   };
   const back = () => setStep((s) => Math.max(0, s - 1));
 
+  // Salary the wizard is about to save. Variable-salary users enter it per
+  // month later, so there's no ceiling to check against yet.
+  const plannedSalary = salaryMode === 'fixed' ? parseMoneyInput(salary) ?? 0 : 0;
+  const allocation = buildAllocation({
+    salary: plannedSalary,
+    categoryLimits: categories.map((c) => c.monthlyLimit),
+    savingsAmounts: savingsGoals.map((g) => g.monthlyAmount),
+  });
+
   const finish = async () => {
+    // Last stop before onboarding ends: the starter budgets plus goals may add
+    // up to more than the salary just entered.
+    if (!(await confirmOverAllocation(allocation, currency))) {
+      setStep(1);
+      return;
+    }
     await updateSettings({
       currency,
       salaryMode,
@@ -130,6 +146,13 @@ export default function SetupWizard() {
           Step {step + 1} of {STEPS.length}
         </Text>
         <Text style={[styles.title, { color: theme.label }]}>{STEPS[step]}</Text>
+
+        {allocation.isOver && (step === 1 || step === 3) && (
+          <Text style={[styles.helper, { color: theme.systemRed }]}>
+            Your budgets and goals add up to {formatCurrency(allocation.allocated, currency)} — {formatCurrency(allocation.overBy, currency)} more
+            than your {formatCurrency(allocation.salary, currency)} salary. Lower an amount or go back and raise your salary.
+          </Text>
+        )}
 
         {step === 0 && (
           <View style={styles.section}>
