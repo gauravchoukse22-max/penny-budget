@@ -44,18 +44,23 @@ statement, so nothing blocks submission.
 
 ### Next — START HERE in a fresh session
 
-- [ ] **Walk the new over-assign warning on the phone.** iOS **build 24** is
-      installed on Gary's device and typechecked with tests green, but the
-      dialog has never been tapped. Five places to try: the Budget tab's number
-      editor (limit / income / goal), Add Category, Add a savings goal, the
-      category screen's limit field (fires on blur), and Finish in the setup
-      wizard. Declining must keep the sheet open with the typed amount.
-- [ ] **Android has the change but no build.** It is pure TS, so it rides the
-      next cut — Android is still on **vc15**, which is waiting to be uploaded.
-      Do NOT bump versionCode until vc15 is up, or vc15 becomes ambiguous
-      (the vc7 rule).
-- [ ] **Build number split:** the repo is now on iOS **24**; the archive being
-      submitted is **23**. 23 does not contain the over-assign warning.
+- [ ] **Re-check the sheets on iOS after the safe-area fix.** iOS **build 25**
+      is on Gary's phone. Every pageSheet now renders inside `SheetModal`,
+      which pads by the top inset on **Android only** — iOS should look
+      unchanged, but that was reasoned from the code, NOT seen. Open the Budget
+      tab's number editor and confirm the Cancel/Save header sits where it
+      always did, with no new gap. Same for Add Category, the month picker, the
+      over-assigned sheet, Split editor, tag picker and the Settings sheets.
+- [ ] **Android: the over-assign warning is VERIFIED on an emulator**
+      (setup-wizard live note, the Finish dialog, Go back landing on
+      Categories, the number editor dialog, and declining keeping the sheet
+      open with the typed amount). Never run on a real Android phone.
+- [ ] **Android needs a fresh cut and vc15 is now stale.** vc15 predates both
+      the over-assign warning AND the sheet fix, so it ships an app whose
+      budget editor cannot be saved or cancelled. Do NOT upload vc15 — cut
+      vc16 and delete the vc15 AAB (the vc7 rule).
+- [ ] **Build number split:** the repo is on iOS **25**; the archive being
+      submitted is **23**. 23 has neither the warning nor the sheet fix.
 
 Everything on the competitive-gap list is now BUILT. What remains is
 verification and Android.
