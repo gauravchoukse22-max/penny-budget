@@ -22,17 +22,23 @@ and you can stop after any phase and pick up later.
 
 ---
 
-## Phase 1 — Create the demo account (on your phone, 3 minutes)
+## Phase 1 — Check the demo account still logs in (2 minutes)
 
-Apple's reviewer needs a login that works, because the app has an account
-feature. Do this in Penny Budget on your phone:
+You already created this one — **appreview@gary-labs.com** — and it's recorded
+in `docs/AppStoreListing.md`. You do NOT need to make a new one.
 
-1. **Settings tab → Account → Create account**.
-2. Use an email you control but don't mind Apple seeing —
-   e.g. `penny.demo@` your domain, or a spare Gmail.
-3. Pick a password you'll paste later. Write both down.
-4. Open the confirmation email and tap the link — the account must actually
-   log in, Apple checks.
+The password is yours; it was deliberately never written into the repo. If you
+don't have it to hand, it's in your password manager, or reset it from the app.
+
+**Just confirm it works**, because Apple will actually try it:
+
+1. In Penny Budget on your phone: **Settings → Account**.
+2. Sign out if you're signed in as yourself.
+3. Sign in as `appreview@gary-labs.com`.
+4. If it logs in, sign back out and switch to your own account. Done.
+
+If it does NOT log in, reset the password from the sign-in screen and use the
+new one in Phase 6.
 
 ---
 
@@ -139,6 +145,10 @@ budget,budgeting,money,expense,tracker,spending,bills,debt,net worth,envelope,st
 
 ### 5e. Support URL
 
+*(Verified live 2026-08-04 — Apple does open these, and a dead one is a
+rejection. This is the same URL `lib/legal.ts` uses, so the page a user opens
+from inside the app is the page the store links to.)*
+
 ```
 https://gary-labs.com/penny-budget/support/
 ```
@@ -171,6 +181,8 @@ Budget from your statements
 
 ### 5i. Privacy Policy URL (App Information page, left sidebar — check it says)
 
+*(Verified live 2026-08-04, and matches `PRIVACY_URL` in `lib/legal.ts`.)*
+
 ```
 https://gary-labs.com/penny-budget/privacy/
 ```
@@ -185,22 +197,23 @@ Still on the 1.2.0 version page:
    select **1.2.0 (23)** → **Done**.
    *(If no build appears, Apple is still processing — wait for the email.)*
 2. Scroll to **App Review Information**:
-   - **Sign-in required** → check the box, then paste the demo account from
-     Phase 1 into **User name** and **Password**.
+   - **Sign-in required** → check the box. **User name:** `appreview@gary-labs.com`
+     **Password:** the one you confirmed in Phase 1.
    - **Notes** — paste:
 
 ```
-Penny Budget works fully without an account — all budgeting features are
-available immediately after onboarding with no sign-in.
+Signing in is OPTIONAL. Penny Budget is fully usable with no account — a
+reviewer can skip sign-in entirely and still exercise every budgeting feature.
 
-The optional account (Settings → Account) only adds cloud backup and
-household sync — the demo credentials above are for that.
+The optional account (Settings → Account) enables cloud backup and Family
+Sharing. Demo credentials are provided above if you wish to review those.
 
-Statement import (Settings → Import Credit Card Statement) parses a PDF or
-CSV bank statement on-device. Nothing is uploaded. Any bank's CSV export
-works if you wish to test it.
-
-Account deletion is in Settings → Account → Security → Delete Account.
+- Account deletion: Settings → Account → Security → Delete Account (removes the
+  account and its cloud backup; on-device data is untouched).
+- "Linked Banks" / Plaid is NOT enabled in this build.
+- Statement import (Settings → Import Credit Card Statement) parses a PDF or CSV
+  bank statement entirely on-device. Nothing is uploaded. Any bank's CSV export
+  works if you wish to test it.
 ```
 
 3. **Version Release** section → select **Manually release this version**.
