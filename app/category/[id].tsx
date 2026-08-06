@@ -22,13 +22,26 @@ import {
 import type { CategoryRule } from '../../features/models';
 import { confirmAction, notify } from '../../lib/confirm';
 import { parseMoneyInput } from '../../lib/parse-number';
+import { projectAssignment, confirmOverAssign } from '../../lib/over-assign-guard';
 
 export default function CategoryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const router = useRouter();
-  const { categories, categorySummaries, transactions, cards, settings, selectedMonth, setCategoryLimitForSelectedMonth, removeCategory, refresh } =
-    useBudget();
+  const {
+    categories,
+    categorySummaries,
+    transactions,
+    cards,
+    settings,
+    selectedMonth,
+    setCategoryLimitForSelectedMonth,
+    removeCategory,
+    refresh,
+    savingsGoals,
+    savingsGoalAmounts,
+    surplus,
+  } = useBudget();
 
   const category = categories.find((c) => c.id === id);
   // categorySummaries carries the limit already resolved for selectedMonth (with carry-forward) — the raw `categories` list only has the value from whenever the category was created.
@@ -109,8 +122,26 @@ export default function CategoryDetailScreen() {
   const categoryTransactions = transactions.filter((t) => t.categoryId === category.id);
   const cardById = new Map(cards.map((c) => [c.id, c]));
 
-  const saveLimit = () => {
-    setCategoryLimitForSelectedMonth(category.id, parseMoneyInput(limitDraft) ?? 0);
+  // Fires on blur, so it runs on every tap-away — bail when nothing changed,
+  // or leaving the field untouched would raise a warning about a number the
+  // user never edited.
+  const saveLimit = async () => {
+    const value = parseMoneyInput(limitDraft) ?? 0;
+    if (value === resolvedLimit) return;
+    const projected = projectAssignment({
+      income: surplus.salary,
+      categories: categorySummaries.map((s) => ({ id: s.category.id, amount: s.category.monthlyLimit })),
+      goals: savingsGoals.map((g) => ({ id: g.id, amount: savingsGoalAmounts.get(g.id) ?? g.monthlyAmount })),
+      change: { kind: 'category', id: category.id, value },
+    });
+    if (!(await confirmOverAssign(projected, settings.currency))) {
+      // Declining puts the field back to the saved amount — the blur already
+      // moved focus away, so leaving the rejected number on screen would read
+      // as saved.
+      setLimitDraft(String(resolvedLimit));
+      return;
+    }
+    await setCategoryLimitForSelectedMonth(category.id, value);
   };
 
   const confirmDelete = async () => {

@@ -10,7 +10,9 @@ import { tapLight, tapMedium, success } from '../lib/haptics';
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onSave: (value: number) => void | Promise<void>;
+  /** Return false to reject the value and leave the sheet open, with what was
+   * typed still there, so it can be adjusted instead of retyped. */
+  onSave: (value: number) => void | boolean | Promise<void | boolean>;
   title: string;
   subtitle?: string;
   initialValue: number;
@@ -63,7 +65,7 @@ export function NumberEditorSheet({
   const commit = async () => {
     if (invalid) return;
     tapMedium();
-    await onSave(numeric);
+    if ((await onSave(numeric)) === false) return;
     success();
     onClose();
   };
