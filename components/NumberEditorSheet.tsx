@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
+import { SheetModal } from './SheetModal';
 import { useTheme, spacing, type } from '../theme/colors';
 import { formatCurrency, currencySymbol } from '../lib/format';
 import { parseMoneyExpression } from '../lib/parse-number';
@@ -71,7 +72,7 @@ export function NumberEditorSheet({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: theme.groupedBackground }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -135,7 +136,7 @@ export function NumberEditorSheet({
         </View>
         </DismissKeyboard>
       </KeyboardAvoidingView>
-    </Modal>
+    </SheetModal>
   );
 }
 

@@ -1,14 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  TextInput,
-  Platform,
-  KeyboardAvoidingView,
-  ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet, TextInput, Platform, KeyboardAvoidingView, ScrollView } from 'react-native';
+import { SheetModal } from './SheetModal';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useTheme, spacing, radius, type } from '../theme/colors';
 import { formatCurrency, currencySymbol, formatShortDate } from '../lib/format';
@@ -143,7 +135,7 @@ export function FundCellSheet({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
       {/* An RN Modal mounts its own native view hierarchy, outside the root
           wrapper in app/_layout.tsx — without a root of its own here, the swipe
           rows in the history below simply never receive touches. */}
@@ -273,7 +265,7 @@ export function FundCellSheet({
         </ScrollView>
       </KeyboardAvoidingView>
       </GestureHandlerRootView>
-    </Modal>
+    </SheetModal>
   );
 }
 

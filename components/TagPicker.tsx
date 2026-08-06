@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SheetModal } from './SheetModal';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Chip, IconButton } from './Button';
 import { DismissKeyboard } from './DismissKeyboard';
@@ -159,7 +160,7 @@ export function TagPicker({ visible, onClose, selectedTagIds, onChange }: TagPic
   const draftProblem = draft.trim().length > 0 ? validateTagName(draft) : null;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
       {/* A modal sheet with a text input and no scroll view at the top level —
           exactly what DismissKeyboard exists for. */}
       <DismissKeyboard style={{ backgroundColor: theme.groupedBackground }}>
@@ -244,7 +245,7 @@ export function TagPicker({ visible, onClose, selectedTagIds, onChange }: TagPic
           <Button label="Done" variant="primary" size="lg" full onPress={onClose} />
         </View>
       </DismissKeyboard>
-    </Modal>
+    </SheetModal>
   );
 }
 

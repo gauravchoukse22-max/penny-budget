@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, SectionList, ScrollView, Pressable, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, SectionList, ScrollView, Pressable, TextInput } from 'react-native';
+import { SheetModal } from '../../components/SheetModal';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -415,7 +416,7 @@ export default function TransactionsScreen() {
         }
       />
 
-      <Modal visible={picker !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPicker(null)}>
+      <SheetModal visible={picker !== null} onRequestClose={() => setPicker(null)}>
         <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
           <Text style={[type.title2, { color: theme.label, marginBottom: spacing.lg }]}>
             {picker === 'category' ? 'Move to category' : 'Move to card'}
@@ -445,17 +446,15 @@ export default function TransactionsScreen() {
           </ScrollView>
           <Button label="Cancel" onPress={() => setPicker(null)} variant="glass" full style={styles.modalFooterButton} />
         </View>
-      </Modal>
+      </SheetModal>
 
       {/* The filters themselves. Every option the old chip rows had is here,
           plus Uncategorized — nothing was dropped, it just stopped being
           permanently on screen. Selections apply live rather than on a Done
           button, so the bar behind the sheet updates as you tap and the choice
           is confirmed by what you see, not by a second action. */}
-      <Modal
+      <SheetModal
         visible={showFilters}
-        animationType="slide"
-        presentationStyle="pageSheet"
         onRequestClose={() => setShowFilters(false)}
       >
         <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
@@ -543,7 +542,7 @@ export default function TransactionsScreen() {
             style={styles.modalFooterButton}
           />
         </View>
-      </Modal>
+      </SheetModal>
     </SafeAreaView>
   );
 }

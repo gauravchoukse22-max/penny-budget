@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native';
+import { SheetModal } from '../../components/SheetModal';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -185,7 +186,7 @@ function AddCardModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
       {/* Scrolling sheet, not a plain View: on a short screen the keyboard
           otherwise sits over the Add Card button with no way to reach it. */}
       <KeyboardAwareScreen
@@ -217,7 +218,7 @@ function AddCardModal({
           <Button label="Add Card" onPress={save} variant="primary" size="lg" style={styles.button} />
         </View>
       </KeyboardAwareScreen>
-    </Modal>
+    </SheetModal>
   );
 }
 

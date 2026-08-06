@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { SheetModal } from './SheetModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, IconButton } from './Button';
 import { useTheme, spacing, radius, type } from '../theme/colors';
@@ -78,7 +79,7 @@ export function MonthPickerSheet({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.groupedBackground }} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <Text style={[type.headline, { color: theme.label }]}>Go to month</Text>
@@ -155,7 +156,7 @@ export function MonthPickerSheet({
           style={styles.todayButton}
         />
       </SafeAreaView>
-    </Modal>
+    </SheetModal>
   );
 }
 

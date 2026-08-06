@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { SheetModal } from '../../components/SheetModal';
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -481,7 +482,7 @@ export default function ImportPreviewScreen() {
       </View>
 
       {/* Category picker — one row, or the whole bulk selection. */}
-      <Modal visible={categoryPickerFor !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setCategoryPickerFor(null)}>
+      <SheetModal visible={categoryPickerFor !== null} onRequestClose={() => setCategoryPickerFor(null)}>
         <SafeAreaView style={[styles.flex, { backgroundColor: theme.groupedBackground }]}>
           <View style={styles.pickerHeader}>
             <Text style={[type.title2, { color: theme.label }]}>
@@ -510,7 +511,7 @@ export default function ImportPreviewScreen() {
             ))}
           </ScrollView>
         </SafeAreaView>
-      </Modal>
+      </SheetModal>
     </SafeAreaView>
   );
 }

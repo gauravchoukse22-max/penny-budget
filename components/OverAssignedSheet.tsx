@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SheetModal } from './SheetModal';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from './Button';
 import { Surface } from './Surface';
@@ -51,7 +52,7 @@ export function OverAssignedSheet({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: theme.groupedBackground }}>
         <View style={[styles.header, { borderBottomColor: theme.separator }]}>
           <Text style={[type.headline, { color: theme.label }]}>Over-assigned</Text>
@@ -184,7 +185,7 @@ export function OverAssignedSheet({
           </Text>
         </ScrollView>
       </View>
-    </Modal>
+    </SheetModal>
   );
 }
 

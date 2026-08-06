@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Switch, Modal, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Switch, Platform } from 'react-native';
+import { SheetModal } from '../../components/SheetModal';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -413,10 +414,8 @@ export default function SettingsScreen() {
         </Text>
       </ScrollView>
 
-      <Modal
+      <SheetModal
         visible={pickingCardFor}
-        animationType="slide"
-        presentationStyle="pageSheet"
         onRequestClose={() => setPickingCardFor(false)}
         onDismiss={() => {
           // iOS only — fires after the sheet is fully gone, so presenting the
@@ -441,12 +440,10 @@ export default function SettingsScreen() {
             <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
           </Pressable>
         </View>
-      </Modal>
+      </SheetModal>
 
-      <Modal
+      <SheetModal
         visible={pickingCurrency}
-        animationType="slide"
-        presentationStyle="pageSheet"
         onRequestClose={() => setPickingCurrency(false)}
       >
         <View style={[styles.modalContent, { backgroundColor: theme.groupedBackground }]}>
@@ -493,7 +490,7 @@ export default function SettingsScreen() {
             <Text style={{ color: theme.label, fontWeight: '600' }}>Cancel</Text>
           </Pressable>
         </View>
-      </Modal>
+      </SheetModal>
     </SafeAreaView>
   );
 }

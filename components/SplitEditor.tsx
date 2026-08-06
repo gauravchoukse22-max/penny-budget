@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SheetModal } from './SheetModal';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, IconButton } from './Button';
 import { CategoryIcon } from './CategoryIcon';
@@ -102,7 +103,7 @@ export function SplitEditor({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: theme.groupedBackground }}>
         <View style={[styles.header, { borderBottomColor: theme.separator }]}>
           <Button label="Cancel" variant="ghost" size="sm" onPress={onClose} />
@@ -225,10 +226,8 @@ export function SplitEditor({
         </ScrollView>
 
         {/* Category picker, reusing the same list shape as the rest of the app. */}
-        <Modal
+        <SheetModal
           visible={pickerFor !== null}
-          animationType="slide"
-          presentationStyle="pageSheet"
           onRequestClose={() => setPickerFor(null)}
         >
           <View style={{ flex: 1, backgroundColor: theme.groupedBackground }}>
@@ -267,9 +266,9 @@ export function SplitEditor({
               ))}
             </ScrollView>
           </View>
-        </Modal>
+        </SheetModal>
       </View>
-    </Modal>
+    </SheetModal>
   );
 }
 

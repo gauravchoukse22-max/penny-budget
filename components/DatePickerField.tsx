@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Platform, Modal, useColorScheme } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Platform, useColorScheme } from 'react-native';
+import { SheetModal } from './SheetModal';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme, spacing, radius, type } from '../theme/colors';
@@ -72,7 +73,7 @@ export function DatePickerField({ value, onChange }: { value: string; onChange: 
       )}
 
       {Platform.OS === 'ios' && (
-        <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setOpen(false)}>
+        <SheetModal visible={open} onRequestClose={() => setOpen(false)}>
           <View style={{ flex: 1, backgroundColor: theme.groupedBackground }}>
             <View style={styles.sheetHeader}>
               <Button label="Cancel" onPress={() => setOpen(false)} variant="ghost" size="sm" />
@@ -99,7 +100,7 @@ export function DatePickerField({ value, onChange }: { value: string; onChange: 
               }}
             />
           </View>
-        </Modal>
+        </SheetModal>
       )}
     </>
   );

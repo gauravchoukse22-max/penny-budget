@@ -1,15 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  Pressable,
-  TextInput,
-  Platform,
-  KeyboardAvoidingView,
-  ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, Platform, KeyboardAvoidingView, ScrollView } from 'react-native';
+import { SheetModal } from '../../components/SheetModal';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useBudget } from '../../context/BudgetContext';
@@ -280,7 +271,7 @@ function EntrySheet({
   };
 
   return (
-    <Modal visible={state !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <SheetModal visible={state !== null} onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: theme.groupedBackground }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -361,7 +352,7 @@ function EntrySheet({
           />
         </ScrollView>
       </KeyboardAvoidingView>
-    </Modal>
+    </SheetModal>
   );
 }
 

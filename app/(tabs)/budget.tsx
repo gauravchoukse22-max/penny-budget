@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Modal, Platform, KeyboardAvoidingView, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Platform, KeyboardAvoidingView, Animated } from 'react-native';
+import { SheetModal } from '../../components/SheetModal';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -757,7 +758,7 @@ function AssignSheet({
   const theme = useTheme();
   const money = (n: number) => (hideAmounts ? maskedAmount(currency) : formatCurrency(n, currency));
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: theme.groupedBackground }}>
         <View style={styles.assignHeader}>
           <View style={{ flex: 1 }}>
@@ -804,7 +805,7 @@ function AssignSheet({
           ))}
         </ScrollView>
       </View>
-    </Modal>
+    </SheetModal>
   );
 }
 
@@ -876,7 +877,7 @@ function GoalFundLinkModal({
   };
 
   return (
-    <Modal visible={!!goal} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <SheetModal visible={!!goal} onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: theme.groupedBackground }}>
         <View style={styles.linkHeader}>
           <Pressable onPress={onClose} hitSlop={10}>
@@ -951,7 +952,7 @@ function GoalFundLinkModal({
           )}
         </ScrollView>
       </View>
-    </Modal>
+    </SheetModal>
   );
 }
 
@@ -1020,7 +1021,7 @@ function AddCategoryModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: theme.groupedBackground }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1063,7 +1064,7 @@ function AddCategoryModal({
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </Modal>
+    </SheetModal>
   );
 }
 
