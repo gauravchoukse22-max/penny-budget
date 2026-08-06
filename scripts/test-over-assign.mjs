@@ -17,7 +17,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
 // over-assign.ts imports nothing — nothing to stub.
-const { analyseOverAssignment } = await import(await transform(join(root, 'lib/over-assign.ts'), []));
+const { analyseOverAssignment, projectAssignment } = await import(await transform(join(root, 'lib/over-assign.ts'), []));
 
 let passed = 0;
 let failed = 0;
@@ -166,6 +166,56 @@ eq(analyseOverAssignment(0.3, [cat('a', 'A', 0.1), cat('b', 'B', 0.2)]), null, '
       `fix "${fix.kind}" never proposes a negative assignment`
     );
   }
+}
+
+// ── projectAssignment: the edit that has not been saved yet ────────────────
+// The guard warns BEFORE the write, so what matters is that it measures the
+// month as it would be, not as it is.
+{
+  const rows = {
+    income: 3000,
+    categories: [
+      { id: 'a', amount: 1000 },
+      { id: 'b', amount: 500 },
+    ],
+    goals: [{ id: 'g', amount: 400 }],
+  };
+
+  const same = projectAssignment({ ...rows, change: { kind: 'category', id: 'a', value: 1000 } });
+  eq([same.assignedTotal, same.isOver], [1900, false], 'an unchanged edit reports the current total and fits');
+
+  const raised = projectAssignment({ ...rows, change: { kind: 'category', id: 'a', value: 2200 } });
+  eq([raised.assignedTotal, raised.overage, raised.isOver], [3100, 100, true], 'raising one category over the income is caught');
+
+  const added = projectAssignment({ ...rows, change: { kind: 'category', id: null, value: 1200 } });
+  eq([added.assignedTotal, added.overage], [3100, 100], 'a brand-new category is added, not substituted');
+
+  const addedGoal = projectAssignment({ ...rows, change: { kind: 'goal', id: null, value: 1200 } });
+  eq([addedGoal.assignedTotal, addedGoal.overage], [3100, 100], 'a brand-new savings goal is added too');
+
+  const cutIncome = projectAssignment({ ...rows, change: { kind: 'income', value: 1500 } });
+  eq([cutIncome.income, cutIncome.overage], [1500, 400], 'lowering the income can put an unchanged plan over');
+
+  const exact = projectAssignment({ ...rows, change: { kind: 'category', id: 'a', value: 2100 } });
+  eq([exact.assignedTotal, exact.overage, exact.isOver], [3000, 0, false], 'assigning the income exactly is not over');
+
+  // The float trap over-assign.ts already guards: 0.1 + 0.2 !== 0.3.
+  const drift = projectAssignment({
+    income: 0.3,
+    categories: [{ id: 'a', amount: 0.1 }],
+    goals: [{ id: 'g', amount: 0.2 }],
+    change: { kind: 'category', id: 'a', value: 0.1 },
+  });
+  eq([drift.overage, drift.isOver], [0, false], 'float drift does not read as over by a fraction of a cent');
+
+  // A goal edit must not be applied to a category that happens to share an id.
+  const collide = projectAssignment({
+    income: 1000,
+    categories: [{ id: 'x', amount: 100 }],
+    goals: [{ id: 'x', amount: 100 }],
+    change: { kind: 'goal', id: 'x', value: 900 },
+  });
+  eq(collide.assignedTotal, 1000, 'an edit only touches its own kind, even when ids collide');
 }
 
 // ── report ─────────────────────────────────────────────────────────────────

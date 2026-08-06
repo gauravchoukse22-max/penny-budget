@@ -69,6 +69,58 @@ export interface OverAssignAnalysis {
 const cents = (n: number): number => Math.round(n * 100);
 const fromCents = (c: number): number => c / 100;
 
+export interface Projection {
+  /** Σ of every category limit and goal amount once the edit lands. */
+  assignedTotal: number;
+  income: number;
+  /** assignedTotal − income when positive, else 0. */
+  overage: number;
+  isOver: boolean;
+}
+
+/**
+ * The month's totals as they WOULD be if one edit were saved — the ledger
+ * above reports where you already are, this reports where a tap is about to
+ * put you. That is the whole difference: it lets a screen warn before the
+ * write instead of after it.
+ *
+ * `id: null` means the row does not exist yet (adding a category or goal), so
+ * its amount is appended rather than substituted.
+ *
+ * Pure, like everything else here, so scripts/test-over-assign.mjs covers it.
+ */
+export function projectAssignment(input: {
+  income: number;
+  categories: { id: string; amount: number }[];
+  goals: { id: string; amount: number }[];
+  change:
+    | { kind: 'income'; value: number }
+    | { kind: 'category'; id: string | null; value: number }
+    | { kind: 'goal'; id: string | null; value: number };
+}): Projection {
+  const { change } = input;
+  const income = change.kind === 'income' ? change.value : input.income;
+
+  const applied = (rows: { id: string; amount: number }[], kind: 'category' | 'goal'): number[] => {
+    if (change.kind !== kind) return rows.map((r) => r.amount);
+    if (change.id === null) return [...rows.map((r) => r.amount), change.value];
+    return rows.map((r) => (r.id === change.id ? change.value : r.amount));
+  };
+
+  const assignedCents = [...applied(input.categories, 'category'), ...applied(input.goals, 'goal')].reduce(
+    (s, n) => s + cents(Number.isFinite(n) ? n : 0),
+    0
+  );
+  const overageCents = assignedCents - cents(income);
+
+  return {
+    assignedTotal: fromCents(assignedCents),
+    income,
+    overage: overageCents > 0 ? fromCents(overageCents) : 0,
+    isOver: overageCents > 0,
+  };
+}
+
 /**
  * Distribute a reduction of `targetCents` across `pool`, proportional to each
  * item's size, never taking an item below zero. Returns per-item new values.

@@ -9,6 +9,7 @@ import { KeyboardAwareScreen } from '../components/KeyboardAwareScreen';
 import { Button, Chip } from '../components/Button';
 import { parseMoneyInput } from '../lib/parse-number';
 import { formatCurrency } from '../lib/format';
+import { projectAssignment, confirmOverAssign } from '../lib/over-assign-guard';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR'];
 const STEPS = ['Currency', 'Categories', 'Salary', 'Savings', 'Cards'] as const;
@@ -83,7 +84,25 @@ export default function SetupWizard() {
   };
   const back = () => setStep((s) => Math.max(0, s - 1));
 
+  // What the wizard is about to commit. Variable-salary users enter a figure
+  // per month later, so onboarding has no ceiling to check them against — the
+  // Budget tab picks it up on the first real month.
+  const plannedSalary = salaryMode === 'fixed' ? parseMoneyInput(salary) ?? 0 : 0;
+  const projectedSetup = projectAssignment({
+    income: plannedSalary,
+    categories: categories.map((c) => ({ id: c.id, amount: c.monthlyLimit })),
+    goals: savingsGoals.map((g) => ({ id: g.id, amount: g.monthlyAmount })),
+    change: { kind: 'income', value: plannedSalary },
+  });
+
   const finish = async () => {
+    // Last chance before onboarding ends: the starter limits plus the goals
+    // just added may add up to more than the salary entered two steps ago.
+    // Declining lands on Categories, where the biggest numbers are.
+    if (!(await confirmOverAssign(projectedSetup, currency))) {
+      setStep(1);
+      return;
+    }
     await updateSettings({
       currency,
       salaryMode,
@@ -134,6 +153,17 @@ export default function SetupWizard() {
           Step {step + 1} of {STEPS.length}
         </Text>
         <Text style={[styles.title, { color: theme.label }]}>{STEPS[step]}</Text>
+
+        {/* Only on the two steps that can fix it — Categories and Savings.
+            Salary is step 2, so this stays silent until there is a figure to
+            measure against. */}
+        {projectedSetup.isOver && plannedSalary > 0 && (step === 1 || step === 3) && (
+          <Text style={[styles.helper, { color: theme.systemRed }]}>
+            Your limits and goals come to {formatCurrency(projectedSetup.assignedTotal, currency)} —{' '}
+            {formatCurrency(projectedSetup.overage, currency)} more than the {formatCurrency(plannedSalary, currency)} salary you entered.
+            Lower an amount, or go back and change the salary.
+          </Text>
+        )}
 
         {step === 0 && (
           <View style={styles.section}>

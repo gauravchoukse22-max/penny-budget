@@ -21,6 +21,7 @@ import type { Fund, FundAccount, FundEntry } from '../../features/models';
 import type { CategorySpendSummary, SavingsGoal } from '../../lib/models';
 import { addMonths, resolveCategoryLimits, resolveSavingsGoalAmounts } from '../../lib/queries';
 import { analyseOverAssignment, type Allocation, type Fix, type OverAssignAnalysis } from '../../lib/over-assign';
+import { projectAssignment, confirmOverAssign } from '../../lib/over-assign-guard';
 import { OverAssignedSheet } from '../../components/OverAssignedSheet';
 
 // What the single money-editor sheet is currently editing.
@@ -193,8 +194,29 @@ export default function BudgetScreen() {
 
   const money = (n: number) => (settings.hideAmounts ? maskedAmount(settings.currency) : formatCurrency(n, settings.currency));
 
+  // Every assignment edit on this screen runs through the same projection, so
+  // one place decides what "this would go over" means.
+  const projectRows = {
+    income: salary,
+    categories: categorySummaries.map((s) => ({ id: s.category.id, amount: s.category.monthlyLimit })),
+    goals: savingsGoals.map((g) => ({ id: g.id, amount: savingsGoalAmounts.get(g.id) ?? g.monthlyAmount })),
+  };
+  const allowsChange = (change: Parameters<typeof projectAssignment>[0]['change']) =>
+    confirmOverAssign(projectAssignment({ ...projectRows, change }), settings.currency);
+
   const saveEditor = async (value: number) => {
-    if (!editor) return;
+    if (!editor) return false;
+    // `currentSalary` is what the salary editor writes, but `salary` is what
+    // the month actually resolves to — the projection has to compare against
+    // the resolved figure or fixed-mode edits would check the wrong ceiling.
+    const change =
+      editor.kind === 'limit'
+        ? ({ kind: 'category', id: editor.id, value } as const)
+        : editor.kind === 'goal'
+        ? ({ kind: 'goal', id: editor.id, value } as const)
+        : ({ kind: 'income', value } as const);
+    if (!(await allowsChange(change))) return false;
+
     if (editor.kind === 'limit') {
       await setCategoryLimitForSelectedMonth(editor.id, value);
     } else if (editor.kind === 'salary') {
@@ -203,11 +225,13 @@ export default function BudgetScreen() {
     } else if (editor.kind === 'goal') {
       await setSavingsGoalAmountForSelectedMonth(editor.id, value);
     }
+    return true;
   };
 
   const addGoal = async () => {
     const amount = parseMoneyInput(goalAmount);
     if (!goalName.trim() || amount === null || !(amount > 0)) return;
+    if (!(await allowsChange({ kind: 'goal', id: null, value: amount }))) return;
     await addSavingsGoal({ name: goalName.trim(), monthlyAmount: amount });
     success();
     setGoalName('');
@@ -605,7 +629,16 @@ export default function BudgetScreen() {
         }}
       />
 
-      <AddCategoryModal visible={showAddCategory} onClose={() => setShowAddCategory(false)} onSave={addCategory} usedCount={categorySummaries.length} />
+      <AddCategoryModal
+        visible={showAddCategory}
+        onClose={() => setShowAddCategory(false)}
+        onSave={async (input) => {
+          if (!(await allowsChange({ kind: 'category', id: null, value: input.monthlyLimit }))) return false;
+          await addCategory(input);
+          return true;
+        }}
+        usedCount={categorySummaries.length}
+      />
 
       <GoalFundLinkModal
         goal={linkingGoal}
@@ -957,7 +990,8 @@ function AddCategoryModal({
 }: {
   visible: boolean;
   onClose: () => void;
-  onSave: (input: { name: string; icon: string; color: string; monthlyLimit: number }) => Promise<void>;
+  /** Resolves false when the save was declined at the over-income warning. */
+  onSave: (input: { name: string; icon: string; color: string; monthlyLimit: number }) => Promise<boolean>;
   usedCount: number;
 }) {
   const theme = useTheme();
@@ -970,12 +1004,15 @@ function AddCategoryModal({
       notify('Name required');
       return;
     }
-    await onSave({
+    const saved = await onSave({
       name: name.trim(),
       icon,
       color: CATEGORY_PALETTE[usedCount % CATEGORY_PALETTE.length],
       monthlyLimit: parseMoneyInput(limit) ?? 0,
     });
+    // Declined at the warning — keep the sheet open so the limit can be
+    // lowered rather than losing the name and icon already chosen.
+    if (!saved) return;
     success();
     setName('');
     setLimit('');
