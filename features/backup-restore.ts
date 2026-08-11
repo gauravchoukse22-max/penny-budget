@@ -270,12 +270,12 @@ export function validateBackup(backup: unknown): { valid: true; backup: BackupDa
   }
   const typed = backup as BackupData;
   if (typeof typed.version !== 'number' || !Number.isFinite(typed.version) || typed.version < 1) {
-    return { valid: false, message: "This file isn't a valid Penny Budget backup." };
+    return { valid: false, message: "This file isn't a valid KaiJar backup." };
   }
   if (typed.version > BACKUP_VERSION) {
     return {
       valid: false,
-      message: 'This backup was made by a newer version of Penny Budget. Please update the app first.',
+      message: 'This backup was made by a newer version of KaiJar. Please update the app first.',
     };
   }
   return { valid: true, backup: typed };
@@ -295,7 +295,7 @@ export async function exportDatabaseToJson(): Promise<boolean> {
       tables,
     };
     const json = JSON.stringify(backup, null, 2);
-    return await downloadOrShareFile(json, `penny-budget-backup-${Date.now()}.json`, 'application/json', 'Back up Penny Budget');
+    return await downloadOrShareFile(json, `kaijar-backup-${Date.now()}.json`, 'application/json', 'Back up KaiJar');
   } catch (error) {
     console.error('Failed to export database:', error);
     return false;

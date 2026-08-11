@@ -180,7 +180,7 @@ export function OverAssignedSheet({
           </Surface>
 
           <Text style={{ color: theme.tertiaryLabel, fontSize: 12, textAlign: 'center', paddingHorizontal: spacing.lg }}>
-            You can also just leave it. Penny will keep showing the gap so you don't forget,
+            You can also just leave it. KaiJar will keep showing the gap so you don't forget,
             and nothing stops you spending.
           </Text>
         </ScrollView>

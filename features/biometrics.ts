@@ -60,7 +60,7 @@ export async function stepUpReauth(promptMessage = "Confirm it's you"): Promise<
   return authenticateUser(promptMessage);
 }
 
-export async function authenticateUser(promptMessage: string = 'Unlock Penny Budget'): Promise<boolean> {
+export async function authenticateUser(promptMessage: string = 'Unlock KaiJar'): Promise<boolean> {
   try {
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage,

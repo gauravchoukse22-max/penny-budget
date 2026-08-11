@@ -195,7 +195,7 @@ export function RefundField({ transactionId, transactionAmount, currency, onChan
           {/* The honest part: marking it received does NOT create the credit.
               Saying so is what stops the user expecting their balance to move. */}
           <Text style={[styles.help, { color: theme.tertiaryLabel }]}>
-            When it lands, mark it received and add the credit as its own transaction — Penny won't invent one your bank
+            When it lands, mark it received and add the credit as its own transaction — KaiJar won't invent one your bank
             hasn't confirmed.
           </Text>
         </>

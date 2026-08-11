@@ -196,7 +196,7 @@ export default function ImportPreviewScreen() {
       // notices it months later.
       const taught =
         learned > 0
-          ? `\nPenny remembered ${learned} merchant${learned === 1 ? '' : 's'} — next time they'll be categorised for you.`
+          ? `\nKaiJar remembered ${learned} merchant${learned === 1 ? '' : 's'} — next time they'll be categorised for you.`
           : '';
       if (await confirmAction({ title: 'Import complete', message: `Added ${result.imported} transaction(s) to ${card?.name ?? 'your card'}.${extra}${taught}${span}`, confirmLabel: 'Done' })) {
         router.back();
@@ -308,7 +308,7 @@ export default function ImportPreviewScreen() {
                 <Ionicons name="sparkles" size={15} color={theme.systemAmber} />
                 <Text style={[styles.suggestText, { color: theme.secondaryLabel }]}>
                   {suggestedCount} categor{suggestedCount === 1 ? 'y was' : 'ies were'} guessed. Confirming teaches
-                  Penny to get {suggestedCount === 1 ? 'it' : 'them'} right automatically next time.
+                  KaiJar to get {suggestedCount === 1 ? 'it' : 'them'} right automatically next time.
                 </Text>
                 <Button
                   label={`Confirm ${suggestedCount}`}

@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
   try {
     const data = await plaidPost<LinkTokenResponse>('/link/token/create', {
       user: { client_user_id: user.id },
-      client_name: 'Penny Budget',
+      client_name: 'KaiJar',
       language: 'en',
       country_codes: ['US'],
       products: ['transactions'],

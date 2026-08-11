@@ -90,7 +90,7 @@ export default function BillsScreen() {
     if (result === 'enabled') {
       setRemindersOn(true);
     } else if (result === 'denied') {
-      notify('Notifications are off', 'Allow notifications for Penny Budget in your phone Settings, then try again.');
+      notify('Notifications are off', 'Allow notifications for KaiJar in your phone Settings, then try again.');
     } else {
       // Native module not linked in this binary (see features/bill-reminders.ts).
       notify('Update needed', 'Bill reminders need the latest app version. The calendar still works.');

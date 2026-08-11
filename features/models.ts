@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// features/models.ts – Extended type definitions for Penny Budget's
+// features/models.ts – Extended type definitions for KaiJar's
 // intelligence engine.  These complement the core types in ../lib/models.
 // ---------------------------------------------------------------------------
 

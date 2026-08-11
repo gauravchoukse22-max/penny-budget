@@ -48,7 +48,7 @@ export default function BankScreen() {
     // on a single accidental tap.
     if (await confirmAction({
       title: 'Link a bank account?',
-      message: 'You’ll sign in on your bank’s own page through Plaid, our linking provider. Penny Budget never sees your bank password. Your transactions from the linked account will sync to this device through your Penny Budget account.',
+      message: 'You’ll sign in on your bank’s own page through Plaid, our linking provider. KaiJar never sees your bank password. Your transactions from the linked account will sync to this device through your KaiJar account.',
       confirmLabel: 'Continue',
     })) {
       runLink();
@@ -192,7 +192,7 @@ export default function BankScreen() {
           </Surface>
 
           <Text style={[type.footnote, { color: theme.tertiaryLabel, paddingHorizontal: spacing.md }]}>
-            Linking opens your bank’s own sign-in through Plaid — Penny Budget never sees your bank password. New
+            Linking opens your bank’s own sign-in through Plaid — KaiJar never sees your bank password. New
             transactions are pulled into this device’s budget when you open the app or tap Sync now. Each linked
             account gets its own card. Unlinking keeps everything already imported.
           </Text>

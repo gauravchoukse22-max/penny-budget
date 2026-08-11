@@ -209,7 +209,7 @@ export default function SecurityScreen() {
         <Row icon="log-out-outline" label="Sign out of all devices" color={theme.systemRed} onPress={doSignOutAll} chevron={false} />
       </GroupedSection>
 
-      <GroupedSection footnote="Read how Penny Budget protects your data.">
+      <GroupedSection footnote="Read how KaiJar protects your data.">
         <Row icon="lock-closed-outline" label="Security & Privacy" onPress={openSecurity} />
       </GroupedSection>
 

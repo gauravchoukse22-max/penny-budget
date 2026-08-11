@@ -63,7 +63,7 @@ add the code to both the **Confirm signup** and **Reset password** templates,
 e.g.:
 
 ```
-Your Penny Budget code is: {{ .Token }}
+Your KaiJar code is: {{ .Token }}
 
 Or tap this link: {{ .ConfirmationURL }}
 ```

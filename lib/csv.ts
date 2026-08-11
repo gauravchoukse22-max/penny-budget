@@ -10,7 +10,7 @@ const FALLBACK_CARD_NAME = 'Unassigned (imported)';
 
 export async function exportTransactionsCsv(transactions: Parameters<typeof transactionsToCsv>[0], categories: Category[], cards: Card[]) {
   const csv = transactionsToCsv(transactions, categories, cards);
-  await downloadOrShareFile(csv, `penny-budget-export-${Date.now()}.csv`, 'text/csv', 'Export Transactions');
+  await downloadOrShareFile(csv, `kaijar-export-${Date.now()}.csv`, 'text/csv', 'Export Transactions');
 }
 
 export function parseCsvLine(line: string): string[] {

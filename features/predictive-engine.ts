@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// features/predictive-engine.ts – Forecasting & anomaly detection for Penny
+// features/predictive-engine.ts – Forecasting & anomaly detection for KaiJar
 // Budget.
 //
 // All functions are async and use getDb() for database access.

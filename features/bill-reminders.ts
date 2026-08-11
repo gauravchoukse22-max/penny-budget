@@ -1,6 +1,6 @@
 // Bill due-date reminders — local notifications the day before each bill.
 //
-// Rocket Money's non-bank hook is "never miss a bill"; this is Penny's version
+// Rocket Money's non-bank hook is "never miss a bill"; this is KaiJar's version
 // built on data already on the device: recurring rules (dayOfMonth) and card
 // due days (cards.dueDay), projected by lib/bill-schedule.ts.
 //

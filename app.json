@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "Penny Budget",
+    "name": "KaiJar",
     "slug": "Penny-Budget",
     "scheme": "pennybudget",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.gary.pennybudget",
-      "buildNumber": "25",
+      "buildNumber": "26",
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -26,7 +26,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 15,
+      "versionCode": 16,
       "blockedPermissions": [
         "android.permission.READ_MEDIA_IMAGES"
       ]
@@ -42,7 +42,7 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Penny Budget uses Face ID to unlock the app and keep your budget private."
+          "faceIDPermission": "KaiJar uses Face ID to unlock the app and keep your budget private."
         }
       ],
       "expo-secure-store",

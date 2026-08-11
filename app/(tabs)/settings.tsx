@@ -410,7 +410,7 @@ export default function SettingsScreen() {
         </Surface>
 
         <Text style={[styles.footer, { color: theme.tertiaryLabel }]}>
-          Penny Budget — your data stays on this device unless you turn on an optional account and back it up.
+          KaiJar — your data stays on this device unless you turn on an optional account and back it up.
         </Text>
       </ScrollView>
 

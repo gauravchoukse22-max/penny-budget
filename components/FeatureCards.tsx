@@ -286,7 +286,7 @@ export function AppLockScreen({ onUnlock }: { onUnlock: () => void }) {
     // overlay, which defeats the lock.
     <View style={[StyleSheet.absoluteFill, styles.lockScreen, { backgroundColor: theme.background }]}>
       <Ionicons name="lock-closed" size={48} color={theme.accent} style={{ marginBottom: spacing.lg }} />
-      <Text style={[typeScale.headline, { color: theme.label, marginBottom: spacing.md }]}>Penny Budget is Locked</Text>
+      <Text style={[typeScale.headline, { color: theme.label, marginBottom: spacing.md }]}>KaiJar is Locked</Text>
       <Button
         label={biometricType ? `Unlock with ${biometricType}` : 'Unlock'}
         onPress={onUnlock}

@@ -216,7 +216,7 @@ export default function SharingScreen() {
   const doShareCode = async () => {
     if (!invite) return;
     try {
-      await Share.share({ message: `Join my Penny Budget with this code: ${invite}` });
+      await Share.share({ message: `Join my KaiJar with this code: ${invite}` });
     } catch {
       // Sharing was dismissed or is unavailable — the code stays on screen.
     }
@@ -430,7 +430,7 @@ export default function SharingScreen() {
 
         <GroupedSection
           header="Invite someone"
-          footnote="They open Penny Budget, go to Settings → Sharing, choose Share with someone, and enter this code. Codes last 7 days."
+          footnote="They open KaiJar, go to Settings → Sharing, choose Share with someone, and enter this code. Codes last 7 days."
         >
           {alone && (
             <Text style={{ color: theme.secondaryLabel, fontSize: 14, lineHeight: 20 }}>

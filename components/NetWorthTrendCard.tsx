@@ -90,8 +90,8 @@ export function NetWorthTrendCard({
           <Ionicons name="trending-up-outline" size={18} color={theme.tertiaryLabel} />
           <Text style={[styles.notice, { color: theme.secondaryLabel }]}>
             {series.status === 'empty'
-              ? 'No history yet. Nothing was recording your balances before now, and Penny will not invent months it has no figures for. Update any balance and the line starts from there.'
-              : `One month recorded so far (${formatMonthYear(series.points[0].yearMonth)}). A trend needs a second month — it starts building from here, not backwards through months Penny never saw.`}
+              ? 'No history yet. Nothing was recording your balances before now, and KaiJar will not invent months it has no figures for. Update any balance and the line starts from there.'
+              : `One month recorded so far (${formatMonthYear(series.points[0].yearMonth)}). A trend needs a second month — it starts building from here, not backwards through months KaiJar never saw.`}
           </Text>
         </View>
       </Surface>

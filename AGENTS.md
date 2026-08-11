@@ -1,4 +1,4 @@
-# Penny Budget — read before writing any code
+# KaiJar — read before writing any code
 
 ## 1. Read TODO.md first
 

@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // features/smart-categorizer.ts – ML-powered categorization engine for
-// Penny Budget.
+// KaiJar.
 //
 // Three strategies in priority order:
 //   1. User-defined keyword rules       (source: 'rule')

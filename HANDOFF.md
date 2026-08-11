@@ -1,4 +1,4 @@
-# 📌 Penny Budget — Master Handoff & Continuity File
+# 📌 KaiJar — Master Handoff & Continuity File
 
 > **READ THIS FIRST if you're a new Claude session picking up this project.**
 > This file is the single source of truth for resuming work. Open this folder in Claude Code,
@@ -22,7 +22,7 @@ transaction add/edit; swipe-to-change-month on Home)
 
 ## 1. What this project is
 
-**Penny Budget** — a private, on-device personal budgeting app. Track spend by category and by
+**KaiJar** — a private, on-device personal budgeting app. Track spend by category and by
 card, set a monthly salary (fixed or variable) and savings goals, and see a live **Surplus**
 (Salary − Spend − Savings Goals). Built with Expo (React Native) + TypeScript, file-based routes
 via `expo-router`. All data lives in on-device SQLite (`lib/db.ts`) — no server, no accounts.
