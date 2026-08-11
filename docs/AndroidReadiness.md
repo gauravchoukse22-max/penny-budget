@@ -1,4 +1,4 @@
-# Android Readiness — Penny Budget
+# Android Readiness — KaiJar
 
 Read-only audit, 2026-07-27 (Expo SDK 54.0.35, RN 0.81.5, New Arch), before the first local-Gradle
 Android build. **Bottom line: the app will build AND launch on Android as-is — no blockers.** But

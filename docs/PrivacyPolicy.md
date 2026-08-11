@@ -8,22 +8,22 @@
 > <https://gauravchoukse22-max.github.io/penny-budget/privacy.html> — that is the URL to give
 > App Store Connect and Play Console. This file is kept only for history.
 
-# Privacy Policy for Penny Budget
+# Privacy Policy for KaiJar
 
 **Last updated: July 8, 2026 — SUPERSEDED, see the notice above**
 
-Penny Budget ("the app") is a personal budgeting app built by an individual developer. This
+KaiJar ("the app") is a personal budgeting app built by an individual developer. This
 policy explains how the app handles your information.
 
 ## Summary
 
-Penny Budget does not collect, transmit, or store any of your data outside your own device.
+KaiJar does not collect, transmit, or store any of your data outside your own device.
 There are no user accounts, no analytics, no advertising, and no servers involved in running
 the app.
 
 ## Data Storage
 
-All information you enter into Penny Budget — including transactions, categories, cards,
+All information you enter into KaiJar — including transactions, categories, cards,
 salary, and savings goals — is stored locally on your device using on-device storage (SQLite).
 This data:
 
@@ -34,25 +34,25 @@ This data:
 
 ## Data Collection
 
-Penny Budget does not collect any personal information, usage data, or analytics. The app does
+KaiJar does not collect any personal information, usage data, or analytics. The app does
 not include any third-party analytics, advertising, or tracking software development kits
 (SDKs).
 
 ## Data Sharing
 
-Because Penny Budget does not collect any data, it has no data to share with third parties,
+Because KaiJar does not collect any data, it has no data to share with third parties,
 advertisers, or data brokers.
 
 ## CSV Import/Export
 
-Penny Budget lets you export your data to a CSV file and import data from a CSV file. These
+KaiJar lets you export your data to a CSV file and import data from a CSV file. These
 files are created and read directly on your device using your device's standard file system
 and sharing tools (for example, the iOS share sheet). The developer does not have access to
 these files.
 
 ## Children's Privacy
 
-Penny Budget does not knowingly collect any information from anyone, including children under
+KaiJar does not knowingly collect any information from anyone, including children under
 the age of 13, because it does not collect information at all.
 
 ## Changes to This Policy

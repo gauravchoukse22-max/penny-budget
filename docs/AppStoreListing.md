@@ -1,4 +1,4 @@
-# App Store Connect — copy/paste content for Penny Budget
+# App Store Connect — copy/paste content for KaiJar
 
 Everything below is ready to paste into App Store Connect. Character counts are noted where Apple
 enforces limits.
@@ -8,7 +8,7 @@ enforces limits.
 ## 1. App name
 
 ```
-Penny Budget
+KaiJar
 ```
 
 ## 2. Subtitle (30 characters max)
@@ -28,13 +28,13 @@ Track spending by category and card, set savings goals, and see your monthly sur
 ## 4. Description (4000 characters max)
 
 ```
-Penny Budget is a simple, private budgeting app that keeps every number on your device by default. No ads, no analytics, no tracking. Just you and your money.
+KaiJar is a simple, private budgeting app that keeps every number on your device by default. No ads, no analytics, no tracking. Just you and your money.
 
 TRACK SPENDING YOUR WAY
 Log transactions by category and by card in seconds. See exactly where your money goes each month with clear breakdowns and progress bars for every budget category.
 
 KNOW YOUR SURPLUS
-Penny Budget shows you Salary minus Spending minus Savings, so you always know how much is really left over — not just what's in your checking account.
+KaiJar shows you Salary minus Spending minus Savings, so you always know how much is really left over — not just what's in your checking account.
 
 SET REAL SAVINGS GOALS
 Create savings goals like an Emergency Fund, Vacation, or Home Repairs, assign a monthly target, and check off transfers as you make them. Watch your progress build month over month.
@@ -52,7 +52,7 @@ IMPORT & EXPORT
 Bring in existing transaction history from a CSV statement export, and export your data anytime. Every imported transaction is shown for you to review and confirm before anything is added — duplicates and recurring bills are flagged automatically. Your data is always yours.
 
 OPTIONAL ACCOUNT — ONLY IF YOU WANT IT
-Penny Budget works fully offline and you never have to sign in. If you want a backup or a second device, you can create an optional account with an email address or Sign in with Apple, then back up and restore on demand. Nothing is uploaded automatically or in the background.
+KaiJar works fully offline and you never have to sign in. If you want a backup or a second device, you can create an optional account with an email address or Sign in with Apple, then back up and restore on demand. Nothing is uploaded automatically or in the background.
 
 SHARE A BUDGET WITH FAMILY
 Optionally invite family to co-edit one shared household budget, so everyone sees the same numbers. Entirely opt-in, and you can leave at any time — the budget on your device keeps working offline.
@@ -60,7 +60,7 @@ Optionally invite family to co-edit one shared household budget, so everyone see
 PRIVATE BY DESIGN
 Your budget lives in on-device storage. There are no ads, no analytics, and no tracking, ever. Cloud backup and family sharing are strictly opt-in, and you can delete your account and its cloud copy from inside the app at any time.
 
-Whether you're tracking a simple monthly budget or managing multiple cards and savings goals, Penny Budget keeps it fast, clear, and private.
+Whether you're tracking a simple monthly budget or managing multiple cards and savings goals, KaiJar keeps it fast, clear, and private.
 ```
 (~2,100 characters — well under the limit)
 
@@ -99,7 +99,7 @@ Password: <the password Gary set — enter it in App Store Connect, not here>
 
 Review notes (paste into the "Notes" field):
 ```
-Signing in is OPTIONAL. Penny Budget is fully usable offline with no account — a
+Signing in is OPTIONAL. KaiJar is fully usable offline with no account — a
 reviewer can skip sign-in entirely and still exercise every budgeting feature.
 
 The optional account (Settings → Account) enables cloud backup and Family Sharing.
@@ -177,7 +177,7 @@ Notes for filling the form:
 ## 11. Age Rating questionnaire
 
 Answer **"No"** / **"None"** to every category (violence, mature themes, gambling, medical/legal
-advice, etc.) — Penny Budget is a personal finance utility with no user-generated content, no web
+advice, etc.) — KaiJar is a personal finance utility with no user-generated content, no web
 browser, and no social features. This lands at **4+**.
 
 ## 12. Category

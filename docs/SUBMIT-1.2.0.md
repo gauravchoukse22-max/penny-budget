@@ -1,4 +1,19 @@
-# Submit Penny Budget 1.2.0 — follow top to bottom
+# ✅ DONE — 1.2.0 shipped 2026-08-11. Do not follow this file.
+
+> **This walkthrough is finished and kept only as a record.** 1.2.0 went live on
+> the App Store at 07:22 UTC on 2026-08-11 (verified against Apple's lookup API,
+> App ID 6788635272).
+>
+> **For the KaiJar rename, follow `TODO.md` → "SUBMIT 1.3.0" instead**, with the
+> paste blocks in `docs/AppStoreSubmission.md`. It is a much shorter list: App
+> Privacy, the age rating, the URLs and the screenshots are all answered already
+> and carry forward. Following the phases below would walk you back through
+> first-submission work you have already done, using a build number that no
+> longer exists.
+>
+> The one thing still worth reading here is **Phase 1**, the demo account note.
+
+---
 
 Every step is: **where to click**, then **what to paste**. Paste blocks are
 fenced — copy the whole block, nothing outside it. Total time ~30 minutes,
@@ -32,7 +47,7 @@ don't have it to hand, it's in your password manager, or reset it from the app.
 
 **Just confirm it works**, because Apple will actually try it:
 
-1. In Penny Budget on your phone: **Settings → Account**.
+1. In KaiJar on your phone: **Settings → Account**.
 2. Sign out if you're signed in as yourself.
 3. Sign in as `appreview@gary-labs.com`.
 4. If it logs in, sign back out and switch to your own account. Done.
@@ -45,7 +60,7 @@ new one in Phase 6.
 ## Phase 2 — Open the app in App Store Connect
 
 1. Go to **appstoreconnect.apple.com** and sign in.
-2. **My Apps → Penny Budget**.
+2. **My Apps → KaiJar**.
 3. In the left sidebar under **iOS App**, click the **blue "+"** (or
    "+ Version or Platform") and create version:
 
@@ -109,7 +124,7 @@ New: unspent money rolls into next month, split one receipt across categories, a
 Everything a $100-a-year budget app does with your bank data — done from your
 statements, on your phone, free.
 
-Penny Budget never asks for your bank login. Import a PDF or CSV statement
+KaiJar never asks for your bank login. Import a PDF or CSV statement
 from any bank, review every transaction before it lands, and Penny learns
 your merchants so the next import files itself.
 
@@ -202,7 +217,7 @@ Still on the 1.2.0 version page:
    - **Notes** — paste:
 
 ```
-Signing in is OPTIONAL. Penny Budget is fully usable with no account — a
+Signing in is OPTIONAL. KaiJar is fully usable with no account — a
 reviewer can skip sign-in entirely and still exercise every budgeting feature.
 
 The optional account (Settings → Account) enables cloud backup and Family

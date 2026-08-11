@@ -1,4 +1,4 @@
-# Penny Budget — Home-Screen Widget Design & Feasibility
+# KaiJar — Home-Screen Widget Design & Feasibility
 
 *Written 2026-08-03. Design + feasibility only — no code changes. Companion files referenced:
 `lib/queries.ts` (computeSurplus, resolveSalary), `app/(tabs)/` routes, `PREBUILD_NOTES.md`,
@@ -10,13 +10,13 @@
 
 | App | Widgets | What reviewers praise |
 |---|---|---|
-| **Copilot Money** | iOS home-screen spending widget + lock-screen widgets, Apple Watch glances | "Budget status at a glance", native feel. Weakness noted in reviews: widget needs a live bank connection to show fresh data — Penny Budget's on-device data avoids this entirely. |
+| **Copilot Money** | iOS home-screen spending widget + lock-screen widgets, Apple Watch glances | "Budget status at a glance", native feel. Weakness noted in reviews: widget needs a live bank connection to show fresh data — KaiJar's on-device data avoids this entirely. |
 | **Monarch** | Lock-screen widget reflecting budget categories; **no home-screen widgets** on either platform | Reviews knock the widget for updating "less aggressively" — stale data with no honesty marker. |
 | **YNAB** | Lock-screen widget showing "ready to assign" / a category balance; no home-screen widget | Praised for fitting the method (one number that drives behaviour), knocked for being confusing without context. |
 
 Takeaways that shaped this design:
 1. **One number wins.** Every praised widget is "the number that tells me if I can spend."
-   For Penny Budget that number is **surplus ("left to spend")** — already computed as
+   For KaiJar that number is **surplus ("left to spend")** — already computed as
    `salary − spend − transferred savings` in `computeSurplus()`.
 2. **Staleness is the #1 review complaint.** Widgets must carry an honest "as of" stamp,
    because our data only refreshes when the app opens.

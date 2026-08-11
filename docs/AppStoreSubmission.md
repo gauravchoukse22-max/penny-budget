@@ -1,4 +1,4 @@
-# App Store submission pack — 1.2.0 (build 23)
+# App Store submission pack — 1.3.0 (build 26), the rename release
 
 Everything to paste into App Store Connect, in the order the screens ask for it.
 Audited against the code on 2026-08-04: no analytics SDK, no crash reporter, no
@@ -6,7 +6,34 @@ ads. The only network destinations in the entire app are the Supabase backend
 (optional account/sync) and gary-labs.com (static pages). Data is on-device
 unless the user turns on the optional account.
 
+**1.2.0 is already live** (released 2026-08-11, App ID 6788635272). A live
+version's name cannot be edited, so the rename ships as **1.3.0**: create the
+new version in App Store Connect first, and the Name field unlocks.
+
 ---
+
+## 0. The app name — do this first
+
+App Store Connect → **App Information → Name**:
+
+```
+KaiJar: Budget Planner
+```
+
+(22 of 30 characters.)
+
+**Why not just "KaiJar":** Apple weights the Name field more heavily than
+anything else in search. "Penny Budget" was carrying the word *budget* for
+free; "KaiJar" carries nothing. The descriptor after the colon buys that back.
+This is the same shape as Spendee, PocketGuard and every other app in the
+category.
+
+It does **not** affect the home screen. The icon label comes from the binary
+(`CFBundleDisplayName`), which is set to plain **KaiJar** — short where it has
+to be short, descriptive where it has to be findable.
+
+**Decided by Gary, 2026-08-11.** Not an open question — paste it as written.
+Use the identical string on Google Play so the two listings match.
 
 ## 1. App Privacy (App Store Connect → App Privacy → Get Started)
 
@@ -52,7 +79,9 @@ Result: **4+**.
 `Budget from your statements`
 
 **Promotional text** (170 chars, editable without review):
-`New: unspent money rolls into next month, split one receipt across categories, a debt payoff planner, and your net worth over time. All on your phone — no bank login.`
+`Penny Budget is now KaiJar — same app, same data, nothing to re-do. Still free, still no bank login, still everything a $100-a-year budget app does from your statements.`
+(167 chars. Leads with the rename on purpose: existing users arriving at the
+listing need the reassurance in the first line, not buried in What's New.)
 
 **Description:**
 
@@ -60,7 +89,7 @@ Result: **4+**.
 Everything a $100-a-year budget app does with your bank data — done from your
 statements, on your phone, free.
 
-Penny Budget never asks for your bank login. Import a PDF or CSV statement
+KaiJar never asks for your bank login. Import a PDF or CSV statement
 from any bank, review every transaction before it lands, and Penny learns
 your merchants so the next import files itself.
 
@@ -92,30 +121,43 @@ No subscriptions. No bank linking. No catch.
 `budget,budgeting,money,expense,tracker,spending,bills,debt,net worth,envelope,statement,csv,family`
 (98 chars)
 
-**What's New in 1.2.0:**
+**What's New in 1.3.0:**
 
 ```
-The biggest update yet:
-• Unspent money now rolls into next month (turn it on per category)
-• Split one transaction across several categories
-• Debt payoff planner — see what paying extra actually saves
-• Net worth, now with a trend over time
-• Goal target dates: "funded by March at $200/mo"
-• Statement import learns your merchants and can bulk-assign categories
-• Tags, a refund tracker, and receipt attachments
-• A cleaner look on every screen, in light and dark
+Penny Budget is now KaiJar.
+
+Same app, same person building it, same everything inside. If the icon on
+your home screen looks different this morning, that is why — nothing has
+been taken over.
+
+Your data has not moved and nothing needs re-doing. Every transaction,
+budget, card, savings goal and category is exactly where it was. You do not
+need to sign in again, re-import a statement, or re-share your household —
+the sharing code you already gave someone still works.
+
+Why: there were a dozen or more apps called some version of "Penny Budget",
+and being impossible to find in a search is a bad problem for an app you
+open every day. KaiJar is ours alone.
+
+The new icon is a jar filling up with coins, which is closer to what the app
+actually does than a piggy bank was.
 ```
 
 ## 5. App Review notes (paste into "Notes" in the review section)
 
 ```
-Penny Budget works fully without an account — all budgeting features are
+This version renames the app from "Penny Budget" to "KaiJar". Same developer
+account, same bundle ID (com.gary.pennybudget), same app — the previous name
+collided with a dozen other budgeting apps. The bundle ID is unchanged
+deliberately, so this is an update to the existing app rather than a new one.
+
+KaiJar works fully without an account — all budgeting features are
 available immediately after onboarding with no sign-in.
 
 The optional account (Settings → Account) only adds cloud backup and
 household sync. Demo account for testing it:
-  email: [GARY: create a demo account in the app and paste it here]
-  password: [GARY]
+  email: appreview@gary-labs.com
+  password: [GARY: from your password manager — deliberately not in the repo]
 
 Statement import (Settings → Import Credit Card Statement) parses a PDF or
 CSV bank statement on-device. Nothing is uploaded. Any bank's CSV export

@@ -1,6 +1,6 @@
 # Release Checklist — iOS App Store
 
-Reusable pre-flight for shipping Penny Budget. Builds are **local Xcode archives — never EAS**.
+Reusable pre-flight for shipping KaiJar. Builds are **local Xcode archives — never EAS**.
 
 Status below is for **1.1.0 (build 9)**, branch `release/1.1.0`.
 

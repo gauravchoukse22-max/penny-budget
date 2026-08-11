@@ -16,6 +16,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: '2026-08-11-kaijar-rename',
+    version: '1.3.0',
+    date: 'August 2026',
+    title: 'Penny Budget is now KaiJar',
+    changes: [
+      'Same app, same person building it, same everything inside. Only the name and the icon have changed — if the icon on your home screen looks different this morning, that is why, and nothing has been taken over.',
+      'Your data has not moved and nothing needs re-doing. Every transaction, budget, card, savings goal and category is exactly where it was. You do not need to sign in again, re-import a statement, or re-share your household — the sharing code you gave someone still works.',
+      'The reason for the change: there were a dozen or more apps called some version of "Penny Budget", and being impossible to find in a search is a bad problem for an app you are meant to open every day. KaiJar is ours alone.',
+      'The new icon is a jar filling up with coins, which is closer to what the app actually does than a piggy bank was.',
+    ],
+  },
+  {
     id: '2026-08-03-statement-import',
     version: '1.2.0',
     date: 'August 2026',
@@ -123,7 +135,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: 'Link your bank (limited rollout)',
     changes: [
       'New Linked Banks (Settings → Account → Linked Banks, in builds where it\'s enabled): connect a bank or credit card through Plaid and new transactions import automatically — no more monthly statement downloads.',
-      'You sign in on your bank\'s own page; Penny Budget never sees your bank password. Each linked account shows up as its own card.',
+      'You sign in on your bank\'s own page; KaiJar never sees your bank password. Each linked account shows up as its own card.',
       'Transactions sync when you open the screen or tap Sync now, and get a suggested category on the way in.',
       'Unlink anytime — everything already imported stays in your budget and keeps working offline.',
     ],

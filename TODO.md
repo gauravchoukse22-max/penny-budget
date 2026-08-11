@@ -1,4 +1,15 @@
-# Penny Budget — running to-do
+# KaiJar — running to-do
+
+> **Renamed 2026-08-11: "Penny Budget" → "KaiJar".** "Penny Budget" collided with
+> dozens of apps; the first pick, "Kaijet", is a registered trademark of KaiJet
+> Technology International (brand j5create), who have litigated before — dropped.
+> Code strings, `app.json`, iOS `CFBundleDisplayName` and Android `app_name` are
+> already done. The bundle id / package stays `com.gary.pennybudget` forever
+> (locked on iOS after first release, and changing it on Android would break the
+> Google OAuth client config for zero user-visible gain). The `pennybudget://`
+> scheme, `pennybudget.db`, `penny-cash-card` and the `PENNY_UPLOAD_*` gradle
+> properties are all deliberately unchanged — renaming any of them breaks
+> existing installs, Plaid redirects, or the signing config.
 
 The single source of truth for outstanding work. Read this at the start of every
 session, before planning anything. Update it as items land — a finished item gets
@@ -11,36 +22,135 @@ Apple ID, dashboards he is logged into). Everything else is Claude's.
 
 ## Gary only
 
-### SUBMIT 1.2.0 — do these in order, everything is prepared
-Everything to paste lives in `docs/AppStoreSubmission.md`. Screenshots are in
-`docs/store-screenshots/`. The Chase import is confirmed working on the real
-statement, so nothing blocks submission.
+### ~~SUBMIT 1.2.0~~ — DONE. Live on the App Store 2026-08-11 07:22 UTC.
+Verified against Apple's own lookup API, not from memory: version 1.2.0,
+App ID 6788635272. App Privacy, age rating and the three URLs are all
+answered already and carry forward — you do **not** redo them for 1.3.0.
 
-1. [ ] Upload **"PennyBudget 1.2.0 (23)"** from Xcode Organizer (if not already
-       done — it may already be in TestFlight from earlier today).
-2. [ ] Create a **demo account** in the app (any email you control), confirm
-       the email, and paste the credentials into the review notes — Apple
-       requires working credentials because the app has account features.
-3. [ ] App Store Connect → the app → **App Privacy**: enter the three data
-       types from the pack (Email, Other Financial Info, User ID — all
-       App Functionality, no tracking).
-4. [ ] **Age rating**: answer everything None/No → 4+.
-5. [ ] **1.2.0 version page**: paste subtitle, promo text, description,
-       keywords and What's New from the pack; set the three URLs; upload the
-       8 screenshots per size; paste the review notes with the demo account.
-6. [ ] Select **build 23**, choose **Manually release this version**, and
-       **Submit for Review**.
+### SUBMIT 1.3.0 — the rename release
+Everything to paste lives in `docs/AppStoreSubmission.md`. Screenshots are
+unchanged and already uploaded — none of them showed the old name.
+
+> **Why a new version at all:** a live version's Name field is locked. Creating
+> 1.3.0 is what unlocks it. The store name and the binary must ship together,
+> or the icon label and the listing disagree.
+
+1. [ ] App Store Connect → **+ Version** → `1.3.0`. This is what unlocks the
+       name field; nothing else works until this exists.
+2. [ ] **App Information → Name** → `KaiJar: Budget Planner`
+       **(decided 2026-08-11 — paste it exactly, no decision left to make).**
+       The home screen still reads just **KaiJar**; that comes from the binary,
+       not this field. Same string goes on Google Play.
+3. [ ] Upload **PennyBudget 1.3.0 (26)** from Xcode Organizer. The archive name
+       still says PennyBudget — that is the internal Xcode target, not the app
+       name, and renaming it would break the build recipe for no user benefit.
+4. [ ] **1.3.0 version page**: paste the new promo text and What's New from the
+       pack. Description, subtitle, keywords and screenshots are unchanged.
+5. [ ] Review notes: the pack now opens by explaining the rename and the
+       unchanged bundle ID, so review does not read it as a different app.
+       Demo account is `appreview@gary-labs.com`; password is in your manager.
+6. [ ] Select **build 26**, **Manually release this version**, Submit.
+7. [ ] After it is approved — **deploy gary-labs.com** (see Claude's list; the
+       site is rebuilt and waiting). Do it before release so the privacy page
+       and the app agree on the name.
 
 
 - [x] **Chase import confirmed working on the real statement PDF** (Gary,
       2026-08-04) — the parser's first contact with a real bank survived. The
       109 fixtures stand validated; keep them ahead of any parser change.
+### Rename — two things that live OUTSIDE the app binary
+Both are user-visible and neither ships with the build. Found by sweeping for
+the old name rather than assuming the app was the only place it appeared.
+
+- [ ] **Supabase → Authentication → Emails → Templates.** The *Confirm signup*
+      and *Reset password* templates are edited in the dashboard, not the repo,
+      and still read "Your Penny Budget code is: ...". Anyone signing up or
+      resetting a password gets an email naming an app that no longer exists —
+      which reads like a phishing attempt. Change both to
+      `Your KaiJar code is: {{ .Token }}`.
+- [ ] **Redeploy the `plaid-create-link` edge function.** `client_name` is fixed
+      in the repo (now `KaiJar`), but the deployed copy still sends the old
+      name, and Plaid shows it on the bank consent screen — the single most
+      trust-sensitive screen in the app. Until it is redeployed, users see
+      "Penny Budget" asking for their bank.
+      `supabase functions deploy plaid-create-link`
+
 - [ ] **Android: run the 14-day closed test** with ~12 testers, then apply for
       production access. Google gates production on this for personal accounts.
+- [ ] **Play Console → Grow → Store presence → Main store listing → App name**:
+      set to `KaiJar` (30-char limit). Unlike Apple, Play lets you change this
+      any time without a new version — but the on-device label still comes from
+      the AAB, so it needs the fresh build too.
 - [ ] **Play listing**: Data safety, content rating, store listing copy and
       graphics. Drafts are in `~/Developer/penny-budget-builds/`.
 
 ## Claude
+
+### Rename fallout — clear before 1.2.0 ships
+
+- [x] **Store copy rewritten** (2026-08-11). All nine `docs/*.md` renamed;
+      `AppStoreSubmission.md` retargeted to 1.3.0 with a new section 0 on the
+      app name, rename-first promotional text, a What's New that leads with
+      reassurance, and review notes that explain the unchanged bundle ID.
+      Keywords and description needed no change — "penny" was never a keyword,
+      and `budget,budgeting` already covers what the Name field stops carrying.
+      URLs in the docs were left pointing at `/penny-budget/` on purpose.
+- [x] **Screenshots checked — no re-shoot needed** (2026-08-11). All 8 frames
+      are Home, Budget, Split, Insights, Planner, Net Worth, Transactions and
+      Cards; none is the Settings screen or the lock screen, which are the only
+      two places the old name appeared in the UI. The caption headers are
+      benefit lines, not the app name. The existing sets for all three sizes
+      stand.
+- [x] **gary-labs.com rebuilt with the new name** (2026-08-11).
+      `~/Developer/gary-labs-site/content.mjs` renamed and `node build.mjs` run
+      clean; the built privacy page has 12 KaiJar references and zero stale
+      ones. The site app icon (`static/icons/penny-budget.png`, 192px) is the
+      new jar.
+      **The URL paths deliberately still say `/penny-budget/`.** The live 1.2.0
+      binary has those URLs compiled in, so every user you have right now hits
+      them — changing the slug would break the Privacy link Apple requires to
+      work. The builder has no redirect support, so a slug change would need
+      that written first. Revisit once 1.2.0 installs have aged out.
+      **→ Gary still has to deploy the site.** Nothing is live until he does.
+- [x] **Icon redrawn as a jar of nine coins** (Gary chose it, 2026-08-11).
+      `assets/icon.png` 1024, `android-icon-background` 512, `-foreground` 512,
+      `-monochrome` 432, `favicon` 48 — all regenerated by
+      `scripts/make-icons.py`, originals recoverable from git. The
+      coins are punched out as transparent holes, so the one shape serves as
+      the store icon, the adaptive foreground (background gradient shows
+      through) and the monochrome layer (system tint shows through). Artwork is
+      held to 44% of canvas height on the Android layers so the corners survive
+      the launcher's 66dp safe-zone mask. Verified by compositing under a
+      circle mask — not yet seen on a real launcher.
+- [x] **Fresh builds cut and verified** (2026-08-11). Version is **1.3.0**
+      everywhere — `app.json`, `Info.plist`, `build.gradle`.
+
+      **iOS:** `~/Library/Developer/Xcode/Archives/2026-08-11/PennyBudget 1.3.0 (26).xcarchive`.
+      Verified from inside the archive, not from a green build: display name
+      KaiJar, version 1.3.0 (26), bundle id unchanged, Face ID string fixed,
+      and the app icon reverted out of Apple's CgBI format to confirm the jar
+      really shipped.
+
+      **Android:** `~/Developer/penny-budget-builds/KaiJar-1.3.0-vc16.aab`
+      (and `.apk`). Verified: `application-label:'KaiJar'`, versionCode 16,
+      versionName 1.3.0, signed with the upload key
+      `dc076300950d3d17f19ac812262c2cf8e2ebe1eb` — NOT the debug key.
+      Hermes bundle checked with `strings -a` (plain grep finds nothing in
+      bytecode — that false negative cost a round trip): 10 KaiJar hits, the
+      rename changelog entry present, and the only two remaining "Penny Budget"
+      strings are the intentional ones inside that entry.
+
+      **The trap this caught:** `expo prebuild` is what normally regenerates the
+      native icons and the Face ID usage string from `app.json`. This repo never
+      prebuilds, so editing `app.json` alone would have shipped the rename with
+      the old piggy-bank icon on both platforms and a Face ID prompt naming an
+      app that no longer exists. The iOS asset catalog and all 25 Android
+      mipmap webp files had to be regenerated in place.
+
+      **`ios/` and `android/` are gitignored, so those icons are not in version
+      control.** `scripts/make-icons.py` is their only reproducible record —
+      run it if either directory is ever recreated, or the app ships the wrong
+      icon with a perfectly green build.
 
 ### Next — START HERE in a fresh session
 

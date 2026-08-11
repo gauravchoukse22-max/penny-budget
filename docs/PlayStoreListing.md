@@ -1,4 +1,4 @@
-# Google Play — copy/paste content + submission guide for Penny Budget
+# Google Play — copy/paste content + submission guide for KaiJar
 
 Everything below is ready to paste into the **Google Play Console**. Character
 limits noted where Google enforces them. This is the Android counterpart to
@@ -20,12 +20,34 @@ limits noted where Google enforces them. This is the Android counterpart to
 
 | Field | Value |
 |---|---|
-| App name (30 max) | `Penny Budget` |
+| App name (30 max) | `KaiJar: Budget Planner` (22) |
 | Default language | English (United States) |
 | App or game | App |
 | Free or paid | Free |
 | Category | Finance |
 | Tags | budgeting, personal finance, expense tracker |
+
+Same reasoning as the App Store name: the brand alone carries no search weight,
+so the descriptor after the colon does that work. The launcher label still reads
+just **KaiJar** — that comes from the AAB, not this field.
+
+## 1b. Release notes for vc16 / 1.3.0 (500 characters max)
+
+This is Android's **first** public release, so most users have never seen the
+old name. Keep it short and forward-looking rather than leading with a rename
+nobody here witnessed:
+
+```
+The first Android release of KaiJar.
+
+Budget from your own statements — no bank login, ever. Import a PDF or CSV
+from any bank, review every transaction before it lands, and KaiJar learns
+your merchants so the next import files itself.
+
+Everything stays on your device unless you turn on the optional account.
+No ads, no analytics, no subscriptions.
+```
+(311 characters)
 
 ## 2. Short description (80 characters max)
 
@@ -37,13 +59,13 @@ Private budgeting — track spending, cards & savings goals, all on your phone.
 ## 3. Full description (4000 characters max)
 
 ```
-Penny Budget is a simple, private budgeting app that keeps every number on your device. Just you and your money.
+KaiJar is a simple, private budgeting app that keeps every number on your device. Just you and your money.
 
 TRACK SPENDING YOUR WAY
 Log transactions by category and by card in seconds. See exactly where your money goes each month with clear breakdowns and progress bars for every budget category.
 
 KNOW YOUR SURPLUS
-Penny Budget shows you Salary minus Spending minus Savings, so you always know how much is really left over — not just what's in your checking account.
+KaiJar shows you Salary minus Spending minus Savings, so you always know how much is really left over — not just what's in your checking account.
 
 SET REAL SAVINGS GOALS
 Create savings goals like an Emergency Fund, Vacation, or Home Repairs, assign a monthly target, and check off transfers as you make them. Watch your progress build month over month.
@@ -61,9 +83,9 @@ IMPORT & EXPORT
 Bring in existing transaction history via CSV import, and export your data anytime. Your data is always yours.
 
 PRIVATE BY DESIGN
-Penny Budget stores everything locally on your device. There are no ads, no analytics, and no tracking. Optionally, you can create an account to back up and restore your budget to the cloud — completely optional, and the app works fully offline without one. You can delete your account and cloud backup from inside the app at any time.
+KaiJar stores everything locally on your device. There are no ads, no analytics, and no tracking. Optionally, you can create an account to back up and restore your budget to the cloud — completely optional, and the app works fully offline without one. You can delete your account and cloud backup from inside the app at any time.
 
-Whether you're tracking a simple monthly budget or managing multiple cards and savings goals, Penny Budget keeps it fast, clear, and private.
+Whether you're tracking a simple monthly budget or managing multiple cards and savings goals, KaiJar keeps it fast, clear, and private.
 ```
 
 ## 4. Graphics required by Play

@@ -1,11 +1,11 @@
-# Penny Budget — Support
+# KaiJar — Support
 
-Penny Budget is a simple, private, on-device budgeting app for iOS.
+KaiJar is a simple, private, on-device budgeting app for iOS.
 
 ## Frequently asked questions
 
 **Where is my data stored?**
-Entirely on your device. Penny Budget has no servers and no accounts — your transactions,
+Entirely on your device. KaiJar has no servers and no accounts — your transactions,
 categories, cards, and savings goals never leave your phone unless you explicitly export a CSV
 file yourself.
 
