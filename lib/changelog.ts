@@ -6,15 +6,25 @@
 // `version` is the marketing version the change ships in. `id` is what we store
 // as "seen" — bump it whenever you add an entry so the sheet reappears once.
 
+import { BANK_LINKING_ENABLED } from './feature-flags';
+
 export type ChangelogEntry = {
   id: string; // unique, monotonic marker used for "already seen" tracking
   version: string;
   date: string; // human-readable, e.g. "July 2026"
   title: string;
   changes: string[];
+  /**
+   * Only show this entry in builds where bank linking is switched on. Store
+   * builds leave `BANK_LINKING_ENABLED` false, so without this a user reads
+   * about "Linked Banks" in What's New, goes to Settings to find it, and it
+   * isn't there. Announcing a feature the reader cannot reach is worse than
+   * not announcing it.
+   */
+  requiresBankLinking?: boolean;
 };
 
-export const CHANGELOG: ChangelogEntry[] = [
+const ALL_ENTRIES: ChangelogEntry[] = [
   {
     id: '2026-08-11-kaijar-rename',
     version: '1.3.0',
@@ -133,6 +143,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: '1.0.1',
     date: 'July 2026',
     title: 'Link your bank (limited rollout)',
+    requiresBankLinking: true,
     changes: [
       'New Linked Banks (Settings → Account → Linked Banks, in builds where it\'s enabled): connect a bank or credit card through Plaid and new transactions import automatically — no more monthly statement downloads.',
       'You sign in on your bank\'s own page; KaiJar never sees your bank password. Each linked account shows up as its own card.',
@@ -240,6 +251,15 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
 ];
+
+/**
+ * What this build can honestly show. Entries for features that are compiled in
+ * but switched off are dropped, so What's New never describes a screen the
+ * reader cannot open.
+ */
+export const CHANGELOG: ChangelogEntry[] = ALL_ENTRIES.filter(
+  (entry) => !entry.requiresBankLinking || BANK_LINKING_ENABLED
+);
 
 /** The marker for the newest entry — what we compare against "last seen". */
 export const LATEST_CHANGELOG_ID = CHANGELOG[0]?.id ?? '';

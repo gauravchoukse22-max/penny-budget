@@ -97,6 +97,13 @@ config — read-only, no side effects, and far better than inferring.
       code path has ever worked.
 - [ ] **Delete the test user** — Supabase → Authentication → Users →
       `figures.cobbler-0g@icloud.com`. It inflates the real user count.
+- [x] **Custom SMTP is already configured** — `supabase/README.md` §2 lists it
+      as a to-do, but it is done. The test email arrived from
+      `noreply_at_gary-labs_com_...@icloud.com`, which is iCloud Hide My Email's
+      relay encoding of `noreply@gary-labs.com`. So the ~2 emails/hour cap on
+      Supabase's built-in mailer does not apply. Another case of the README
+      describing intent rather than current state — do not trust it as a record
+      of what is configured.
 - [ ] **While in there — check `supabase/README.md` §4 redirect URLs are
       actually registered** (`pennybudget://account/update-password`,
       `pennybudget://account/index`). That README is an instruction list, not a
@@ -106,12 +113,22 @@ config — read-only, no side effects, and far better than inferring.
 **Note for the rename:** the templates never mentioned "Penny Budget" at all, so
 nothing here needed renaming. An earlier version of this item claimed they did.
 That was invented from the README and was wrong — see AGENTS.md §0.
-- [ ] **Redeploy the `plaid-create-link` edge function.** `client_name` is fixed
-      in the repo (now `KaiJar`), but the deployed copy still sends the old
-      name, and Plaid shows it on the bank consent screen — the single most
-      trust-sensitive screen in the app. Until it is redeployed, users see
-      "Penny Budget" asking for their bank.
-      `supabase functions deploy plaid-create-link`
+- [x] **Plaid — nothing to do. Bank linking is already off in store builds.**
+      `BANK_LINKING_ENABLED` is `process.env.EXPO_PUBLIC_BANK_LINKING === '1'`
+      (`lib/feature-flags.ts`), the var is not set in `.env.local`, and Expo
+      inlines it at bundle time — so the Settings entry point never renders and
+      `app/bank/index.tsx` is unreachable. Gary asked to hide Plaid on
+      2026-08-11; it was already hidden.
+
+      **An earlier version of this item called the Plaid consent screen "the
+      single most trust-sensitive screen in the app" and made redeploying it
+      urgent. That was wrong** — no store user can reach it. Redeploying
+      `plaid-create-link` is worth doing whenever the function is next touched,
+      purely so a future bank-enabled build does not show the old name, but it
+      is not blocking anything. See AGENTS.md §0.
+
+      Follow-up that *was* real: the 1.0.1 What's New entry announced Linked
+      Banks to users who cannot open it. Now gated behind the same flag.
 
 - [ ] **Android: run the 14-day closed test** with ~12 testers, then apply for
       production access. Google gates production on this for personal accounts.
