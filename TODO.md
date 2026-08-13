@@ -62,24 +62,50 @@ unchanged and already uploaded — none of them showed the old name.
 Both are user-visible and neither ships with the build. Found by sweeping for
 the old name rather than assuming the app was the only place it appeared.
 
-- [ ] **Supabase → Authentication → Emails → Templates — CHECK, do not assume.**
-      Gary looked on 2026-08-11 and reported the *Confirm signup* template has
-      no "Penny Budget" line in it at all.
-      **An earlier version of this item claimed the templates said "Your Penny
-      Budget code is: ..." — that was wrong.** It was lifted from the *
-      instruction* in `supabase/README.md` §2b and mistaken for a description of
-      the live dashboard. Never verified. Do not repeat that.
+### LIVE BUG found 2026-08-11 — signup/reset emails had no code
 
-      What actually needs checking, in order of severity:
-      1. **Does the template contain `{{ .Token }}`?** `app/account/verify-email.tsx`
-         and `forgot-password.tsx` ask the user to type a 6-digit code via
-         `verifyEmailOtp` / `verifyRecoveryOtp`. Supabase only emails that code
-         when the template includes `{{ .Token }}`, and its stock templates are
-         link-only. If it is missing, **email confirmation and password reset
-         are broken in the shipped app** — a live production bug that has
-         nothing to do with the rename, and far more urgent than one.
-      2. **Only if the app name appears** anywhere in the template, change it to
-         KaiJar. It may well not appear at all.
+Not a rename issue at all. The rename sweep happened to uncover it.
+
+**What was wrong — precisely.** Gary rightly pushed back with "it was working
+before", and he was half right:
+
+- **Verified** `GET /auth/v1/settings` returns `"mailer_autoconfirm": false`, so
+  email confirmation really is required. `signUp` therefore gets no session,
+  returns `needsEmailConfirmation`, and `app/account/index.tsx:118` always
+  routes to the verify-email screen. Nobody skips it.
+- **Verified** both templates were link-only — no `{{ .Token }}`.
+- So the **6-digit code box never worked**: the app said "Check your email for a
+  6-digit code" and the email contained no digits.
+- But the **link always worked** (`AuthContext.tsx:139` `exchangeCodeForSession`),
+  and the screen's own footnote points at it. That is what Gary used when
+  testing, which is why the account flow appeared healthy.
+
+Half broken, not broken: advertised path dead, fallback carrying it. An earlier
+note here said "broken since launch", which overstated it.
+
+Use `curl "$SUPABASE_URL/auth/v1/settings" -H "apikey: $ANON_KEY"` to check auth
+config — read-only, no side effects, and far better than inferring.
+
+- [x] **Confirm signup template fixed** (Gary, 2026-08-11) — `{{ .Token }}`
+      added above his existing link wording, link kept as the fallback.
+- [x] **Reset password template fixed** (Gary, 2026-08-11) — same change.
+- [x] **VERIFIED END TO END, not assumed** (2026-08-11). A real signup was
+      POSTed to `/auth/v1/signup` for a throwaway iCloud alias; the response
+      returned `session: False` and `confirmation_sent_at` set, which is the
+      empirical confirmation that the app routes to the code screen. Gary then
+      opened the inbox and **saw a 6-digit number**. That is the first time the
+      code path has ever worked.
+- [ ] **Delete the test user** — Supabase → Authentication → Users →
+      `figures.cobbler-0g@icloud.com`. It inflates the real user count.
+- [ ] **While in there — check `supabase/README.md` §4 redirect URLs are
+      actually registered** (`pennybudget://account/update-password`,
+      `pennybudget://account/index`). That README is an instruction list, not a
+      record of what is configured — the same mistake that hid this bug for
+      weeks. The link fallback only works if those are present.
+
+**Note for the rename:** the templates never mentioned "Penny Budget" at all, so
+nothing here needed renaming. An earlier version of this item claimed they did.
+That was invented from the README and was wrong — see AGENTS.md §0.
 - [ ] **Redeploy the `plaid-create-link` edge function.** `client_name` is fixed
       in the repo (now `KaiJar`), but the deployed copy still sends the old
       name, and Plaid shows it on the bank consent screen — the single most
