@@ -62,12 +62,24 @@ unchanged and already uploaded — none of them showed the old name.
 Both are user-visible and neither ships with the build. Found by sweeping for
 the old name rather than assuming the app was the only place it appeared.
 
-- [ ] **Supabase → Authentication → Emails → Templates.** The *Confirm signup*
-      and *Reset password* templates are edited in the dashboard, not the repo,
-      and still read "Your Penny Budget code is: ...". Anyone signing up or
-      resetting a password gets an email naming an app that no longer exists —
-      which reads like a phishing attempt. Change both to
-      `Your KaiJar code is: {{ .Token }}`.
+- [ ] **Supabase → Authentication → Emails → Templates — CHECK, do not assume.**
+      Gary looked on 2026-08-11 and reported the *Confirm signup* template has
+      no "Penny Budget" line in it at all.
+      **An earlier version of this item claimed the templates said "Your Penny
+      Budget code is: ..." — that was wrong.** It was lifted from the *
+      instruction* in `supabase/README.md` §2b and mistaken for a description of
+      the live dashboard. Never verified. Do not repeat that.
+
+      What actually needs checking, in order of severity:
+      1. **Does the template contain `{{ .Token }}`?** `app/account/verify-email.tsx`
+         and `forgot-password.tsx` ask the user to type a 6-digit code via
+         `verifyEmailOtp` / `verifyRecoveryOtp`. Supabase only emails that code
+         when the template includes `{{ .Token }}`, and its stock templates are
+         link-only. If it is missing, **email confirmation and password reset
+         are broken in the shipped app** — a live production bug that has
+         nothing to do with the rename, and far more urgent than one.
+      2. **Only if the app name appears** anywhere in the template, change it to
+         KaiJar. It may well not appear at all.
 - [ ] **Redeploy the `plaid-create-link` edge function.** `client_name` is fixed
       in the repo (now `KaiJar`), but the deployed copy still sends the old
       name, and Plaid shows it on the bank consent screen — the single most
@@ -78,9 +90,9 @@ the old name rather than assuming the app was the only place it appeared.
 - [ ] **Android: run the 14-day closed test** with ~12 testers, then apply for
       production access. Google gates production on this for personal accounts.
 - [ ] **Play Console → Grow → Store presence → Main store listing → App name**:
-      set to `KaiJar` (30-char limit). Unlike Apple, Play lets you change this
-      any time without a new version — but the on-device label still comes from
-      the AAB, so it needs the fresh build too.
+      set to `KaiJar: Budget Planner` — the same string as the App Store, so the
+      two listings match. Unlike Apple, Play lets you change this any time
+      without a new version, but the launcher label still comes from the AAB.
 - [ ] **Play listing**: Data safety, content rating, store listing copy and
       graphics. Drafts are in `~/Developer/penny-budget-builds/`.
 

@@ -1,5 +1,26 @@
 # KaiJar — read before writing any code
 
+## 0. Assume nothing. Verify, then state.
+
+Gary's standing rule. He does not read the code, so he cannot catch a confident
+wrong answer, and he submits to the App Store on the strength of these replies.
+
+- Separate **"I verified this by doing X"** from **"I believe this"** in every
+  answer, and name the check you actually ran.
+- **This file, TODO.md, and every README describe intent, not current truth.**
+  Config lives in dashboards; state lives in the running system. Go look.
+- A search-result snippet is not a source. Fetch the source; if the fetch fails,
+  say so rather than repeating the snippet as fact.
+- **A green build proves nothing about what is inside it.** Verify the artifact:
+  `aapt2 dump badging` on the APK, PlistBuddy and `strings -a` on the archive.
+  The Hermes bundle is bytecode — plain `grep` silently finds nothing.
+- What cannot be checked from here — anything behind Gary's logins — must be
+  asked, not guessed. Give him the one precise question and where to look.
+
+Three claims in the 1.3.0 rename session were asserted without checking and all
+three were wrong: a trademark that does not exist, screenshots that were never
+opened, and a dashboard setting inferred from a README instruction.
+
 ## 1. Read TODO.md first
 
 [TODO.md](./TODO.md) is the running to-do list and the source of truth for what is
