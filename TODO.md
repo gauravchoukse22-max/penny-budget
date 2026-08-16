@@ -467,8 +467,11 @@ still worth a glance.
 
 ### Verified only by typecheck, never run on a device
 These are real risks, not paperwork. Each changed behaviour no agent could observe.
-- [ ] **"Paid from a fund" on a transaction** (built 2026-08-15, NOT in any
-      build). A transaction can name one cell of the Funds grid, and
+- [ ] **"Paid from a fund" on a transaction** — **on Gary's phone as iOS
+      1.3.0 (27)**, installed 2026-08-15. Build 27 exists ONLY on his phone; it
+      is deliberately NOT 26, which is the archive at Apple, so the two can
+      never be confused in Xcode's Organizer (the vc7 rule).
+      A transaction can name one cell of the Funds grid, and
       `setTransactionFundPayment` files the matching negative fund entry at the
       derived id `txn-<transactionId>` — so the Vacation fund comes down by the
       booking without anyone typing the number twice.
