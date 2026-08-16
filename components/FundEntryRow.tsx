@@ -4,6 +4,7 @@ import { useTheme, spacing } from '../theme/colors';
 import { IconButton } from './Button';
 import { formatShortDate } from '../lib/format';
 import { AmountText } from './AmountText';
+import { isTransactionFundEntry } from '../features/funds';
 import type { FundEntry } from '../features/models';
 
 type Props = {
@@ -25,7 +26,14 @@ type Props = {
 export function FundEntryRow({ entry, currency, accountName, onDelete }: Props) {
   const theme = useTheme();
   const isCredit = entry.amount >= 0;
-  const detail = [accountName, entry.note].filter(Boolean).join(' · ');
+  // A withdrawal a transaction filed is not the user's line to remove here:
+  // the charge would still say it was paid from this fund, and the next edit to
+  // that charge would file it all over again. Saying where it came from is also
+  // the answer to "why did my fund drop and I don't remember doing that".
+  const fromTransaction = isTransactionFundEntry(entry);
+  const detail = [accountName, entry.note, fromTransaction ? 'From a transaction' : null]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <View style={[styles.row, { borderBottomColor: theme.separator }]}>
@@ -46,7 +54,7 @@ export function FundEntryRow({ entry, currency, accountName, onDelete }: Props) 
         weight="semibold"
         color={isCredit ? theme.positiveMuted : theme.negativeMuted}
       />
-      {onDelete && (
+      {onDelete && !fromTransaction && (
         <IconButton
           icon="close"
           onPress={() => onDelete(entry)}

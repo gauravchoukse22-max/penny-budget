@@ -467,6 +467,28 @@ still worth a glance.
 
 ### Verified only by typecheck, never run on a device
 These are real risks, not paperwork. Each changed behaviour no agent could observe.
+- [ ] **"Paid from a fund" on a transaction** (built 2026-08-15, NOT in any
+      build). A transaction can name one cell of the Funds grid, and
+      `setTransactionFundPayment` files the matching negative fund entry at the
+      derived id `txn-<transactionId>` — so the Vacation fund comes down by the
+      booking without anyone typing the number twice.
+
+      **Verified:** `tsc --noEmit` clean, and the orphan-sweep SQL run against a
+      real sqlite3 database (it took the stale orphan only, sparing a live
+      entry, a just-synced one, a hand-typed one and a `goal-` one).
+      **Not verified:** anything on a screen, and the two-phone round trip.
+
+      Needs eyes on: the fund chip row on Add (it renders NOTHING until the
+      grid has at least one fund and one account); the "goes to $X" preview,
+      including on the Edit screen where the balance must exclude this
+      transaction's own withdrawal; the amber "more than it holds" line, which
+      warns and does not block; editing the amount moving the fund by the
+      difference; deleting the transaction giving the money back; and that
+      Funds history rows say "From a transaction" and refuse to swipe-delete.
+
+      The sweep is deliberately **24h-delayed** (`ORPHANED_ENTRY_GRACE_MS`):
+      sweeping eagerly would delete a co-member's entry that arrived in a pull
+      before its transaction did — and journal the tombstone back at them.
 - [ ] **The rebuilt Budget tab (allocation ledger).** The screen now leads with
       "not yet assigned" = salary − Σ category limits − Σ savings goal amounts
       (all resolved per selected month), a thin assigned/savings/unassigned bar,

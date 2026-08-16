@@ -487,6 +487,197 @@ export async function reconcileSavingsGoalEntries(
   }
 }
 
+// ── Paying for something out of a fund ──────────────────────────────────────
+//
+// "We saved up for the holiday, and today we booked the flights." The charge is
+// a normal transaction — it happened on a card and belongs in the month's
+// spending like everything else — but the money for it was already set aside,
+// so the Vacation fund has to come DOWN by the same amount. Doing that by hand
+// means typing the number twice and remembering to, which is exactly the step
+// people skip; the fund then reads high forever and nobody notices.
+//
+// So a transaction can name one cell of the grid, and this files the matching
+// withdrawal for it.
+
+/** Marks a fund entry as one a transaction owns, not one the user typed. */
+export const TRANSACTION_ENTRY_PREFIX = 'txn-';
+
+/** The ledger line's note when the transaction itself has none. */
+export const TRANSACTION_ENTRY_FALLBACK_NOTE = 'Paid from this fund';
+
+/**
+ * An orphaned entry is only swept once it is this old.
+ *
+ * The hazard it guards against: a co-member records a fund-paid transaction and
+ * both records sync out. If the fund entry lands on this phone in a pull that
+ * hasn't yet brought the transaction, an eager sweep would delete the entry AND
+ * journal the tombstone — deleting it on THEIR phone too, where nothing is
+ * wrong. A day's grace is far longer than that window and far shorter than
+ * leaving a wrong balance up for good.
+ */
+const ORPHANED_ENTRY_GRACE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The id a transaction's withdrawal always gets, derived from the transaction
+ * rather than uuid().
+ *
+ * Same reasoning as savingsGoalEntryId: the transaction syncs to the other
+ * phone, and if anything there ever re-files the withdrawal a random id would
+ * make it a SECOND withdrawal — the fund would drop twice for one purchase.
+ * Deriving it means every device writes the same record.
+ */
+export function transactionFundEntryId(transactionId: string): string {
+  return `${TRANSACTION_ENTRY_PREFIX}${transactionId}`;
+}
+
+/** True for a withdrawal filed by a transaction rather than typed by hand. */
+export function isTransactionFundEntry(entry: { id: string }): boolean {
+  return entry.id.startsWith(TRANSACTION_ENTRY_PREFIX);
+}
+
+/** The transaction a withdrawal belongs to, or null if it isn't one. */
+export function fundEntryTransactionId(entry: { id: string }): string | null {
+  return isTransactionFundEntry(entry) ? entry.id.slice(TRANSACTION_ENTRY_PREFIX.length) : null;
+}
+
+/** The grid cell a transaction is paid from. Null means "not paid from a fund". */
+export type TransactionFundTarget = { fundId: string; accountId: string } | null;
+
+/** What the transaction screens know about the charge when they save it. */
+export type TransactionFundPaymentInput = {
+  transactionId: string;
+  /** The transaction's SIGNED amount — expense positive, refund/credit negative. */
+  amount: number;
+  /** The transaction's own date (YYYY-MM-DD), so the withdrawal lands in the
+   * month the money actually went out, not the month it was typed. */
+  date: string;
+  /** The transaction's note; becomes the ledger line so the fund's history
+   * reads "Flights", not "withdrawal". */
+  note?: string | null;
+};
+
+/** The withdrawal a transaction has filed, if any. */
+export async function getTransactionFundPayment(transactionId: string): Promise<FundEntry | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<FundEntry>('SELECT * FROM fund_entries WHERE id = ?', [
+    transactionFundEntryId(transactionId),
+  ]);
+  return row ?? null;
+}
+
+/**
+ * Makes the grid match "this transaction is paid from that cell" — filing the
+ * withdrawal, moving it, correcting it, or removing it.
+ *
+ * Declarative like reconcileSavingsGoalEntries, and for the same reason: link,
+ * unlink, re-link to a different fund, an edited amount and an edited date are
+ * then all one code path, and none of them can leave a stale withdrawal behind
+ * or file a second one. The screens simply call it on every save with whatever
+ * the form currently says.
+ *
+ * The entry's amount is the transaction's amount NEGATED. An expense is stored
+ * positive, and spending the money takes it out of the fund; a refund is stored
+ * negative, and getting it back puts it in. So refunding a fund-paid purchase
+ * restores the fund with no extra rule for it.
+ *
+ * A row that already matches is left alone rather than rewritten — re-journaling
+ * an identical row on every save would fill the outbox with no-ops and ping-pong
+ * between two phones each "correcting" the other.
+ *
+ * Returns the entry that now exists, or null if there is none.
+ */
+export async function setTransactionFundPayment(
+  transaction: TransactionFundPaymentInput,
+  target: TransactionFundTarget
+): Promise<FundEntry | null> {
+  const db = await getDb();
+  const id = transactionFundEntryId(transaction.transactionId);
+  const existing = await db.getFirstAsync<FundEntry>('SELECT * FROM fund_entries WHERE id = ?', [id]);
+
+  const amount = fromCents(-toCents(transaction.amount));
+  // A zero-amount charge takes nothing out of the fund, and an entry of 0 is
+  // noise in the history — treated as "no payment", same as no target.
+  const wanted = target && toCents(amount) !== 0;
+
+  if (!wanted) {
+    if (!existing) return null;
+    await db.runAsync('DELETE FROM fund_entries WHERE id = ?', [id]);
+    // Journaled only because a row really was removed: a tombstone for an id
+    // that never existed asks the co-member to delete something they may never
+    // have had.
+    await queueSyncMutation('DELETE', 'fund_entries', id, { id });
+    return null;
+  }
+
+  const note = transaction.note?.trim();
+  const entry: FundEntry = {
+    id,
+    fundId: target.fundId,
+    accountId: target.accountId,
+    amount,
+    date: transaction.date,
+    note: note ? note : TRANSACTION_ENTRY_FALLBACK_NOTE,
+    // An existing row keeps its own, so editing a transaction doesn't reshuffle
+    // the order of entries filed on the same day.
+    createdAt: existing?.createdAt ?? new Date().toISOString(),
+  };
+
+  if (
+    existing &&
+    existing.fundId === entry.fundId &&
+    existing.accountId === entry.accountId &&
+    toCents(existing.amount) === toCents(entry.amount) &&
+    existing.date === entry.date &&
+    existing.note === entry.note
+  ) {
+    return existing;
+  }
+
+  await db.runAsync(
+    `INSERT OR REPLACE INTO fund_entries (id, fundId, accountId, amount, date, note, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [entry.id, entry.fundId, entry.accountId, entry.amount, entry.date, entry.note, entry.createdAt]
+  );
+  await queueSyncMutation('CREATE', 'fund_entries', entry.id, entry);
+  return entry;
+}
+
+/** Removes a transaction's withdrawal. Call this BEFORE deleting the
+ * transaction, while it is still obvious there was one. */
+export async function clearTransactionFundPayment(transactionId: string): Promise<void> {
+  await setTransactionFundPayment({ transactionId, amount: 0, date: '' }, null);
+}
+
+/**
+ * Removes withdrawals whose transaction is gone, and journals each one.
+ *
+ * The backstop the tag links and refund claims each carry, for the same reason:
+ * foreign keys are not enforced here so nothing cascades, and the delete paths
+ * that can strand a withdrawal don't all run through one place. The one this
+ * exists for is a household member on a build WITHOUT this feature deleting a
+ * fund-paid transaction — their app knows nothing about the entry, so only the
+ * transaction's tombstone arrives and the fund would stay permanently low with
+ * a line in its history pointing at a purchase that no longer exists.
+ *
+ * Deliberately not eager — see ORPHANED_ENTRY_GRACE_MS.
+ */
+export async function sweepOrphanedTransactionFundEntries(now = new Date()): Promise<number> {
+  const db = await getDb();
+  const cutoff = new Date(now.getTime() - ORPHANED_ENTRY_GRACE_MS).toISOString();
+  const orphans = await db.getAllAsync<{ id: string }>(
+    `SELECT id FROM fund_entries
+      WHERE id LIKE ?
+        AND createdAt < ?
+        AND substr(id, ${TRANSACTION_ENTRY_PREFIX.length + 1}) NOT IN (SELECT id FROM transactions)`,
+    [`${TRANSACTION_ENTRY_PREFIX}%`, cutoff]
+  );
+  for (const orphan of orphans) {
+    await db.runAsync('DELETE FROM fund_entries WHERE id = ?', [orphan.id]);
+    await queueSyncMutation('DELETE', 'fund_entries', orphan.id, { id: orphan.id });
+  }
+  return orphans.length;
+}
+
 // ── Totals ──────────────────────────────────────────────────────────────────
 
 export type FundGrid = {
@@ -668,7 +859,8 @@ export async function migrateFundBalancesToEntries(): Promise<number> {
  * Single entry point on purpose: the backfill has to have run before any
  * total is shown, and every screen that reads a fund total (the grid, the
  * Insights card) going through here is what stops one of them rendering a
- * pre-upgrade user's savings as zero.
+ * pre-upgrade user's savings as zero. The orphan sweep rides along for the
+ * same reason — a fund total is the only place a stranded withdrawal shows up.
  */
 export async function loadFundGrid(): Promise<{
   funds: Fund[];
@@ -677,6 +869,7 @@ export async function loadFundGrid(): Promise<{
   grid: FundGrid;
 }> {
   await migrateFundBalancesToEntries();
+  await sweepOrphanedTransactionFundEntries();
   const [funds, accounts, entries] = await Promise.all([listFunds(), listFundAccounts(), listFundEntries()]);
   return { funds, accounts, entries, grid: buildFundGrid(funds, accounts, entries) };
 }

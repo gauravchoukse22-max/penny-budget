@@ -8,6 +8,7 @@ import { parseMoneyExpression } from '../lib/parse-number';
 import { Button, Chip } from './Button';
 import { DatePickerField, toIsoDate } from './DatePickerField';
 import { FundEntryRow } from './FundEntryRow';
+import { isTransactionFundEntry } from '../features/funds';
 import { SwipeToDelete } from './SwipeToDelete';
 import { confirmAction } from '../lib/confirm';
 import { tapLight, tapMedium, success } from '../lib/haptics';
@@ -251,15 +252,24 @@ export function FundCellSheet({
                 Nothing here yet. Whatever you add now becomes the first entry.
               </Text>
             ) : (
-              entries.map((entry) => (
-                <SwipeToDelete
-                  key={entry.id}
-                  onDelete={() => onDeleteEntry(entry)}
-                  accessibilityLabel={`Remove entry from ${formatShortDate(entry.date)}`}
-                >
-                  <FundEntryRow entry={entry} currency={currency} onDelete={removeEntry} />
-                </SwipeToDelete>
-              ))
+              entries.map((entry) =>
+                // A withdrawal a transaction filed is owned by that transaction:
+                // removing it here would leave the charge still claiming it was
+                // paid from this fund, and the next edit to the charge would
+                // file it again. Delete or unlink the transaction instead — the
+                // row says where it came from.
+                isTransactionFundEntry(entry) ? (
+                  <FundEntryRow key={entry.id} entry={entry} currency={currency} />
+                ) : (
+                  <SwipeToDelete
+                    key={entry.id}
+                    onDelete={() => onDeleteEntry(entry)}
+                    accessibilityLabel={`Remove entry from ${formatShortDate(entry.date)}`}
+                  >
+                    <FundEntryRow entry={entry} currency={currency} onDelete={removeEntry} />
+                  </SwipeToDelete>
+                )
+              )
             )}
           </View>
         </ScrollView>

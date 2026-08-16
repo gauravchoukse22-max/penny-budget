@@ -15,6 +15,8 @@ import { TagChips, TagPicker } from '../../components/TagPicker';
 import { Button } from '../../components/Button';
 import { listTags, setTransactionTags, type Tag } from '../../features/tags';
 import { setRefundClaim } from '../../features/refunds';
+import { FundPaymentField } from '../../components/FundPaymentField';
+import { setTransactionFundPayment, type TransactionFundTarget } from '../../features/funds';
 import { updateLoggingStreak } from '../../features/streaks-and-gamification';
 import { createTransaction } from '../../lib/queries';
 import type { SmartSuggestion } from '../../features/models';
@@ -74,6 +76,12 @@ export default function AddTransactionScreen() {
   // screen. Asking everyone for a number to serve the minority would cost the
   // screen its one-number-and-Save shape.
   const [awaitingRefund, setAwaitingRefund] = useState(false);
+  // "We already saved up for this" — the grid cell the money comes out of.
+  const [fundTarget, setFundTarget] = useState<TransactionFundTarget>(null);
+  // Bumped after each save so the field re-reads the ledger it just changed;
+  // otherwise "Save & add another" previews the second purchase against the
+  // balance from before the first one.
+  const [fundReloadKey, setFundReloadKey] = useState(0);
 
   const loadVocabulary = useCallback(async () => {
     setAllTags(await listTags());
@@ -141,6 +149,15 @@ export default function AddTransactionScreen() {
       note: note.trim() || null,
     });
     if (tagIds.length > 0) await setTransactionTags(created.id, tagIds);
+    // After the transaction exists, because the withdrawal's id is derived from
+    // its id. Files a matching negative entry in the fund's ledger, so the
+    // Funds page comes down by this charge without anyone typing it twice.
+    if (fundTarget) {
+      await setTransactionFundPayment(
+        { transactionId: created.id, amount: signedAmount, date, note: note.trim() || null },
+        fundTarget
+      );
+    }
     if (awaitingRefund) {
       // Defaults to the whole charge — the amount is refined on the detail
       // screen when it is a partial refund.
@@ -160,6 +177,10 @@ export default function AddTransactionScreen() {
       // "I'm getting this one back" is a fact about a single purchase and
       // carrying it over would silently inflate the outstanding total.
       setAwaitingRefund(false);
+      // The fund SURVIVES, for the same reason tags do: the flights, the hotel
+      // and the car all come out of the holiday money, and re-picking it three
+      // times is the friction this feature exists to remove.
+      setFundReloadKey((k) => k + 1);
     } else {
       router.back();
     }
@@ -383,6 +404,17 @@ export default function AddTransactionScreen() {
           onPress={() => setTagPickerOpen(true)}
         />
       </View>
+
+      {/* Sits right below Tags because it answers the same kind of question —
+          not what this was, but where the money for it came from. Renders
+          nothing at all until the user has a funds grid. */}
+      <FundPaymentField
+        value={fundTarget}
+        onChange={setFundTarget}
+        amount={(isRefund ? -1 : 1) * (parsedAmount ?? 0)}
+        currency={settings.currency}
+        reloadKey={fundReloadKey}
+      />
 
       {/* Not shown on a refund/credit: that transaction IS money coming back,
           so offering to track it as still-owed would be self-contradictory and

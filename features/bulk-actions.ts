@@ -1,6 +1,7 @@
 import { getDb } from '../lib/db';
 import { chunkIds, journalRowsAsUpdates } from '../lib/queries';
 import { queueSyncMutation } from './cloudkit-sync';
+import { transactionFundEntryId } from './funds';
 
 // Every write below is journalled to the outbox inside the same SQL transaction
 // as the write itself, so a bulk edit can never commit locally without the
@@ -58,6 +59,24 @@ export async function bulkDeleteTransactions(transactionIds: string[]): Promise<
       changes += result.changes;
     }
     for (const id of deletedIds) await queueSyncMutation('DELETE', 'transactions', id, { id });
+
+    // A charge paid out of a fund owns a withdrawal in the Funds ledger, keyed
+    // to its id. Nothing cascades here (AGENTS.md §2), so deleting the charges
+    // without this leaves the funds permanently low, with history lines
+    // pointing at purchases that no longer exist. Only the entries that really
+    // existed are journaled — a tombstone for an id the co-member never had
+    // asks them to delete nothing, which is the same guard the loop above uses.
+    const strandedEntryIds = deletedIds.map(transactionFundEntryId);
+    for (const chunk of chunkIds(strandedEntryIds)) {
+      const placeholders = chunk.map(() => '?').join(', ');
+      const present = await db.getAllAsync<{ id: string }>(
+        `SELECT id FROM fund_entries WHERE id IN (${placeholders})`,
+        chunk
+      );
+      if (present.length === 0) continue;
+      await db.runAsync(`DELETE FROM fund_entries WHERE id IN (${placeholders})`, chunk);
+      for (const row of present) await queueSyncMutation('DELETE', 'fund_entries', row.id, { id: row.id });
+    }
   });
 
   return changes;

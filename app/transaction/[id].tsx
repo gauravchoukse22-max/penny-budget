@@ -19,6 +19,13 @@ import { ReceiptField } from '../../components/ReceiptField';
 import { RefundField } from '../../components/RefundBadge';
 import { clearTagsForTransaction, listTagIdsForTransaction, listTags, setTransactionTags, type Tag } from '../../features/tags';
 import { clearRefundClaim } from '../../features/refunds';
+import { FundPaymentField } from '../../components/FundPaymentField';
+import {
+  clearTransactionFundPayment,
+  getTransactionFundPayment,
+  setTransactionFundPayment,
+  type TransactionFundTarget,
+} from '../../features/funds';
 import type { Transaction } from '../../lib/models';
 
 // Matches the add-transaction screen so both screens' buttons are the same
@@ -83,6 +90,10 @@ export default function EditTransactionScreen() {
   }, []);
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  // Which fund this charge was paid out of, read back from the ledger — the
+  // link lives on the fund entry, not on the transaction row, so there is
+  // nothing on `transaction` to seed it from.
+  const [fundTarget, setFundTarget] = useState<TransactionFundTarget>(null);
 
   useEffect(() => {
     if (transaction) {
@@ -114,6 +125,17 @@ export default function EditTransactionScreen() {
     let alive = true;
     listTagIdsForTransaction(transaction.id).then((ids) => {
       if (alive) applyTagIds(ids);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [transaction?.id]);
+
+  useEffect(() => {
+    if (!transaction?.id) return;
+    let alive = true;
+    getTransactionFundPayment(transaction.id).then((entry) => {
+      if (alive && entry) setFundTarget({ fundId: entry.fundId, accountId: entry.accountId });
     });
     return () => {
       alive = false;
@@ -163,6 +185,15 @@ export default function EditTransactionScreen() {
     // After the transaction write, so a failure there does not leave the tags
     // pointing at a row that was never updated.
     await setTransactionTags(transaction.id, tagIdsRef.current);
+    // Called unconditionally, including when no fund is selected: this is what
+    // UNLINKS a charge that used to come out of one, and it re-files the
+    // withdrawal at the edited amount and date. Correcting a $500 booking to
+    // $450 has to move the fund by the same $50, or the two disagree with
+    // nothing on screen to say so.
+    await setTransactionFundPayment(
+      { transactionId: transaction.id, amount: signedAmount, date, note: note.trim() || null },
+      fundTarget
+    );
     router.back();
   };
 
@@ -180,6 +211,12 @@ export default function EditTransactionScreen() {
       // waiting for the next read to notice.
       await clearTagsForTransaction(transaction.id);
       await clearRefundClaim(transaction.id);
+      // Same sweep-before-delete rule. Deleting the charge has to give the
+      // money back to the fund — leaving the withdrawal behind would keep the
+      // fund permanently low, with a line in its history pointing at a purchase
+      // that no longer exists. features/funds.ts carries a backstop for the
+      // paths that cannot reach this line, but this is the common case.
+      await clearTransactionFundPayment(transaction.id);
       await removeTransaction(transaction.id);
       router.back();
     }
@@ -327,6 +364,18 @@ export default function EditTransactionScreen() {
           onPress={() => setTagPickerOpen(true)}
         />
       </View>
+
+      {/* Unlike the fields around it this one is a DRAFT, written on Save
+          Changes — the withdrawal has to move with the amount and the date, and
+          writing it on each tap would leave a cancelled edit having already
+          moved money out of the fund. */}
+      <FundPaymentField
+        value={fundTarget}
+        onChange={setFundTarget}
+        amount={(isRefund ? -1 : 1) * (parsedAmount ?? Math.abs(transaction.amount))}
+        currency={settings.currency}
+        transactionId={transaction.id}
+      />
 
       <Text style={[styles.label, { color: theme.secondaryLabel }]}>Refund</Text>
       {/* Writes immediately rather than on Save, unlike the fields above. A
